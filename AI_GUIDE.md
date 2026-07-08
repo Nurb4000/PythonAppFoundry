@@ -404,7 +404,7 @@ For AJAX uploads from custom forms:
 const formData = new FormData();
 formData.append('file', fileInput.files[0]);
 
-fetch('/api/upload', {
+fetch('/__api/upload', {
     method: 'POST',
     body: formData,
     credentials: 'same-origin'
@@ -422,6 +422,47 @@ fetch('/api/upload', {
 - Files are stored in the `instance/uploads/` directory
 - The platform does not validate file types by default — add your own validation if needed
 - Maximum file size is controlled by Flask's `MAX_CONTENT_LENGTH` configuration
+
+#### File Upload Best Practices
+
+**Important: Pass template variables to render()**
+
+When querying data in your script, you must pass those variables to the `render()` function for them to be available in the HTML template:
+
+```python
+# WRONG — recent_uploads won't be available in template
+recent_uploads = db.session.query(Upload).order_by(Upload.created_at.desc()).limit(10).all()
+_result = render('''...html using {{ recent_uploads }}...''')
+
+# CORRECT — pass variables explicitly
+recent_uploads = db.session.query(Upload).order_by(Upload.created_at.desc()).limit(10).all()
+_result = render('''...html using {{ recent_uploads }}...''', recent_uploads=recent_uploads)
+```
+
+**Authentication checks:**
+
+Always check `current_user.is_authenticated` before allowing uploads:
+
+```python
+if request.method == 'POST' and current_user.is_authenticated:
+    # Process upload
+else:
+    flash('Please log in to upload files', 'error')
+```
+
+**Use the file upload service for security:**
+
+The `upload_file()` service handles secure filename generation and storage automatically:
+
+```python
+from app.services.file_upload import upload_file
+
+if 'file' in request.files:
+    f = request.files['file']
+    if f.filename and f.filename != 'undefined':
+        upload = upload_file(f)
+        flash(f'Uploaded {upload.original_name}')
+```
 
 ### API endpoint
 ```xml
