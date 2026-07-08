@@ -187,6 +187,13 @@
                 credentials: 'same-origin'
             });
             
+            // Check if response is JSON (not a redirect to login page)
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                // Not JSON - likely redirected to login page
+                throw new Error('Please log in to upload files');
+            }
+            
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.error || 'Upload failed');
