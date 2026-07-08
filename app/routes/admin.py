@@ -1669,7 +1669,7 @@ def list_uploads():
 </tr>
 {% endfor %}
 </tbody></table>
-{% if not uploads %}<p style="color:#888;">No files uploaded yet.</p>{% endif %}''', uploads=uploads, search=search, file_type=file_type)
+{% if not uploads %}<p style="color:#888;">No files uploaded yet.</p>{% endif %}''', uploads=uploads, total_size=total_size, search=search, file_type=file_type)
 
 @admin_bp.route('/uploads/upload', methods=['POST'])
 @developer_or_admin_required
