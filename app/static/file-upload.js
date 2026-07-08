@@ -9,7 +9,7 @@
         maxFileSize: 10 * 1024 * 1024, // 10MB default
         allowedTypes: '*', // or specific types like 'image/*', '.pdf,.doc,.docx'
         multiple: false,
-        uploadUrl: '/api/upload',
+        uploadUrl: '/__api/upload',
         autoUpload: true,
     };
     
