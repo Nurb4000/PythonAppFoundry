@@ -2068,10 +2068,11 @@ DASHBOARD_TEMPLATE = '''
 .log-modal-close:hover { color:#333; }
 </style>
 <script>
-function showLogDetail(id, message) {
+function showLogDetail(id, msgEl) {
   var modal = document.getElementById('logModal');
   var content = document.getElementById('logContent');
-  content.innerHTML = '<h3>Execution Log #' + id + '</h3><pre>' + (message || 'No details available.') + '</pre>';
+  var message = msgEl ? msgEl.textContent || msgEl.innerText : 'No details available.';
+  content.innerHTML = '<h3>Execution Log #' + id + '</h3><pre>' + message + '</pre>';
   modal.style.display = 'block';
 }
 document.addEventListener('click', function(e) {
@@ -2137,9 +2138,11 @@ document.addEventListener('click', function(e) {
       <td>{{ log.duration_ms }}ms</td>
       <td>
         {% if log.error_message %}
-        <button onclick="showLogDetail({{ log.id }}, {{ log.error_message[:500]|tojson }})" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#fee;border:1px solid #c00;color:#c00;border-radius:3px;">View Error</button>
+        <button onclick="showLogDetail({{ log.id }}, this.nextElementSibling)" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#fee;border:1px solid #c00;color:#c00;border-radius:3px;">View Error</button>
+        <span style="display:none;">{{ log.error_message[:2000] }}</span>
         {% elif log.stdout %}
-        <button onclick="showLogDetail({{ log.id }}, {{ log.stdout[:500]|tojson }})" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#efe;border:1px solid #080;color:#080;border-radius:3px;">View Output</button>
+        <button onclick="showLogDetail({{ log.id }}, this.nextElementSibling)" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#efe;border:1px solid #080;color:#080;border-radius:3px;">View Output</button>
+        <span style="display:none;">{{ log.stdout[:2000] }}</span>
         {% else %}
         <span style="color:#888;font-size:0.85em;">—</span>
         {% endif %}
