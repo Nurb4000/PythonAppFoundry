@@ -67,3 +67,60 @@ def api_list_modules():
         'scripts': [s.name for s in m.scripts],
         'forms': [f.name for f in m.forms],
     } for m in modules])
+
+
+@api_bp.route('/upload', methods=['POST'])
+@login_required
+def api_upload_file():
+    """Upload a file and return JSON with the upload details."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file_obj = request.files['file']
+    if not file_obj.filename:
+        return jsonify({'error': 'No filename provided'}), 400
+    
+    try:
+        from app.services.file_upload import upload_file
+        upload = upload_file(file_obj)
+        return jsonify({
+            'id': upload.id,
+            'filename': upload.filename,
+            'original_name': upload.original_name,
+            'mime_type': upload.mime_type,
+            'size': upload.size,
+            'url': f'/uploads/{upload.filename}',
+            'created_at': upload.created_at.isoformat() if upload.created_at else None,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@api_bp.route('/uploads', methods=['GET'])
+@login_required
+def api_list_uploads():
+    """List all uploaded files (paginated)."""
+    from app.models import Upload
+    
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(per_page, 100)  # Max 100 per page
+    
+    uploads = db.session.query(Upload).order_by(Upload.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    return jsonify({
+        'uploads': [{
+            'id': u.id,
+            'filename': u.filename,
+            'original_name': u.original_name,
+            'mime_type': u.mime_type,
+            'size': u.size,
+            'url': f'/uploads/{u.filename}',
+            'created_at': u.created_at.isoformat() if u.created_at else None,
+        } for u in uploads.items],
+        'total': uploads.total,
+        'page': uploads.page,
+        'pages': uploads.pages,
+    })

@@ -137,13 +137,36 @@ Browse and edit any database table directly from the admin UI.
 - Input types auto-detect based on column type (text, number, boolean, datetime)
 - Password columns are hidden for security
 
-### Uploads
-Upload files (images, PDFs, etc.) for use in your pages.
+### Uploads (File Manager)
+Manage files (images, PDFs, documents, etc.) for use in your pages.
 
-- Files are stored in `instance/uploads/` with random filenames
-- Accessible at `/uploads/<filename>` from any page
-- Use in HTML: `<img src="/uploads/photo.jpg">` or `<a href="/uploads/report.pdf">`
-- Upload, view, and delete from the admin UI
+**Location:** `/__admin/uploads`
+
+**Features:**
+- Drag-and-drop or click-to-browse upload form at the top
+- Search files by name
+- Filter by type: All Types, Images, Documents, Videos, Audio
+- Preview thumbnails for images
+- File type icons (📄 PDF, 🎥 Video, 🎵 Audio, 📎 Other)
+- View, Download, and Delete actions per file
+- Total file count and size summary
+
+**Usage:**
+1. Upload files via the admin UI or user-facing forms
+2. Files are stored in `instance/uploads/` with random filenames for security
+3. Accessible at `/uploads/<filename>` from any page
+4. Use in HTML: `<img src="/uploads/photo.jpg">` or `<a href="/uploads/report.pdf">`
+
+**User Form Integration:**
+Forms can include file upload components using the built-in JavaScript component:
+- Include `file-upload.js` and `file-upload.css` from `/static/`
+- Add a div with `data-file-upload` attribute for drag-and-drop functionality
+- Files are uploaded via POST to `/api/upload` (requires login)
+- Returns JSON with file URL, size, and metadata
+
+**API Endpoints:**
+- `POST /api/upload` — Upload a file (returns JSON with file details)
+- `GET /api/uploads` — List all uploads with pagination
 
 ### Users
 Manage user accounts. Three roles with increasing permissions:

@@ -1569,34 +1569,107 @@ import secrets as _secrets
 @admin_bp.route('/uploads')
 @developer_or_admin_required
 def list_uploads():
-    uploads = db.session.query(Upload).order_by(Upload.created_at.desc()).all()
-    return render_admin('Uploads', '''
-<div style="margin-bottom:1rem;">
-  <form method="POST" action="{{ url_for('admin.upload_file') }}" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;">
-    <input type="file" name="file" required>
-    <button style="padding:6px 16px;">Upload</button>
+    # Get search/filter parameters
+    search = request.args.get('search', '')
+    file_type = request.args.get('type', '')
+
+    query = db.session.query(Upload).order_by(Upload.created_at.desc())
+
+    # Apply filters
+    if search:
+        query = query.filter(
+            db.or_(
+                Upload.original_name.ilike(f'%{search}%'),
+                Upload.filename.ilike(f'%{search}%')
+            )
+        )
+
+    if file_type:
+        if file_type == 'image':
+            query = query.filter(Upload.mime_type.like('image/%'))
+        elif file_type == 'document':
+            query = query.filter(Upload.mime_type.in_(['application/pdf', 'application/msword',
+                                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                                      'text/plain']))
+        elif file_type == 'video':
+            query = query.filter(Upload.mime_type.like('video/%'))
+        elif file_type == 'audio':
+            query = query.filter(Upload.mime_type.like('audio/%'))
+
+    uploads = query.all()
+
+    # Calculate total size
+    total_size = sum(u.size for u in uploads)
+
+    return render_admin('File Manager', '''
+<div style="margin-bottom:1rem;display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+  <form method="POST" action="{{ url_for('admin.upload_file') }}" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;flex:1;min-width:300px;">
+    <input type="file" name="file" required style="flex:1;">
+    <button type="submit" style="padding:6px 16px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;">Upload</button>
+  </form>
+  <form method="GET" style="display:flex;gap:8px;align-items:center;">
+    <input type="text" name="search" placeholder="Search files..." value="{{ search }}" style="padding:6px 12px;border:1px solid #ddd;border-radius:4px;">
+    <select name="type" style="padding:6px 12px;border:1px solid #ddd;border-radius:4px;">
+      <option value="">All Types</option>
+      <option value="image" {% if file_type == 'image' %}selected{% endif %}>Images</option>
+      <option value="document" {% if file_type == 'document' %}selected{% endif %}>Documents</option>
+      <option value="video" {% if file_type == 'video' %}selected{% endif %}>Videos</option>
+      <option value="audio" {% if file_type == 'audio' %}selected{% endif %}>Audio</option>
+    </select>
+    <button type="submit" style="padding:6px 12px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;">Filter</button>
+    {% if search or file_type %}
+      <a href="{{ url_for('admin.list_uploads') }}" style="padding:6px 12px;color:#007bff;text-decoration:none;">Clear</a>
+    {% endif %}
   </form>
 </div>
+
+<div style="margin-bottom:1rem;padding:0.75rem;background:#f8f9fa;border-radius:4px;font-size:0.9rem;color:#666;">
+  Showing {{ uploads|length }} file(s), total size: {{ '%0.2f MB'|format(total_size / 1048576) }}
+</div>
+
 <table>
-<thead><tr><th>Filename</th><th>Original Name</th><th>Type</th><th>Size</th><th>Uploaded</th><th></th></tr></thead>
+<thead><tr>
+  <th>Preview</th>
+  <th>Original Name</th>
+  <th>Type</th>
+  <th>Size</th>
+  <th>Uploaded</th>
+  <th>Actions</th>
+</tr></thead>
 <tbody>
 {% for u in uploads %}
 <tr>
-  <td><code>{{ u.filename }}</code></td>
-  <td>{{ u.original_name }}</td>
+  <td>
+    {% if 'image' in u.mime_type %}
+      <img src="/uploads/{{ u.filename }}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;" alt="{{ u.original_name }}">
+    {% elif 'pdf' in u.mime_type %}
+      <span style="font-size:1.5rem;">📄</span>
+    {% elif 'video' in u.mime_type %}
+      <span style="font-size:1.5rem;">🎥</span>
+    {% elif 'audio' in u.mime_type %}
+      <span style="font-size:1.5rem;">🎵</span>
+    {% else %}
+      <span style="font-size:1.5rem;">📎</span>
+    {% endif %}
+  </td>
+  <td>
+    <strong>{{ u.original_name }}</strong><br>
+    <code style="font-size:0.8em;color:#666;">{{ u.filename }}</code>
+  </td>
   <td>{{ u.mime_type }}</td>
   <td>{{ '%0.1f KB'|format(u.size / 1024) }}</td>
   <td>{{ u.created_at|localtime }}</td>
   <td>
-    <a href="/uploads/{{ u.filename }}" target="_blank">View</a>
-    <form method="POST" action="{{ url_for('admin.delete_upload', id=u.id) }}" style="display:inline" onsubmit="return confirm('Delete {{ u.filename }}?')">
-      <button style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Delete</button>
+    <a href="/uploads/{{ u.filename }}" target="_blank" style="margin-right:0.5rem;">View</a>
+    <a href="/uploads/{{ u.filename }}" download style="margin-right:0.5rem;">Download</a>
+    <form method="POST" action="{{ url_for('admin.delete_upload', id=u.id) }}" style="display:inline" onsubmit="return confirm('Delete {{ u.original_name }}?')">
+      <button type="submit" style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Delete</button>
     </form>
   </td>
 </tr>
 {% endfor %}
 </tbody></table>
-{% if not uploads %}<p style="color:#888;">No files uploaded yet.</p>{% endif %}''', uploads=uploads)
+{% if not uploads %}<p style="color:#888;">No files uploaded yet.</p>{% endif %}''', uploads=uploads, search=search, file_type=file_type)
 
 @admin_bp.route('/uploads/upload', methods=['POST'])
 @developer_or_admin_required
@@ -1609,21 +1682,13 @@ def upload_file():
         flash('No file selected')
         return redirect(url_for('admin.list_uploads'))
 
-    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
-    save_name = _secrets.token_hex(12) + ('.' + ext if ext else '')
-    upload_dir = _os.path.join(_current_app.instance_path, 'uploads')
-    _os.makedirs(upload_dir, exist_ok=True)
-    f.save(_os.path.join(upload_dir, save_name))
+    try:
+        from app.services.file_upload import upload_file as upload_service
+        upload = upload_service(f)
+        flash(f'Uploaded {upload.original_name}')
+    except Exception as e:
+        flash(f'Upload failed: {str(e)}', 'error')
 
-    upload = Upload(
-        filename=save_name,
-        original_name=f.filename,
-        mime_type=f.content_type or 'application/octet-stream',
-        size=_os.path.getsize(_os.path.join(upload_dir, save_name)),
-    )
-    db.session.add(upload)
-    db.session.commit()
-    flash(f'Uploaded {f.filename}')
     return redirect(url_for('admin.list_uploads'))
 
 @admin_bp.route('/uploads/<int:id>/delete', methods=['POST'])
@@ -1632,13 +1697,14 @@ def delete_upload(id):
     upload = db.session.get(Upload, id)
     if not upload:
         abort(404)
-    upload_dir = _os.path.join(_current_app.instance_path, 'uploads')
-    fp = _os.path.join(upload_dir, upload.filename)
-    if _os.path.exists(fp):
-        _os.remove(fp)
-    db.session.delete(upload)
-    db.session.commit()
-    flash(f'Deleted {upload.original_name}')
+
+    try:
+        from app.services.file_upload import delete_upload_file
+        delete_upload_file(upload)
+        flash(f'Deleted {upload.original_name}')
+    except Exception as e:
+        flash(f'Delete failed: {str(e)}', 'error')
+
     return redirect(url_for('admin.list_uploads'))
 
 # ── Groups ──

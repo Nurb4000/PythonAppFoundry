@@ -304,6 +304,125 @@ admins = session.query(User).filter_by(role='admin').all()
 
 **Note:** When accessing a table from another module, you must list ALL its columns in the `get_or_create()` call — missing columns will not exist in the returned model. If unsure, inspect the table schema or define all columns you need.
 
+### File Uploads
+
+The platform provides file upload functionality for user forms. Files are stored securely with random filenames and tracked in the database.
+
+#### Using the File Upload Component (Recommended)
+
+Include the file upload JavaScript component in your form template:
+
+```html
+<!-- Include the file upload styles and script -->
+<link rel="stylesheet" href="/static/file-upload.css">
+<div id="file-upload-container" data-file-upload='{"maxFileSize": 5242880, "multiple": true}'></div>
+<script src="/static/file-upload.js"></script>
+```
+
+The component provides:
+- Drag-and-drop file selection
+- Click to browse files
+- File validation (size and type)
+- Upload progress indication
+- Multiple file support (optional)
+
+#### Manual File Upload Handling
+
+If you need custom upload handling, use the API endpoint:
+
+```python
+# Route configuration
+<route slug="/upload" method="POST" script="handle_upload" auth_required="true"/>
+```
+
+```python
+# Script: handle_upload
+from app.models import Upload
+import os
+import secrets
+
+if 'file' not in request.files:
+    flash('No file selected', 'error')
+    return redirect(request.url)
+
+f = request.files['file']
+if not f.filename:
+    flash('No file chosen', 'error')
+    return redirect(request.url)
+
+# Generate secure random filename
+ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+save_name = secrets.token_hex(12) + ('.' + ext if ext else '')
+
+# Save to uploads directory
+upload_dir = os.path.join(app.instance_path, 'uploads')
+os.makedirs(upload_dir, exist_ok=True)
+f.save(os.path.join(upload_dir, save_name))
+
+# Create database record
+upload = Upload(
+    filename=save_name,
+    original_name=f.filename,
+    mime_type=f.content_type or 'application/octet-stream',
+    size=os.path.getsize(os.path.join(upload_dir, save_name)),
+)
+db.session.add(upload)
+db.session.commit()
+
+flash(f'File "{upload.original_name}" uploaded successfully')
+return redirect(request.url)
+```
+
+#### Accessing Uploaded Files in Scripts
+
+```python
+# List all uploads
+from app.models import Upload
+uploads = session.query(Upload).order_by(Upload.created_at.desc()).all()
+
+for upload in uploads:
+    print(f"{upload.original_name} - {upload.mime_type} - {upload.size} bytes")
+    print(f"URL: /uploads/{upload.filename}")
+
+# Filter by type
+images = session.query(Upload).filter(Upload.mime_type.like('image/%')).all()
+pdfs = session.query(Upload).filter(Upload.mime_type == 'application/pdf').all()
+
+# Get file path for processing
+import os
+from flask import current_app
+upload_dir = os.path.join(current_app.instance_path, 'uploads')
+file_path = os.path.join(upload_dir, upload.filename)
+```
+
+#### File Upload API Endpoint
+
+For AJAX uploads from custom forms:
+
+```javascript
+// JavaScript example
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+fetch('/api/upload', {
+    method: 'POST',
+    body: formData,
+    credentials: 'same-origin'
+})
+.then(response => response.json())
+.then(data => {
+    console.log('Upload successful:', data);
+    // data.url contains the public URL: /uploads/{filename}
+})
+.catch(error => console.error('Upload failed:', error));
+```
+
+**Security Notes:**
+- All uploaded files are stored with random filenames to prevent path traversal
+- Files are stored in the `instance/uploads/` directory
+- The platform does not validate file types by default — add your own validation if needed
+- Maximum file size is controlled by Flask's `MAX_CONTENT_LENGTH` configuration
+
 ### API endpoint
 ```xml
 <route slug="/api/data" method="GET" script="api_data" auth_required="false"/>
