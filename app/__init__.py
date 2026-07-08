@@ -1,0 +1,164 @@
+import os
+from flask import Flask, request, send_from_directory, abort
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, current_user
+from flask_migrate import Migrate
+
+db = SQLAlchemy()
+login_manager = LoginManager()
+migrate = Migrate()
+
+
+def create_app(config_class=None):
+    app = Flask(__name__)
+    app.config.from_object('app.config.Config')
+
+    if config_class:
+        app.config.from_object(config_class)
+
+    db.init_app(app)
+    login_manager.init_app(app)
+    migrate.init_app(app, db)
+
+    login_manager.login_view = 'auth.login'
+
+    from app.models import User
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        return db.session.get(User, int(user_id))
+
+    from app.routes.auth import auth_bp
+    from app.routes.admin import admin_bp
+    from app.routes.api import api_bp
+    from app.routes.dynamic import dynamic_bp
+    from app.routes.chat import chat_bp
+    from app.routes.bpmn import bpmn_bp
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp, url_prefix='/__admin')
+    app.register_blueprint(api_bp, url_prefix='/__api')
+    app.register_blueprint(dynamic_bp)
+    app.register_blueprint(chat_bp)
+    app.register_blueprint(bpmn_bp)
+
+    from datetime import datetime as _datetime, timezone as _tz
+
+    @app.template_filter('localtime')
+    def _localtime(dt):
+        if dt is None:
+            return ''
+        try:
+            if dt.tzinfo is not None:
+                return dt.astimezone(_tz.utc).replace(tzinfo=None)
+            return dt.replace(tzinfo=_tz.utc).astimezone()
+        except Exception:
+            return dt
+
+    upload_dir = os.path.join(app.instance_path, 'uploads')
+    os.makedirs(upload_dir, exist_ok=True)
+
+    @app.route('/uploads/<path:filename>')
+    def serve_upload(filename):
+        import os.path
+        from app.models import Upload
+        upload = db.session.query(Upload).filter_by(filename=filename).first()
+        if not upload:
+            abort(404)
+        return send_from_directory(upload_dir, filename)
+
+    @app.template_filter('attr')
+    def jinja_attr(obj, name):
+        return getattr(obj, name, '')
+
+    @app.after_request
+    def inject_admin_bar(response):
+        if response.content_type and 'text/html' in response.content_type:
+            from app.models import Setting
+            site_name = Setting.get('site_name', '')
+            body = response.get_data(as_text=True)
+
+            if site_name:
+                if '<title>' in body:
+                    body = body.replace('<title>', f'<title>{site_name} — ')
+                elif '<head>' in body:
+                    body = body.replace('<head>', f'<head><title>{site_name}</title>')
+
+            if (current_user.is_authenticated
+                    and not request.path.startswith('/__api')
+                    and not request.path.startswith('/__auth')):
+                site_tag = f'{site_name} — ' if site_name else ''
+                if current_user.role == 'admin':
+                    bar = f'''<div id="admin-bar" style="background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
+                <span style="font-weight:600;color:#e94560">{site_tag}Admin</span>
+                <a href="/__admin/dashboard" style="color:#eee;text-decoration:none">Dashboard</a>
+                <a href="/__admin/modules" style="color:#eee;text-decoration:none">Modules</a>
+                <a href="/__admin/routes" style="color:#eee;text-decoration:none">Routes</a>
+                <a href="/__admin/scripts" style="color:#eee;text-decoration:none">Scripts</a>
+                <a href="/__admin/forms" style="color:#eee;text-decoration:none">Forms</a>
+                <a href="/__admin/tasks" style="color:#eee;text-decoration:none">Tasks</a>
+                <a href="/__admin/triggers" style="color:#eee;text-decoration:none">Triggers</a>
+                <a href="/__admin/users" style="color:#eee;text-decoration:none">Users</a>
+                <a href="/__admin/groups" style="color:#eee;text-decoration:none">Groups</a>
+                <a href="/__admin/data" style="color:#eee;text-decoration:none">Data</a>
+                <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
+                <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
+                <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
+                <a href="/__admin/settings" style="color:#eee;text-decoration:none">Settings</a>
+                <span style="flex:1"></span>
+                <span>{current_user.username}</span>
+                <a href="/" style="color:#eee;text-decoration:none">View Site</a>
+                <a href="/__auth/logout" style="color:#e94560;text-decoration:none">Logout</a>
+            </div>'''
+                elif current_user.role == 'developer':
+                    bar = f'''<div id="admin-bar" style="background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
+                <span style="font-weight:600;color:#e94560">{site_tag}Dev</span>
+                <a href="/__admin/dashboard" style="color:#eee;text-decoration:none">Dashboard</a>
+                <a href="/__admin/modules" style="color:#eee;text-decoration:none">Modules</a>
+                <a href="/__admin/routes" style="color:#eee;text-decoration:none">Routes</a>
+                <a href="/__admin/scripts" style="color:#eee;text-decoration:none">Scripts</a>
+                <a href="/__admin/forms" style="color:#eee;text-decoration:none">Forms</a>
+                <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
+                <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
+                <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
+                <span style="flex:1"></span>
+                <span>{current_user.username}</span>
+                <a href="/" style="color:#eee;text-decoration:none">View Site</a>
+                <a href="/__auth/logout" style="color:#e94560;text-decoration:none">Logout</a>
+            </div>'''
+                else:
+                    bar = f'''<div id="admin-bar" style="background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
+                <a href="/__auth/profile" style="color:#eee;text-decoration:none">Profile</a>
+                <span style="flex:1"></span>
+                <span>{current_user.username}</span>
+                <a href="/" style="color:#eee;text-decoration:none">View Site</a>
+                <a href="/__auth/logout" style="color:#e94560;text-decoration:none">Logout</a>
+            </div>'''
+                if '<body>' in body:
+                    body = body.replace('<body>', f'<body>{bar}', 1)
+                else:
+                    body = f'<!DOCTYPE html><html><body>{bar}{body}</body></html>'
+
+            response.set_data(body)
+        return response
+
+    with app.app_context():
+        db.create_all()
+        from app.models import Route
+        from app.services.scheduler import init_scheduler
+        init_scheduler(app)
+
+        # Clean up duplicate route slugs — keep only the first for each slug
+        seen = set()
+        dupes = []
+        for r in db.session.query(Route).order_by(Route.id).all():
+            if r.slug in seen:
+                dupes.append(r)
+            else:
+                seen.add(r.slug)
+        for r in dupes:
+            db.session.delete(r)
+        if dupes:
+            db.session.commit()
+
+    return app
