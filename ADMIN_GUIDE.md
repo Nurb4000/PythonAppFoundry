@@ -195,6 +195,43 @@ Event-based automation. Events:
 - `on_update` — fires when a row is updated
 - `on_delete` — fires when a row is deleted
 - `after_route` — fires after a route script executes
+- `webhook` — fires when an external service POSTs to a webhook URL
+
+### Webhooks
+External services can trigger scripts via HTTP POST requests. Webhooks are configured as triggers with `event_type='webhook'`.
+
+**Setting up a webhook:**
+
+1. Go to **Triggers** (`/__admin/triggers`) → **New Trigger**
+2. Configure:
+   - **Event Type**: `webhook`
+   - **Target Table**: A unique slug (e.g., `github-push`, `stripe-payment`)
+   - **Script**: The script to execute when the webhook is called
+3. Save the trigger
+
+**Webhook URL format:**
+```
+POST /__api/webhook/{webhook-slug}
+```
+
+**Example — GitHub push webhook:**
+
+1. Create a trigger with slug `github-push`
+2. Script receives:
+   - `webhook_slug` — the slug used in the URL
+   - `webhook_payload` — JSON data from the POST body
+3. Test with curl:
+```bash
+curl -X POST http://localhost:5000/__api/webhook/github-push \
+  -H "Content-Type: application/json" \
+  -d '{"action": "push", "repository": {"name": "my-repo"}, "sender": {"login": "user"}}'
+```
+
+**Security notes:**
+- Webhooks are public endpoints (no authentication)
+- Security is via obscurity — use unique, unpredictable slugs
+- All webhook executions are logged to the dashboard
+- Validate and sanitize payload data in your scripts
 
 ### Dashboard
 System health overview at `/__admin/dashboard`. Shows:

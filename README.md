@@ -21,6 +21,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Module Versioning** — Automatic version snapshots on every import (AI Designer, BPMN) and manual version creation. Rollback to any previous state with one click, diff between versions, and add comments to track changes over time.
 - **Module Dependency Tracking** — Automatically detects when modules reference other modules' routes or scripts. Shows dependency warnings before deletion to prevent silent breakage. Manual "Scan" button to re-detect dependencies.
 - **System Dashboard** — Health overview at `/__admin/dashboard` showing module/route/script counts, system info (Python/Flask versions, uptime), recent execution logs, database table sizes, and per-module summaries. All script executions are automatically logged.
+- **Webhook Support** — External services can trigger scripts via HTTP POST to `/__api/webhook/{slug}`. Configure webhooks as triggers with `event_type='webhook'`. Scripts receive the payload data for processing.
 
 ## Quick Start
 
@@ -65,10 +66,11 @@ run.py → create_app() (Flask factory)
   ├── app/routes/dynamic.py  — Catch-all route handler (serves user modules)
   ├── app/routes/chat.py     — AI Designer chat sessions
   ├── app/routes/bpmn.py     — BPMN visual designer
-  └── app/routes/api.py      — REST API (export, import, list modules)
+  └── app/routes/api.py      — REST API (export, import, list modules, webhooks)
   ├── app/services/script_runner.py  — Sandboxed Python execution
   ├── app/services/ai_assistant.py   — LLM integration
-  └── app/services/bundle.py         — Module XML import/export
+  ├── app/services/bundle.py         — Module XML import/export
+  └── app/services/triggers.py       — Event and webhook trigger firing
 ```
 
 ### Key design decisions
@@ -90,7 +92,7 @@ run.py → create_app() (Flask factory)
 | Script | Python source code executed by routes, tasks, or triggers |
 | Form | JSON schema defining form fields rendered by `render_form()` |
 | ScheduledTask | Cron-triggered script execution via APScheduler |
-| Trigger | Event-based hooks (on_insert, after_route, etc.) |
+| Trigger | Event-based hooks (on_insert, after_route, webhook) |
 | DynamicModel | Factory that creates/retrieves SQLAlchemy table models at runtime |
 | Setting | Key-value store for platform configuration |
 | Upload | File upload metadata |
