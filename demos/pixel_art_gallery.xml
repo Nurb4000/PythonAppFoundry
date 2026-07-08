@@ -89,7 +89,7 @@ h1 { text-align: center; font-size: 2.5rem; color: var(--accent); text-shadow: 2
   <div class="grid">
     {% for a in art_list %}
     <div class="card">
-      {{ a.rendered }}
+      {{ a.rendered|safe }}
       <h3>{{ a.title }}</h3>
       <p class="artist">by {{ a.artist }}</p>
       <p class="votes">❤️ {{ a.votes }} vote{% if a.votes != 1 %}s{% endif %}</p>
