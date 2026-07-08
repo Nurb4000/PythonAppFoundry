@@ -71,7 +71,20 @@ List of all imported modules. Each module is a self-contained bundle with routes
 - **Edit** — change name, slug, description, version, author, toggle enabled
 - **Export XML** — download the module as XML (backup or share)
 - **Refine in AI** — opens a new AI chat session pre-loaded with the module's XML
+- **Scan** — scan the module's scripts for references to other modules and update dependency tracking
 - **Delete** — removes the entire module and all its components
+- **Deps column** — shows how many other modules reference this one (red number if > 0)
+
+#### Module Dependencies
+
+Modules can reference other modules' routes/scripts by slug. The system tracks these dependencies to prevent silent breakage:
+
+- **Auto-detection**: When you import a module via AI Designer, BPMN, or XML upload, the system automatically scans scripts for references to other modules
+- **Manual scan**: Click "Scan" in the Modules list to re-scan a module's dependencies
+- **Delete protection**: If you try to delete a module that others depend on, you'll see a warning page listing all dependent modules before deletion is allowed
+- **Dependency types**: route_reference (URL slug), script_reference (script ID)
+
+This prevents the common issue of deleting a module and having other modules silently break because they reference deleted routes or scripts.
 
 ### Routes
 URLs that the site responds to. Each route points to a script and optionally a form.

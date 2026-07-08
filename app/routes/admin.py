@@ -204,11 +204,18 @@ def list_modules():
         q = q.order_by(Module.id)
     rows = q.all()
 
+    # Pre-calculate dependency counts for each module
+    from app.services.dependencies import get_dependency_count
+    dep_counts = {}
+    for m in rows:
+        dep_counts[m.id] = get_dependency_count(m.id)
+
     if request.args.get('format') == 'csv':
         return _export_csv('modules', ['id', 'name', 'slug', 'version', 'author', 'enabled', 'created_at'], rows, False)
 
     content = render_template_string(MODULE_LIST_TEMPLATE,
         modules=rows,
+        dep_counts=dep_counts,
         new_url=url_for('admin.new_module'),
         edit_url=url_for('admin.edit_module', id=0).rsplit('/', 1)[0],
         export_url=url_for('api.api_export', slug='').rsplit('/', 1)[0],
@@ -234,6 +241,7 @@ MODULE_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:cente
   <th><a href="?sort=version&order={% if sort_col == 'version' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">version{% if sort_col == 'version' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
   <th><a href="?sort=author&order={% if sort_col == 'author' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">author{% if sort_col == 'author' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
   <th><a href="?sort=enabled&order={% if sort_col == 'enabled' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">enabled{% if sort_col == 'enabled' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Deps</th>
   <th>Actions</th>
 </tr></thead>
 <tbody>
@@ -241,11 +249,21 @@ MODULE_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:cente
 <tr>
 <td>{{ m.id }}</td><td>{{ m.name }}</td><td>{{ m.slug }}</td><td>{{ m.version }}</td><td>{{ m.author }}</td><td>{{ m.enabled }}</td>
 <td>
+  {% if dep_counts[m.id] > 0 %}
+    <span style="color:#d00;font-weight:bold;">{{ dep_counts[m.id] }}</span>
+  {% else %}
+    <span style="color:#999;">—</span>
+  {% endif %}
+</td>
+<td>
   <a href="{{ edit_url }}/{{ m.id }}">Edit</a>
   <a href="{{ url_for('admin.list_versions', module_id=m.id) }}">Versions</a>
   <a href="{{ export_url }}/{{ m.slug }}">Export XML</a>
   <a href="{{ chat_url }}/{{ m.id }}">Refine in AI</a>
   {% if m.bpmn_xml %}<a href="{{ bpmn_url }}{{ m.id }}">BPMN</a>{% endif %}
+  <form method="POST" action="{{ url_for('admin.scan_dependencies', module_id=m.id) }}" style="display:inline">
+    <button type="submit" style="background:none;border:none;color:#06c;cursor:pointer;text-decoration:underline;padding:0;font:inherit" title="Scan for dependencies">Scan</button>
+  </form>
   <form method="POST" action="{{ delete_url }}/{{ m.id }}" style="display:inline" onsubmit="var c=this.querySelector('[name=drop_tables]');return confirm('Delete module &quot;{{ m.name }}&quot;'+(c&&c.checked?' including its database tables?':' and all its routes, scripts, forms?'))">
     <label style="font-weight:normal;font-size:0.85em;"><input name="drop_tables" type="checkbox"> Drop tables</label>
     <button type="submit" style="background:none;border:none;color:#d00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
@@ -279,12 +297,47 @@ def new_module():
 <button>Save</button>
 </form>''')
 
-@admin_bp.route('/modules/delete/<int:id>', methods=['POST'])
+@admin_bp.route('/modules/delete/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
 def delete_module(id):
     m = Module.query.get_or_404(id)
     name = m.name
 
+    # Check for dependencies (other modules referencing this one)
+    from app.services.dependencies import get_dependencies, has_dependencies
+    dependencies = []
+    if has_dependencies(id):
+        dependencies = get_dependencies(id)
+
+    # If there are dependencies and this is a GET request, show warning page
+    if dependencies and request.method == 'GET':
+        return render_admin(f'Delete Module: {name}', '''
+<h2>Warning: Module Has Dependencies</h2>
+<p>The module "<strong>{{ name }}</strong>" is referenced by other modules. Deleting it may break those modules.</p>
+
+{% if dependencies %}
+<div style="background:#fff3cd;border:1px solid #ffc107;padding:1rem;border-radius:6px;margin:1rem 0;">
+<h3 style="margin-top:0;color:#856404;">Referenced by {{ dependencies|length }} module(s):</h3>
+<ul style="margin:0.5rem 0;">
+{% for dep in dependencies %}
+<li><strong>{{ dep.source_module.name }}</strong> — {{ dep.dependency_type }} ({{ dep.reference_value }})</li>
+{% endfor %}
+</ul>
+</div>
+{% endif %}
+
+<form method="POST" onsubmit="return confirm('Are you sure you want to delete this module? This cannot be undone.');">
+  <div style="margin:1.5rem 0;">
+    <label style="display:block;margin-bottom:0.5rem;"><input type="checkbox" name="drop_tables"> Also drop DynamicModel tables created by this module</label>
+  </div>
+  <div style="display:flex;gap:0.5rem;">
+    <button type="submit" style="background:#dc3545;color:#fff;border:none;padding:0.5rem 1.5rem;border-radius:4px;cursor:pointer;">Yes, Delete Module</button>
+    <a href="{{ url_for('admin.list_modules') }}" style="padding:0.5rem 1.5rem;color:#666;text-decoration:none;border:1px solid #ddd;border-radius:4px;">Cancel</a>
+  </div>
+</form>
+''', name=name, dependencies=dependencies)
+
+    # POST: Actually delete the module
     # Collect DynamicModel table names used by this module's scripts
     import re
     dyn_tables = set()
@@ -313,6 +366,28 @@ def delete_module(id):
     db.session.commit()
     tbl_msg = f' and dropped {len(dyn_tables)} table(s)' if drop_tables and dyn_tables else ''
     flash(f'Module "{name}" deleted{tbl_msg}')
+    return redirect(url_for('admin.list_modules'))
+
+
+@admin_bp.route('/modules/<int:module_id>/scan-dependencies', methods=['POST'])
+@developer_or_admin_required
+def scan_dependencies(module_id):
+    """Scan a module's scripts for references to other modules and create dependency records."""
+    m = db.session.get(Module, module_id)
+    if not m:
+        flash(f'Module #{module_id} not found', 'error')
+        return redirect(url_for('admin.list_modules'))
+
+    from app.services.dependencies import detect_dependencies
+    try:
+        deps_found = detect_dependencies(module_id)
+        if deps_found:
+            flash(f'Scanned "{m.name}": found {len(deps_found)} dependency reference(s)')
+        else:
+            flash(f'Scanned "{m.name}": no dependencies detected')
+    except Exception as e:
+        flash(f'Error scanning dependencies: {str(e)}', 'error')
+
     return redirect(url_for('admin.list_modules'))
 
 

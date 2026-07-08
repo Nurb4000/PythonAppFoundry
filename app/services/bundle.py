@@ -203,4 +203,14 @@ def import_module(xml_str, update_existing=False, module_id=None):
             db.session.add(trigger)
 
     db.session.commit()
+
+    # Auto-detect dependencies for the imported module
+    try:
+        from app.services.dependencies import detect_dependencies
+        detect_dependencies(module.id)
+    except Exception as e:
+        # Log but don't fail the import if dependency detection fails
+        import logging
+        logging.getLogger(__name__).warning(f'Failed to detect dependencies for module {module.id}: {e}')
+
     return module

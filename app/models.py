@@ -125,6 +125,23 @@ class ModuleVersion(db.Model):
         return f'<ModuleVersion {self.module_id}:{self.version_number}>'
 
 
+class ModuleDependency(db.Model):
+    __tablename__ = 'module_dependencies'
+
+    id = db.Column(db.Integer, primary_key=True)
+    source_module_id = db.Column(db.Integer, db.ForeignKey('modules.id'), nullable=False, index=True)
+    target_module_id = db.Column(db.Integer, db.ForeignKey('modules.id'), nullable=False, index=True)
+    dependency_type = db.Column(db.String(50), default='route_reference')  # route_reference, script_reference, form_reference
+    reference_value = db.Column(db.String(500), default='')  # slug or id being referenced
+    detected_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    source_module = db.relationship('Module', foreign_keys=[source_module_id], backref=db.backref('dependencies_from', lazy='dynamic'))
+    target_module = db.relationship('Module', foreign_keys=[target_module_id], backref=db.backref('dependencies_to', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<ModuleDependency {self.source_module_id}->{self.target_module_id}>'
+
+
 class Route(db.Model):
     __tablename__ = 'routes'
 
