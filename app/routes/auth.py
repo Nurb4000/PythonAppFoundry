@@ -29,7 +29,7 @@ LOGIN_TEMPLATE = f'''<!DOCTYPE html>
 <label>Password <input name="password" type="password" required></label>
 <button>Log In</button>
 </form>
-<p style="margin-top:1rem;font-size:0.9em;">No account? <a href="{{{{ url_for('auth.register') }}}}">Register</a></p>
+{{% if not registration_disabled %}}<p style="margin-top:1rem;font-size:0.9em;">No account? <a href="{{{{ url_for('auth.register') }}}}">Register</a></p>{{% endif %}}
 </div>
 </body>
 </html>
@@ -150,15 +150,16 @@ def _is_safe_url(target):
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    registration_disabled = Setting.get('registration_disabled', 'false') == 'true'
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         user = db.session.query(User).filter_by(username=username).first()
         if user and bcrypt.checkpw(password.encode(), user.password_hash.encode()):
             if not user.is_active:
-                return render_template_string(LOGIN_TEMPLATE, error='Your account has been disabled.')
+                return render_template_string(LOGIN_TEMPLATE, error='Your account has been disabled.', registration_disabled=registration_disabled)
             if not user.is_approved:
-                return render_template_string(LOGIN_TEMPLATE, error='Your account is pending approval.')
+                return render_template_string(LOGIN_TEMPLATE, error='Your account is pending approval.', registration_disabled=registration_disabled)
             login_user(user)
             next_page = request.args.get('next')
             if next_page and _is_safe_url(next_page):
@@ -173,8 +174,8 @@ def login():
             else:
                 next_page = url_for('auth.profile')
             return redirect(next_page)
-        return render_template_string(LOGIN_TEMPLATE, error='Invalid credentials')
-    return render_template_string(LOGIN_TEMPLATE)
+        return render_template_string(LOGIN_TEMPLATE, error='Invalid credentials', registration_disabled=registration_disabled)
+    return render_template_string(LOGIN_TEMPLATE, registration_disabled=registration_disabled)
 
 
 @auth_bp.route('/logout')
