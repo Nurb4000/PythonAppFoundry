@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Pixel Art Gallery" slug="pixel-art" version="1.0" author="Demo">
+  <description>A retro pixel-art showcase with a gallery, a random art generator, and a simple voting system.</description>
+
+  <routes>
+    <route slug="/pixel-art" title="Pixel Art Gallery" auth_required="false">
+      <script><![CDATA[
+import random
+
+# Seed some pixel art pieces if table is empty
+gallery = DynamicModel.get_or_create('gallery_art', {
+    'id': db.Integer,
+    'title': db.String(100),
+    'artist': db.String(50),
+    'pixels': db.Text,
+    'width': db.Integer,
+    'height': db.Integer,
+    'votes': db.Integer,
+    'created_at': db.DateTime,
+})
+
+if not session.query(gallery).first():
+    seed_art = [
+        {'title': 'Sunset Over Mountains', 'artist': 'PixelBot', 'width': 8, 'height': 8,
+         'pixels': '2,2,2,2,4,4,4,4,2,2,2,2,4,3,3,4,2,2,2,4,3,3,3,3,2,2,4,4,3,3,3,4,2,4,3,3,6,6,3,4,4,3,3,6,6,6,3,3,4,3,6,6,6,6,6,4,4,4,4,4,4,4,4,4',
+         'votes': 12},
+        {'title': 'Space Invader', 'artist': 'RetroFan', 'width': 8, 'height': 8,
+         'pixels': '0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,0,1,1,0,0,0,1,0,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,1,1,0,0,0,0,1,0,1,0,0,0,1,0,1,0,1,0,1',
+         'votes': 25},
+        {'title': 'Smiley', 'artist': 'HappyBot', 'width': 6, 'height': 6,
+         'pixels': '0,3,3,3,3,0,3,0,3,3,0,3,3,3,3,3,3,3,3,0,3,3,0,3,3,3,0,0,3,3,0,3,3,3,3,0',
+         'votes': 8},
+        {'title': 'Rainbow Wave', 'artist': 'ColorWiz', 'width': 10, 'height': 6,
+         'pixels': '1,1,1,2,2,3,3,4,4,4,1,1,2,2,3,3,4,4,5,5,1,2,2,3,3,4,4,5,5,5,2,2,3,3,4,4,5,5,1,1,2,3,3,4,4,5,5,1,1,1,3,3,4,4,5,5,1,1,2,2',
+         'votes': 17},
+    ]
+    for art in seed_art:
+        a = gallery(**art, created_at=datetime.now(timezone.utc))
+        session.add(a)
+    session.commit()
+
+arts = session.query(gallery).order_by(gallery.votes.desc()).all()
+
+def render_pixel(pixel, w, h):
+    color_map = {
+        '0': '#000', '1': '#f00', '2': '#f80', '3': '#ff0',
+        '4': '#0f0', '5': '#08f', '6': '#808', '7': '#fff',
+        '8': '#888', '9': '#aaf',
+    }
+    size = min(30, max(10, 400 // w))
+    rows = []
+    px = pixel.split(',')
+    for y in range(h):
+        row = '<tr>'
+        for x in range(w):
+            idx = y * w + x
+            if idx < len(px):
+                color = color_map.get(px[idx].strip(), '#ccc')
+                row += f'<td style="width:{size}px;height:{size}px;background:{color};padding:0;"></td>'
+            else:
+                row += f'<td style="width:{size}px;height:{size}px;background:#eee;padding:0;"></td>'
+        row += '</tr>'
+        rows.append(row)
+    return '<table style="border-collapse:collapse;border:2px solid #333;">' + '\n'.join(rows) + '</table>'
+
+total_votes = sum(a.votes for a in arts)
+top_art = arts[0] if arts else None
+
+_result = render('''
+<style>
+:root { --bg: #1a1a2e; --card: #16213e; --accent: #e94560; }
+body { background: var(--bg); color: #eee; font-family: 'Courier New', monospace; }
+.container { max-width: 960px; margin: 0 auto; padding: 1rem; }
+h1 { text-align: center; font-size: 2.5rem; color: var(--accent); text-shadow: 2px 2px 0 #000; letter-spacing: 4px; }
+.subtitle { text-align: center; color: #888; margin-top: -0.5rem; margin-bottom: 2rem; }
+.stats { text-align: center; color: #aaf; margin-bottom: 2rem; font-size: 0.9rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
+.card { background: var(--card); border-radius: 8px; padding: 1rem; text-align: center; border: 1px solid #333; }
+.card h3 { margin: 0.5rem 0 0.2rem; color: #fff; }
+.card .artist { color: #888; font-size: 0.8rem; }
+.card .votes { color: var(--accent); font-size: 0.85rem; margin-top: 0.3rem; }
+.card canvas { margin: 0 auto; }
+.footer { text-align: center; margin-top: 3rem; color: #555; font-size: 0.8rem; }
+</style>
+<div class="container">
+  <h1>🎮 Pixel Art Gallery</h1>
+  <p class="subtitle">A showcase of tiny masterpieces</p>
+  <div class="stats">
+    <span>{{ total }} pieces &middot; {{ votes }} total votes &middot; 🏆 {{ top_title }}</span>
+  </div>
+  <div class="grid">
+    {% for a in art_list %}
+    <div class="card">
+      {{ a.rendered }}
+      <h3>{{ a.title }}</h3>
+      <p class="artist">by {{ a.artist }}</p>
+      <p class="votes">❤️ {{ a.votes }} vote{% if a.votes != 1 %}s{% endif %}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="footer">Powered by PythonAppFoundry</div>
+</div>
+''', total=len(arts), votes=total_votes, top_title=top_art.title if top_art else 'N/A',
+    art_list=[{'title': a.title, 'artist': a.artist, 'votes': a.votes,
+               'rendered': render_pixel(a.pixels, a.width, a.height)} for a in arts])
+]]></script>
+    </route>
+  </routes>
+</module>
+]]>
