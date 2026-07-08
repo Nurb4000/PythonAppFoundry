@@ -107,4 +107,3 @@ h1 { text-align: center; font-size: 2.5rem; color: var(--accent); text-shadow: 2
     </route>
   </routes>
 </module>
-]]>
