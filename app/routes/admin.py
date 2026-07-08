@@ -1340,7 +1340,8 @@ def list_tables():
     table_modules = {}
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
-                       'settings', 'uploads', 'chat_sessions', 'chat_messages'}
+                       'settings', 'uploads', 'chat_sessions', 'chat_messages',
+                       'execution_logs', 'module_dependencies', 'module_versions'}
     for t in platform_tables:
         table_modules[t] = 'Platform'
 
@@ -1916,7 +1917,8 @@ def delete_group(id):
 def delete_table(table_name):
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
-                       'settings', 'uploads', 'chat_sessions', 'chat_messages'}
+                       'settings', 'uploads', 'chat_sessions', 'chat_messages',
+                       'execution_logs', 'module_dependencies', 'module_versions'}
     if table_name in platform_tables:
         flash(f'Cannot drop platform table "{table_name}"', 'error')
         return redirect(url_for('admin.list_tables'))
@@ -2155,7 +2157,7 @@ def dashboard():
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
-                       'execution_logs'}
+                       'execution_logs', 'module_dependencies', 'module_versions'}
     table_stats = []
     inspector = _sa_inspect(db.engine)
     for db_name in sorted(inspector.get_table_names()):
