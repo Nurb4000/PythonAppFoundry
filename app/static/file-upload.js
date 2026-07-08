@@ -187,14 +187,16 @@
                 credentials: 'same-origin'
             });
             
+            // Read response text once
+            const text = await response.text();
+            
             if (!response.ok) {
-                // Try to parse error as JSON, otherwise show status
+                // Try to parse error as JSON
                 try {
-                    const error = await response.json();
+                    const error = JSON.parse(text);
                     throw new Error(error.error || `Upload failed (${response.status})`);
                 } catch (e) {
                     // If not JSON, check if it's a login redirect
-                    const text = await response.text();
                     if (text.includes('login') || text.includes('Log In')) {
                         throw new Error('Please log in to upload files');
                     }
@@ -204,9 +206,8 @@
             
             // Try to parse as JSON
             try {
-                return await response.json();
+                return JSON.parse(text);
             } catch (e) {
-                const text = await response.text();
                 throw new Error(`Invalid response format: ${text.substring(0, 100)}`);
             }
         }
