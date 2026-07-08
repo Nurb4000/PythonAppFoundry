@@ -960,8 +960,8 @@ def new_trigger():
 <form method="POST">
 <label>Name <input name="name" required></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
-<label>Event Type <select name="event_type"><option>on_insert</option><option>on_update</option><option>on_delete</option><option>after_route</option></select></label>
-<label>Target Table <input name="target_table" placeholder="table_name"></label>
+<label>Event Type <select name="event_type"><option>on_insert</option><option>on_update</option><option>on_delete</option><option>after_route</option><option>webhook</option></select></label>
+<label>Target Table <input name="target_table" placeholder="table_name or webhook-slug"></label>
 <label>Script <select name="script_id">{% for s in scripts %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
 <button>Save</button>
 </form>''', modules=modules, scripts=scripts)
@@ -985,7 +985,7 @@ def edit_trigger(id):
 <form method="POST">
 <label>Name <input name="name" value="{{ tg.name }}" required></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == tg.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
-<label>Event Type <select name="event_type"><option {% if tg.event_type=='on_insert' %}selected{% endif %}>on_insert</option><option {% if tg.event_type=='on_update' %}selected{% endif %}>on_update</option><option {% if tg.event_type=='on_delete' %}selected{% endif %}>on_delete</option><option {% if tg.event_type=='after_route' %}selected{% endif %}>after_route</option></select></label>
+<label>Event Type <select name="event_type"><option {% if tg.event_type=='on_insert' %}selected{% endif %}>on_insert</option><option {% if tg.event_type=='on_update' %}selected{% endif %}>on_update</option><option {% if tg.event_type=='on_delete' %}selected{% endif %}>on_delete</option><option {% if tg.event_type=='after_route' %}selected{% endif %}>after_route</option><option {% if tg.event_type=='webhook' %}selected{% endif %}>webhook</option></select></label>
 <label>Target Table <input name="target_table" value="{{ tg.target_table }}"></label>
 <label>Script <select name="script_id">{% for s in scripts %}<option value="{{ s.id }}" {% if s.id == tg.script_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
 <label><input name="enabled" type="checkbox" {% if tg.enabled %}checked{% endif %}> Enabled</label>

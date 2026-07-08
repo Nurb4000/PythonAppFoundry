@@ -474,6 +474,75 @@ data = [{"id": 1, "name": "test"}]
 return jsonify(data)
 ```
 
+### Webhooks
+
+External services can POST to webhook endpoints to trigger scripts. Webhooks are configured via Triggers (event_type='webhook') in the admin panel at `/__admin/triggers`.
+
+**Webhook URL format:**
+```
+POST /__api/webhook/{webhook-slug}
+```
+
+**Example: GitHub webhook integration**
+
+```python
+# Script: handle_github_push
+# Trigger: event_type='webhook', target_table='github-push'
+
+slug = webhook_slug  # 'github-push'
+payload = webhook_payload  # JSON data from GitHub
+
+# Access the payload data
+repository = payload.get('repository', {}).get('name', 'unknown')
+sender = payload.get('sender', {}).get('login', 'unknown')
+action = payload.get('action', 'unknown')
+
+# Process based on action
+if action == 'push':
+    # Handle push event
+    pass
+elif action == 'pull_request':
+    # Handle PR event
+    pass
+
+_result = f'Processed {action} event from {sender} on {repository}'
+```
+
+**XML bundle example:**
+```xml
+<module name="GitHub Webhooks" slug="github-webhooks">
+  <scripts>
+    <script name="handle_github_push" language="python"><![CDATA[
+# Script: handle_github_push
+slug = webhook_slug
+payload = webhook_payload
+
+repository = payload.get('repository', {}).get('name', 'unknown')
+sender = payload.get('sender', {}).get('login', 'unknown')
+action = payload.get('action', 'unknown')
+
+_result = f'Processed {action} from {sender} on {repository}'
+    ]]></script>
+  </scripts>
+  <triggers>
+    <trigger name="github_push_trigger" event="webhook" table="github-push" script="handle_github_push"/>
+  </triggers>
+</module>
+```
+
+**Testing webhooks manually:**
+```bash
+curl -X POST http://localhost:5000/__api/webhook/github-push \
+  -H "Content-Type: application/json" \
+  -d '{"action": "push", "repository": {"name": "my-repo"}, "sender": {"login": "user"}}'
+```
+
+**Security Notes:**
+- Webhooks are secure by obscurity — the unique slug acts as a secret
+- No authentication required (public endpoints)
+- Log all webhook invocations in ExecutionLog for auditing
+- Validate payload structure in your script before processing
+
 ## Critical: DynamicModel Has NO Relationships
 
 `DynamicModel` tables are flat — columns only. **Do not use `.` dot-access to traverse foreign keys**. The following will **fail**:

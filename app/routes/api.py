@@ -124,3 +124,26 @@ def api_list_uploads():
         'page': uploads.page,
         'pages': uploads.pages,
     })
+
+
+@api_bp.route('/webhook/<slug>', methods=['POST'])
+def api_webhook(slug):
+    """Public webhook endpoint. Fires triggers associated with this slug.
+    
+    Accepts JSON or form data in the request body.
+    No authentication required - secure by obscurity (unique slug).
+    """
+    from app.services.triggers import fire_webhook
+    
+    # Extract payload from request
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+    else:
+        payload = dict(request.form)
+        # Also include files if present
+        for key, value in request.files.items():
+            payload[key] = value.filename
+    
+    fire_webhook(slug, payload)
+    
+    return jsonify({'status': 'ok', 'webhook': slug})
