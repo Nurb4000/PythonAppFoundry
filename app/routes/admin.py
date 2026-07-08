@@ -2060,7 +2060,27 @@ DASHBOARD_TEMPLATE = '''
 .status-err { color: #c00; }
 .log-success { color: #080; }
 .log-error { color: #c00; }
+.log-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; }
+.log-modal-content { position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border-radius:8px; padding:1.5rem; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
+.log-modal-content h3 { margin-top:0; border-bottom:1px solid #eee; padding-bottom:0.5rem; }
+.log-modal-content pre { background:#f8f9fa; padding:1rem; border-radius:4px; overflow-x:auto; font-size:0.85em; max-height:400px; overflow-y:auto; white-space:pre-wrap; word-wrap:break-word; }
+.log-modal-close { float:right; font-size:1.5em; cursor:pointer; color:#999; }
+.log-modal-close:hover { color:#333; }
 </style>
+<script>
+function showLogDetail(id, message) {
+  var modal = document.getElementById('logModal');
+  var content = document.getElementById('logContent');
+  content.innerHTML = '<h3>Execution Log #' + id + '</h3><pre>' + (message || 'No details available.') + '</pre>';
+  modal.style.display = 'block';
+}
+document.addEventListener('click', function(e) {
+  if (e.target.id === 'logModal' || e.target.className === 'log-modal-close') {
+    document.getElementById('logModal').style.display = 'none';
+  }
+});
+</script>
+<div id="logModal" class="log-modal"><div class="log-modal-content"><span class="log-modal-close">&times;</span><div id="logContent"></div></div></div>
 
 <div class="dash-grid">
   <div class="dash-card"><h3>Modules</h3><div class="value">{{ total_modules }}</div><div class="sub">{{ enabled_modules }} enabled</div></div>
@@ -2106,7 +2126,7 @@ DASHBOARD_TEMPLATE = '''
     <h2>Execution Logs (Recent)</h2>
     {% if recent_logs %}
     <table>
-    <thead><tr><th>Time</th><th>Type</th><th>Name</th><th>Status</th><th>Duration</th></tr></thead>
+    <thead><tr><th>Time</th><th>Type</th><th>Name</th><th>Status</th><th>Duration</th><th>Details</th></tr></thead>
     <tbody>
     {% for log in recent_logs %}
     <tr>
@@ -2115,6 +2135,15 @@ DASHBOARD_TEMPLATE = '''
       <td>{{ log.source_name }}</td>
       <td><span class="{% if log.status == 'success' %}log-success{% else %}log-error{% endif %}">{{ log.status|upper }}</span></td>
       <td>{{ log.duration_ms }}ms</td>
+      <td>
+        {% if log.error_message %}
+        <button onclick="showLogDetail({{ log.id }}, {{ log.error_message[:500]|tojson }})" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#fee;border:1px solid #c00;color:#c00;border-radius:3px;">View Error</button>
+        {% elif log.stdout %}
+        <button onclick="showLogDetail({{ log.id }}, {{ log.stdout[:500]|tojson }})" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#efe;border:1px solid #080;color:#080;border-radius:3px;">View Output</button>
+        {% else %}
+        <span style="color:#888;font-size:0.85em;">—</span>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
     </tbody></table>
