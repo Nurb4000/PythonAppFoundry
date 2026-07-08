@@ -21,10 +21,17 @@ class _ModelQueryProperty:
 class DynamicModel:
     @staticmethod
     def get_or_create(name, columns=None):
-        if name in _dynamic_models:
-            return _dynamic_models[name]
+        from sqlalchemy import inspect as _sa_inspect
 
         table_name = name.lower()
+
+        if name in _dynamic_models:
+            inspector = _sa_inspect(db.engine)
+            if table_name in inspector.get_table_names():
+                return _dynamic_models[name]
+            del _dynamic_models[name]
+            if table_name in db.metadata.tables:
+                del db.metadata.tables[table_name]
 
         if columns is None:
             columns = {}
