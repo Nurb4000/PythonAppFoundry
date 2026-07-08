@@ -1,12 +1,16 @@
+import threading
+
 from app import db
-from app.models import ScheduledTask
+from app.models import ScheduledTask, ExecutionLog, Setting
 from app.services.script_runner import execute_script
 
 _scheduler = None
+_app = None
 
 
 def init_scheduler(app):
-    global _scheduler
+    global _scheduler, _app
+    _app = app
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         _scheduler = BackgroundScheduler()
@@ -57,8 +61,9 @@ def register_task(task):
 
 
 def run_task_wrapper(task_id):
-    from app import create_app
-    app = create_app()
+    app = _app
+    if app is None:
+        return
     with app.app_context():
         task = db.session.get(ScheduledTask, task_id)
         if not task or not task.enabled:
@@ -69,7 +74,30 @@ def run_task_wrapper(task_id):
         task.last_run = datetime.now(timezone.utc)
         db.session.commit()
         if task.script:
-            execute_script(task.script, source_type='task', source_name=task.name)
+            timeout = int(Setting.get('script_timeout', '30'))
+            t = threading.Thread(
+                target=_run_script_in_app_context,
+                args=(app, task.script, task.name),
+                daemon=True,
+            )
+            t.start()
+            t.join(timeout=timeout)
+            if t.is_alive():
+                log = ExecutionLog(
+                    source_type='task',
+                    source_name=task.name,
+                    duration_ms=timeout * 1000,
+                    status='error',
+                    error_message=f'Task timed out after {timeout}s',
+                )
+                db.session.add(log)
+                db.session.commit()
+                logging.getLogger(__name__).error(f'Task {task.name} timed out')
+
+
+def _run_script_in_app_context(app, script, name):
+    with app.app_context():
+        execute_script(script, source_type='task', source_name=name)
 
 
 def refresh_tasks():

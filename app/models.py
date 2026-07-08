@@ -13,6 +13,11 @@ logger = logging.getLogger(__name__)
 _dynamic_models = {}
 
 
+class _ModelQueryProperty:
+    def __get__(self, obj, cls):
+        return db.session.query(cls)
+
+
 class DynamicModel:
     @staticmethod
     def get_or_create(name, columns=None):
@@ -44,6 +49,7 @@ class DynamicModel:
             '__table__': table,
             '__tablename__': table_name,
             '__repr__': lambda self: f'<{name} id={getattr(self, "id", None)}>',
+            'query': _ModelQueryProperty(),
         })
 
         _dynamic_models[name] = model
@@ -118,7 +124,7 @@ class ModuleVersion(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     is_current = db.Column(db.Boolean, default=False)
 
-    module = db.relationship('Module', backref=db.backref('versions', lazy='dynamic'))
+    module = db.relationship('Module', backref=db.backref('versions', lazy='dynamic', cascade='all, delete-orphan'))
     created_by = db.relationship('User')
 
     def __repr__(self):
@@ -152,6 +158,7 @@ class Route(db.Model):
     script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=True)
     form_id = db.Column(db.Integer, db.ForeignKey('forms.id'), nullable=True)
     auth_required = db.Column(db.Boolean, default=False)
+    allowed_groups = db.Column(db.Text, default='')
     title = db.Column(db.String(200), default='')
 
     module = db.relationship('Module', backref=db.backref('routes', lazy='dynamic'))

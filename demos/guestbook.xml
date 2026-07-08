@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Demo Guestbook" slug="demo" version="1.0.0" author="PythonAppFoundry">
+  <description>A demo module showcasing forms, data collection with DynamicModel, and basic rendering. Import this from the Modules page to see PythonAppFoundry in action immediately at your site root.</description>
+  <routes>
+    <route slug="/" method="GET,POST" title="Welcome" auth_required="false" script="guestbook_handler" form="guestbook"/>
+  </routes>
+  <scripts>
+    <script name="guestbook_handler" language="python"><![CDATA[
+entries = DynamicModel.get_or_create('demo_entries', {
+    'name': db.String(100),
+    'email': db.String(100),
+    'message': db.Text,
+    'created_at': db.DateTime,
+})
+
+if request.method == 'POST':
+    entry = entries(
+        name=request.form.get('name', ''),
+        email=request.form.get('email', ''),
+        message=request.form.get('message', ''),
+        created_at=datetime.now(timezone.utc),
+    )
+    db.session.add(entry)
+    db.session.commit()
+    flash('Thanks for your message!')
+    return redirect('/')
+
+all_entries = entries.query.order_by(entries.created_at.desc()).limit(20).all()
+
+html = '<h1>Welcome to PythonAppFoundry!</h1>'
+html += '<p style="font-size:1.1em;color:#555;">This demo shows off forms, data collection via <strong>DynamicModel</strong>, and rendering. Try leaving a message below.</p>'
+
+html += '<h2>Leave a Message</h2>'
+html += render_form(action='/')
+
+if all_entries:
+    html += '<h2 style="margin-top:2rem;">Recent Messages</h2>'
+    html += '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f4f4f4;">'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Name</th>'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Email</th>'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Message</th>'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Date</th>'
+    html += '</tr></thead><tbody>'
+    for e in all_entries:
+        html += '<tr>'
+        html += '<td style="padding:0.5rem;border-bottom:1px solid #eee;">' + str(e.name) + '</td>'
+        html += '<td style="padding:0.5rem;border-bottom:1px solid #eee;">' + str(e.email) + '</td>'
+        html += '<td style="padding:0.5rem;border-bottom:1px solid #eee;">' + str(e.message) + '</td>'
+        html += '<td style="padding:0.5rem;border-bottom:1px solid #eee;">' + (e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '') + '</td>'
+        html += '</tr>'
+    html += '</tbody></table>'
+else:
+    html += '<p style="color:#888;margin-top:1.5rem;">No messages yet. Be the first!</p>'
+
+html += '<hr style="margin-top:2rem;">'
+html += '<p style="color:#999;font-size:0.85em;">PythonAppFoundry Demo Module v1.0.0</p>'
+
+_result = render(html)
+]]></script>
+  </scripts>
+  <forms>
+    <form name="guestbook"><![CDATA[[
+  {"name":"name","type":"text","label":"Your Name","required":true,"placeholder":"Enter your name"},
+  {"name":"email","type":"email","label":"Your Email","required":true,"placeholder":"you@example.com"},
+  {"name":"message","type":"textarea","label":"Message","required":true,"placeholder":"Write your message here..."}
+]]]></form>
+  </forms>
+</module>

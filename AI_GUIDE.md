@@ -147,7 +147,7 @@ session.commit()
 **Critical: DynamicModel only auto-adds an `id` column.** It does NOT add `created_at`, `updated_at`, or any other automatic column. Every column you use in a query, filter, or ORDER BY must be explicitly defined in the `get_or_create()` columns dict. If you need `created_at`, add `'created_at': db.DateTime` to the dict — otherwise queries like `ORDER BY created_at` will crash.
 
 Supported column types: `db.String(n)`, `db.Integer`, `db.Boolean`, `db.Float`,
-`db.DateTime`, `db.Text`, `db.Date`, `db Binary`.
+`db.DateTime`, `db.Text`, `db.Date`, `db.LargeBinary`.
 
 ## Render Helper
 
@@ -195,7 +195,7 @@ When embedding JavaScript in HTML strings returned by scripts:
 <scripts>
   <script name="show_contact"><![CDATA[
 # Use render_form() to render the form — do NOT write inline HTML for form fields
-_result = render("<h2>Contact Us</h2>" + render_form('contact_form', action='/contact/submit'))
+_result = render("<h2>Contact Us</h2>" + render_form(action='/contact/submit'))
 ]]></script>
 </scripts>
 ```
@@ -234,6 +234,10 @@ return jsonify({"status": "ok", "items": [...]})
 When a route has a form, the script has these automatically available:
 - `form_fields` — list of field dicts parsed from the form's schema
 - `render_form(action="", method="POST", submit_label="Submit", fields=form_fields)` — renders full form HTML
+
+These are always available in every script (no import needed):
+- `DynamicModel` — factory for dynamic database tables (`DynamicModel.get_or_create(...)`)
+- `datetime`, `timezone` — from the `datetime` module (`datetime.now(timezone.utc)`)
 
 Simple form handler pattern:
 ```python
@@ -355,7 +359,7 @@ ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
 save_name = secrets.token_hex(12) + ('.' + ext if ext else '')
 
 # Save to uploads directory
-upload_dir = os.path.join(app.instance_path, 'uploads')
+upload_dir = os.path.join(current_app.instance_path, 'uploads')
 os.makedirs(upload_dir, exist_ok=True)
 f.save(os.path.join(upload_dir, save_name))
 
@@ -421,7 +425,7 @@ fetch('/__api/upload', {
 - All uploaded files are stored with random filenames to prevent path traversal
 - Files are stored in the `instance/uploads/` directory
 - The platform does not validate file types by default — add your own validation if needed
-- Maximum file size is controlled by Flask's `MAX_CONTENT_LENGTH` configuration
+- There is no built-in file size limit — configure `MAX_CONTENT_LENGTH` in `app/config.py` if needed
 
 #### File Upload Best Practices
 
@@ -543,6 +547,9 @@ curl -X POST http://localhost:5000/__api/webhook/github-push \
 - Log all webhook invocations in ExecutionLog for auditing
 - Validate payload structure in your script before processing
 
+**Future: Authenticated webhooks:**
+A planned enhancement will add an optional `auth_token` field to trigger configurations. When a token is set, the webhook endpoint will require an `Authorization: Bearer <token>` header. Triggers without a token remain public as today. This enables secure cross-instance integration — one instance can call another's webhook with a shared secret.
+
 ## Critical: DynamicModel Has NO Relationships
 
 `DynamicModel` tables are flat — columns only. **Do not use `.` dot-access to traverse foreign keys**. The following will **fail**:
@@ -592,10 +599,13 @@ Then in a Jinja template use the dict key, not dot-chaining:
 12. **No Flask URL converters** — route slugs must be exact paths like `/projects`, not `/project/<int:id>`. Use query parameters (`/project?project_id=1`) and read them in the script via `request.args.get('project_id')`. Never put `<` or `>` inside XML attribute values — they will break XML parsing.
 13. **Scripts must produce output** — end every script with either `return redirect(...)`, `return jsonify(...)`, `_result = <value>`, or `render(...)`. A script that does nothing will render a blank page.
 14. **Form field names must match** — `request.form.get('field_name')` in the script must match `"name":"field_name"` in the form's JSON schema exactly.
-15. **Limit imports in scripts** — the script runner provides `session`, `db`, `request`, `current_user`, `redirect`, `url_for`, `flash`, `render`, `jsonify`, `send_email`, and `render_form` already. **Do NOT import these from anywhere** — there is no `app.helpers` module or any other module that provides them. Import only additional models: `from app.models import DynamicModel`.
+15. **Limit imports in scripts** — the script runner provides `session`, `db`, `request`, `current_user`, `redirect`, `url_for`, `flash`, `render`, `jsonify`, `send_email`, `render_form`, `DynamicModel`, `datetime`, and `timezone` already. **Do NOT import these from anywhere** — they are pre-injected into every script. There is no `app.helpers` module.
 16. **Avoid Python syntax in Jinja2** — use `{% for item in items %}`, NOT `{% for i in range(len(items)) %}`. Use `{{ item.field }}`, NOT `{{ item["field"] }}`.
 17. **Watch for typos** — `_result` not `_reult` or `_results`. `render` not `render_template`. `session` not `sesson`.
 18. **Script runner provides common builtins** — `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `zip`, `sorted`, `min`, `max`, `sum`, `any`, `all`, `isinstance`, `type`, `hasattr`, `getattr`, `setattr`, `dir`, `print`, `ValueError`, `TypeError`, `KeyError`, `AttributeError` are all available. Do not import them.
 19. **Only use documented helpers** — `render_form(action, method, submit_label, fields=form_fields)` renders the form with its defined fields. `form_fields` is automatically available and contains the parsed field definitions from the form's JSON schema. `send_email(to, subject, body, html=False)` sends email via admin-configured SMTP. Do not invent custom function names.
 20. **No automatic timestamps** — DynamicModel tables have no `created_at` or `updated_at` unless you explicitly define them.
 21. **Cross-module data** — use `DynamicModel.get_or_create("TableName", {...})` to access tables from other modules. List all columns you need. You can also query the `User` model directly: `from app.models import User` then `session.query(User).all()`.
+22. **Execution timeout** — Scripts are terminated after 30 seconds by default (configurable via `script_timeout` setting). Long-running operations like bulk processing should be broken into smaller batches or designed to be idempotent so they can resume on retry. Admins can increase the timeout in Settings if needed.
+23. **Route group access** — Routes can be restricted to specific user groups. When a route has groups set, the requesting user must be logged in and belong to at least one of the selected groups. If no groups are set, any authenticated user can access auth-protected routes. Use the Groups admin section to manage group membership.
+24. **Debug mode** — Use the "Run Debug" button on the script edit page to execute a script and view its source code with line numbers, output, and timing. This is useful during development to test scripts without navigating to their route.

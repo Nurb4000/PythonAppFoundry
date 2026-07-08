@@ -35,6 +35,13 @@ def handle_dynamic(slug):
     if route.auth_required and not current_user.is_authenticated:
         return redirect(url_for('auth.login', next=request.path))
 
+    if route.allowed_groups and current_user.is_authenticated:
+        allowed = set(g.strip() for g in route.allowed_groups.split(',') if g.strip())
+        if allowed:
+            user_group_ids = set(str(g.id) for g in current_user.groups)
+            if not allowed.intersection(user_group_ids):
+                return 'Forbidden', 403
+
     if route.script:
         result = execute_script(route.script, route=route)
         fire_triggers('after_route', route.module.slug, {

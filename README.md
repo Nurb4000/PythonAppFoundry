@@ -13,7 +13,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **BPMN Workflow Designer** — A visual drag-and-drop process designer (powered by bpmn-js) for more complex workflows. You still describe your intent and data needs, but the structured diagram makes it easier to manage modules with moving parts. Convert diagrams to runnable modules with one click.
 - **Dynamic Tables** — Scripts create and query database tables on the fly via `DynamicModel.get_or_create()` — no migrations, no schema changes.
 - **Sandboxed Script Runner** — Python scripts execute in a restricted environment with safe builtins and documented helpers (`send_email`, `render_form`, etc.).
-- **Role-Based Access** — Two main roles: **Admin** (full system control) and **Developer** (can create content but can't break the system).
+- **Role-Based Access** — Three roles: **Admin** (full system control), **Developer** (create/manage modules, routes, scripts, forms — can't manage users or settings), and **User** (can log in to auth-protected routes only).
 - **Full Admin Panel** — CRUD for modules, routes, scripts, forms, tasks, triggers, users, groups, data tables, settings, and file uploads. All list views include column sorting, module filtering, and CSV export.
 - **Bundle Import/Export** — Modules export as XML for backup or transfer between instances. Import XML to create or update modules.
 - **SMTP Email** — Platform-wide SMTP settings; `send_email()` is available in all scripts.
@@ -22,13 +22,20 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Module Dependency Tracking** — Automatically detects when modules reference other modules' routes or scripts. Shows dependency warnings before deletion to prevent silent breakage. Manual "Scan" button to re-detect dependencies.
 - **System Dashboard** — Health overview at `/__admin/dashboard` showing module/route/script counts, system info (Python/Flask versions, uptime), recent execution logs with View Error/Output buttons for full details, database table sizes, and per-module summaries. All script executions are automatically logged.
 - **Webhook Support** — External services can trigger scripts via HTTP POST to `/__api/webhook/{slug}`. Configure webhooks as triggers with `event_type='webhook'`. Scripts receive the payload data for processing.
+- **Group-Based Route Access** — Restrict routes to specific user groups. Users must be logged in and belong to at least one allowed group to access the route.
+- **Script Debug Mode** — Run scripts directly from the editor with "Run Debug" to see source code, line numbers, output, and execution timing.
+- **Module Cloning** — One-click duplicate of any module from the admin list to use as a starting point.
+- **Cron Validation** — Invalid cron expressions are caught on save, preventing silent task failures.
+- **Log Retention** — Auto-cleanup of old execution logs configurable from Settings.
+- **Email Test Button** — Verify SMTP configuration with a single click from the Settings page.
+- **Demo Module** — Import `demos/guestbook.xml` from the Modules page for a working example of forms, DynamicModel data collection, and rendered output at the site root.
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/<your-user>/PythonAppFoundry && cd PythonAppFoundry
 pip install -r requirements.txt
-cp .env .env   # defaults work for SQLite
+cp .env.example .env 2>/dev/null || touch .env   # defaults work for SQLite
 python3 run.py
 ```
 
@@ -70,7 +77,11 @@ run.py → create_app() (Flask factory)
   ├── app/services/script_runner.py  — Sandboxed Python execution
   ├── app/services/ai_assistant.py   — LLM integration
   ├── app/services/bundle.py         — Module XML import/export
-  └── app/services/triggers.py       — Event and webhook trigger firing
+  ├── app/services/scheduler.py      — APScheduler cron task runner
+  ├── app/services/triggers.py       — Event and webhook trigger firing
+  ├── app/services/versioning.py     — Module version snapshots, rollback, diff
+  ├── app/services/dependencies.py   — Cross-module dependency detection
+  └── app/services/file_upload.py    — Secure file upload handling
 ```
 
 ### Key design decisions
@@ -108,9 +119,11 @@ redirect, url_for, flash, render, jsonify
 send_email(to, subject, body, html=False)
 render_form(action, method, submit_label, fields=form_fields)
 form_fields                    # list of parsed field dicts (when route has a form)
+DynamicModel                  # factory for dynamic database tables
+datetime, timezone            # from datetime module
 ```
 
-Builtins available: `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `zip`, `sorted`, `min`, `max`, `sum`, `any`, `all`, `isinstance`, `type`, `hasattr`, `getattr`, `setattr`, `dir`, `print`, common exception types.
+Builtins available: `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `zip`, `sorted`, `min`, `max`, `sum`, `any`, `all`, `isinstance`, `type`, `hasattr`, `getattr`, `setattr`, `dir`, `print`, common exception types. The sandbox deliberately excludes `os`, `subprocess`, `eval`, and `open` to prevent system access. Imports work normally (`import` / `from ... import`).
 
 ## Dependencies
 
@@ -122,3 +135,14 @@ Builtins available: `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `
 MIT — see [LICENSE](LICENSE).
 
 Copyright 2026 IDS
+
+
+## Some screenhots to give you an idea of its layout
+
+<img width="1011" height="694" alt="Build" src="https://github.com/user-attachments/assets/58934cf2-30c5-40f4-8d84-41939f957294" />
+<img width="1387" height="532" alt="Edit Module" src="https://github.com/user-attachments/assets/970d5ff1-648b-4a38-8c32-e1e2d77f95c8" />
+<img width="1379" height="365" alt="Route List" src="https://github.com/user-attachments/assets/24153de4-3f21-4271-adf1-8565636efded" />
+<img width="1399" height="564" alt="Database Tables" src="https://github.com/user-attachments/assets/034b3fef-7f77-49dd-840d-9e49120a82dc" />
+<img width="1392" height="581" alt="Table Edit" src="https://github.com/user-attachments/assets/08b1091b-1849-4416-82c7-11dcd93d662f" />
+<img width="1386" height="676" alt="Manual Script Edit" src="https://github.com/user-attachments/assets/d55cf9d3-edde-4a23-a84b-6b37892c0775" />
+<img width="1392" height="692" alt="BPMN" src="https://github.com/user-attachments/assets/3642e844-a4aa-4aa8-a985-52954e670cfc" />

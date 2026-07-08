@@ -233,6 +233,9 @@ curl -X POST http://localhost:5000/__api/webhook/github-push \
 - All webhook executions are logged to the dashboard
 - Validate and sanitize payload data in your scripts
 
+**Future: Webhook authentication:**
+A planned enhancement will add an optional `auth_token` field to triggers. When set, the webhook endpoint will require `Authorization: Bearer <token>` in the request header. Triggers without a token remain public. This will enable secure cross-instance integration — one instance can call another's webhook with a shared secret, while still allowing public webhooks for services that don't support custom headers.
+
 ### Dashboard
 System health overview at `/__admin/dashboard`. Shows:
 - **Summary cards** — counts of modules, routes, scripts, forms, tasks, triggers, users, and uploads
@@ -291,6 +294,8 @@ LLM settings are managed via **Admin → Settings** in the GUI. No server access
 | Model | *(empty)* | OpenAI model name, e.g. `gpt-4o-mini` |
 | Temperature | `0.3` | 0–2, lower = more deterministic |
 | Max Tokens | `4096` | Maximum response length |
+| Script Timeout | `30` | Max seconds a script can run before being terminated (0 = no timeout) |
+| Log Retention | `0` | Days to keep execution logs (0 = forever). Old logs are deleted on dashboard load. |
 
 ## Environment Variables (`.env`)
 
@@ -317,7 +322,13 @@ Email settings are managed via **Admin → Settings** in the GUI. Scripts use `s
 ## Tips
 
 - The first account created is always admin
-- The setup page only appears when no routes exist
-- Login redirects to AI Designer when no routes exist
+- The setup page only appears when no routes exist AND no users exist
+- Login redirects to the module list when no routes exist (admins see the site root if routes exist)
 - Modules can be exported as XML and re-imported on another instance
 - The AI_GUIDE.md file controls how the LLM generates modules — edit it to steer behavior
+- **Script timeout**: Set `script_timeout` in Settings to limit how long scripts can run. Default is 30s. Set to `0` to disable (not recommended — a runaway script can hang the scheduler).
+- **Log retention**: Set `log_retention_days` in Settings to auto-delete old execution logs. Cleanup runs on dashboard page load.
+- **SMTP test**: Use the "Send Test Email" button in Settings to verify your SMTP config before relying on it in scripts.
+- **Module cloning**: Use the "Clone" button on the Modules list to duplicate a module as a starting point. The clone gets "(copy)" appended to its name and slug.
+- **Route group access**: When editing a route, you can restrict it to specific groups. Users must be logged in AND belong to at least one of the selected groups to access the route. Leave groups empty to allow any authenticated user.
+- **Dependency viewer**: Click the red dependency count in the Modules list to see which modules reference a given module, including the type and value of each reference. Run "Scan" on the module first to detect its references to other modules.

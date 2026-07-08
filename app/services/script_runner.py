@@ -1,5 +1,7 @@
 import json
+import signal
 import sys
+import threading
 import time
 import traceback
 import smtplib
@@ -8,6 +10,8 @@ from io import StringIO
 
 from flask import request, redirect, url_for, flash, render_template_string, jsonify as flask_jsonify
 from flask_login import current_user
+from datetime import datetime, timezone
+from app.models import DynamicModel
 
 from app import db
 from app.models import Setting, ExecutionLog
@@ -38,11 +42,23 @@ def _send_email(to, subject, body, html=False):
         raise RuntimeError(f'Email send failed: {e}')
 
 
+class ScriptTimeout(Exception):
+    pass
+
+
 def execute_script(script, route=None, extra_globals=None, source_type='route', source_name=None):
     if source_name is None:
         source_name = script.name
 
     t0 = time.time()
+
+    timeout = int(Setting.get('script_timeout', '30'))
+
+    old_alarm = None
+    if timeout > 0 and threading.current_thread() is threading.main_thread():
+        old_alarm = signal.signal(signal.SIGALRM, lambda s, f: (_ for _ in ()).throw(ScriptTimeout()))
+        signal.alarm(timeout)
+
     log_entry = ExecutionLog(
         source_type=source_type,
         source_name=source_name,
@@ -103,6 +119,9 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'render': render_template_string,
         'jsonify': flask_jsonify,
         'send_email': _send_email,
+        'DynamicModel': DynamicModel,
+        'datetime': datetime,
+        'timezone': timezone,
     }
 
     if extra_globals:
@@ -169,6 +188,14 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         _save_log(log_entry)
         return ''
 
+    except ScriptTimeout:
+        _duration_ms = timeout * 1000
+        log_entry.duration_ms = _duration_ms
+        log_entry.status = 'error'
+        log_entry.error_message = f'Script execution timed out after {timeout}s'
+        _save_log(log_entry)
+        return f'<pre style="color:#c00;">Script timed out after {timeout}s</pre>', 500
+
     except Exception as e:
         tb = traceback.format_exc()
         _duration_ms = int((time.time() - t0) * 1000)
@@ -178,6 +205,9 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         _save_log(log_entry)
         return f'<pre style="color:#c00;">Script error in {script.name}:\n{e}\n\n{tb}</pre>', 500
     finally:
+        if old_alarm is not None:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_alarm)
         sys.stdout = old_stdout
 
 

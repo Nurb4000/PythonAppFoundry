@@ -50,8 +50,8 @@ def create_app(config_class=None):
             return ''
         try:
             if dt.tzinfo is not None:
-                return dt.astimezone(_tz.utc).replace(tzinfo=None)
-            return dt.replace(tzinfo=_tz.utc).astimezone()
+                return dt.astimezone().replace(tzinfo=None)
+            return dt.replace(tzinfo=_tz.utc).astimezone().replace(tzinfo=None)
         except Exception:
             return dt
 
@@ -144,6 +144,16 @@ def create_app(config_class=None):
 
     with app.app_context():
         db.create_all()
+
+        # Migrate: add allowed_groups column to routes if missing
+        from sqlalchemy import inspect as sa_inspect
+        inspector = sa_inspect(db.engine)
+        cols = {c['name'] for c in inspector.get_columns('routes')}
+        if 'allowed_groups' not in cols:
+            from sqlalchemy import text
+            db.session.execute(text('ALTER TABLE routes ADD COLUMN allowed_groups TEXT DEFAULT \'\''))
+            db.session.commit()
+
         from app.models import Route
         from app.services.scheduler import init_scheduler
         init_scheduler(app)

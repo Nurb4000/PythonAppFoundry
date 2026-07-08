@@ -6,6 +6,7 @@ import csv, io
 
 from app import db
 from app.models import User, Module, Route, Script, Form, ScheduledTask, Trigger, ChatSession, ChatMessage, Upload, Setting, Group, ExecutionLog, ModuleVersion
+from app.services.script_runner import execute_script
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -250,7 +251,7 @@ MODULE_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:cente
 <td>{{ m.id }}</td><td>{{ m.name }}</td><td>{{ m.slug }}</td><td>{{ m.version }}</td><td>{{ m.author }}</td><td>{{ m.enabled }}</td>
 <td>
   {% if dep_counts[m.id] > 0 %}
-    <span style="color:#d00;font-weight:bold;">{{ dep_counts[m.id] }}</span>
+    <a href="{{ url_for('admin.view_dependencies', module_id=m.id) }}" style="color:#d00;font-weight:bold;text-decoration:underline;">{{ dep_counts[m.id] }}</a>
   {% else %}
     <span style="color:#999;">—</span>
   {% endif %}
@@ -259,6 +260,9 @@ MODULE_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:cente
   <a href="{{ edit_url }}/{{ m.id }}">Edit</a>
   <a href="{{ url_for('admin.list_versions', module_id=m.id) }}">Versions</a>
   <a href="{{ export_url }}/{{ m.slug }}">Export XML</a>
+  <form method="POST" action="{{ url_for('admin.clone_module', id=m.id) }}" style="display:inline">
+    <button type="submit" style="background:none;border:none;color:#06c;cursor:pointer;text-decoration:underline;padding:0;font:inherit" title="Clone module">Clone</button>
+  </form>
   <a href="{{ chat_url }}/{{ m.id }}">Refine in AI</a>
   {% if m.bpmn_xml %}<a href="{{ bpmn_url }}{{ m.id }}">BPMN</a>{% endif %}
   <form method="POST" action="{{ url_for('admin.scan_dependencies', module_id=m.id) }}" style="display:inline">
@@ -277,6 +281,16 @@ MODULE_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:cente
 @developer_or_admin_required
 def new_module():
     if request.method == 'POST':
+        if 'import_xml' in request.files and request.files['import_xml'].filename:
+            from app.services.bundle import import_module
+            try:
+                xml_file = request.files['import_xml']
+                m = import_module(xml_file.read().decode('utf-8'))
+                flash(f'Module "{m.name}" imported from XML')
+                return redirect(url_for('admin.list_modules'))
+            except Exception as e:
+                flash(f'Import failed: {e}', 'error')
+                return redirect(url_for('admin.list_modules'))
         m = Module(
             name=request.form['name'],
             slug=request.form['slug'],
@@ -288,6 +302,14 @@ def new_module():
         db.session.commit()
         return redirect(url_for('admin.list_modules'))
     return render_admin('New Module', '''
+<details style="margin-bottom:1rem;"><summary style="cursor:pointer;color:#06c;">Import from XML</summary>
+<div style="margin:0.5rem 0 0 1rem;">
+<form method="POST" enctype="multipart/form-data">
+  <label>XML file <input name="import_xml" type="file" accept=".xml"></label>
+  <button>Import</button>
+</form>
+</div>
+</details>
 <form method="POST">
 <label>Name <input name="name" required></label>
 <label>Slug <input name="slug" required></label>
@@ -362,6 +384,9 @@ def delete_module(id):
     m.forms.delete()
     m.scheduled_tasks.delete()
     m.triggers.delete()
+    m.versions.delete()
+    m.dependencies_from.delete()
+    m.dependencies_to.delete()
     db.session.delete(m)
     db.session.commit()
     tbl_msg = f' and dropped {len(dyn_tables)} table(s)' if drop_tables and dyn_tables else ''
@@ -388,6 +413,71 @@ def scan_dependencies(module_id):
     except Exception as e:
         flash(f'Error scanning dependencies: {str(e)}', 'error')
 
+    return redirect(url_for('admin.list_modules'))
+
+
+@admin_bp.route('/modules/<int:module_id>/dependencies')
+@developer_or_admin_required
+def view_dependencies(module_id):
+    m = db.session.get(Module, module_id)
+    if not m:
+        flash(f'Module #{module_id} not found', 'error')
+        return redirect(url_for('admin.list_modules'))
+
+    from app.services.dependencies import get_dependencies
+    deps = get_dependencies(module_id)
+
+    return render_admin(f'Dependencies: {m.name}', '''
+<h2>Module: {{ m.name }} <span style="font-weight:normal;font-size:0.9em;color:#888;">v{{ m.version }}</span></h2>
+<p style="margin-top:-0.5rem;color:#666;">Slug: <code>{{ m.slug }}</code></p>
+
+{% if deps %}
+<div style="background:#fff3cd;border:1px solid #ffc107;padding:1rem;border-radius:6px;margin:1rem 0;">
+<h3 style="margin-top:0;color:#856404;">Referenced by {{ deps|length }} module(s):</h3>
+<p style="margin:0.5rem 0 1rem;color:#666;">These modules reference this module. Deleting it may break them.</p>
+<table style="width:100%;border-collapse:collapse;">
+<thead><tr>
+  <th style="text-align:left;padding:0.5rem;border-bottom:2px solid #e0c060;">Module</th>
+  <th style="text-align:left;padding:0.5rem;border-bottom:2px solid #e0c060;">Type</th>
+  <th style="text-align:left;padding:0.5rem;border-bottom:2px solid #e0c060;">Reference</th>
+  <th style="text-align:left;padding:0.5rem;border-bottom:2px solid #e0c060;">Detected</th>
+</tr></thead>
+<tbody>
+{% for dep in deps %}
+<tr>
+  <td style="padding:0.5rem;border-bottom:1px solid #f0d080;"><strong>{{ dep.source_module.name }}</strong></td>
+  <td style="padding:0.5rem;border-bottom:1px solid #f0d080;"><code>{{ dep.dependency_type }}</code></td>
+  <td style="padding:0.5rem;border-bottom:1px solid #f0d080;"><code>{{ dep.reference_value }}</code></td>
+  <td style="padding:0.5rem;border-bottom:1px solid #f0d080;">{{ dep.detected_at.strftime('%Y-%m-%d %H:%M') }}</td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% else %}
+<div style="background:#d4edda;border:1px solid #c3e6cb;padding:1rem;border-radius:6px;margin:1rem 0;">
+  <p style="margin:0;color:#155724;">No modules currently depend on this module.</p>
+</div>
+{% endif %}
+
+<p><a href="{{ url_for('admin.list_modules') }}">&larr; Back to modules</a></p>
+''', m=m, deps=deps)
+
+
+@admin_bp.route('/modules/clone/<int:id>', methods=['POST'])
+@developer_or_admin_required
+def clone_module(id):
+    m = Module.query.get_or_404(id)
+    from app.services.bundle import export_module, import_module
+    xml_str = export_module(m)
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(xml_str)
+    root.set('name', m.name + ' (copy)')
+    root.set('slug', m.slug + '-copy')
+    try:
+        new_m = import_module(ET.tostring(root, encoding='unicode', xml_declaration=True))
+        flash(f'Module cloned as "{new_m.name}"')
+    except Exception as e:
+        flash(f'Clone failed: {e}', 'error')
     return redirect(url_for('admin.list_modules'))
 
 
@@ -599,12 +689,14 @@ def new_route():
     modules = db.session.query(Module).all()
     scripts = db.session.query(Script).all()
     forms = db.session.query(Form).all()
+    groups = db.session.query(Group).order_by(Group.name).all()
     if request.method == 'POST':
-        slug = request.form['slug']
+        slug = '/' + request.form['slug'].lstrip('/')
         existing = db.session.query(Route).filter_by(slug=slug).first()
         if existing:
             flash(f'Route slug "{slug}" already in use by module "{existing.module.name}"')
             return redirect(url_for('admin.list_routes'))
+        allowed = ','.join(request.form.getlist('allowed_groups'))
         r = Route(
             module_id=int(request.form['module_id']),
             slug=slug,
@@ -612,6 +704,7 @@ def new_route():
             script_id=int(request.form['script_id']) if request.form.get('script_id') else None,
             form_id=int(request.form['form_id']) if request.form.get('form_id') else None,
             auth_required='auth_required' in request.form,
+            allowed_groups=allowed,
             title=request.form.get('title', ''),
         )
         db.session.add(r)
@@ -626,8 +719,17 @@ def new_route():
 <label>Form <select name="form_id"><option value="">-- none --</option>{% for f in forms %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select></label>
 <label><input name="auth_required" type="checkbox"> Auth Required</label>
 <label>Title <input name="title"></label>
+<details style="margin:0.5rem 0;"><summary>Group Access</summary>
+<div style="margin:0.5rem 0 0 1rem;">
+{% for g in groups %}
+<label style="display:block;font-weight:normal;font-size:0.9em;"><input name="allowed_groups" type="checkbox" value="{{ g.id }}"> {{ g.name }}</label>
+{% endfor %}
+{% if not groups %}<span style="color:#888;font-size:0.85em;">No groups defined</span>{% endif %}
+</div>
+</details>
 <button>Save</button>
-</form>''', modules=modules, scripts=scripts, forms=forms)
+</form>''', modules=modules, scripts=scripts, forms=forms, groups=groups)
+
 
 @admin_bp.route('/routes/edit/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
@@ -636,9 +738,10 @@ def edit_route(id):
     modules = db.session.query(Module).all()
     scripts = db.session.query(Script).all()
     forms = db.session.query(Form).all()
+    groups = db.session.query(Group).order_by(Group.name).all()
     if request.method == 'POST':
         r.module_id = int(request.form['module_id'])
-        slug = request.form['slug']
+        slug = '/' + request.form['slug'].lstrip('/')
         existing = db.session.query(Route).filter(Route.slug == slug, Route.id != id).first()
         if existing:
             flash(f'Route slug "{slug}" already in use by module "{existing.module.name}"')
@@ -648,9 +751,11 @@ def edit_route(id):
         r.script_id = int(request.form['script_id']) if request.form.get('script_id') else None
         r.form_id = int(request.form['form_id']) if request.form.get('form_id') else None
         r.auth_required = 'auth_required' in request.form
+        r.allowed_groups = ','.join(request.form.getlist('allowed_groups'))
         r.title = request.form.get('title', '')
         db.session.commit()
         return redirect(url_for('admin.list_routes'))
+    allowed_ids = set(r.allowed_groups.split(',') if r.allowed_groups else [])
     return render_admin('Edit Route', '''
 <form method="POST">
 <label>Slug <input name="slug" value="{{ r.slug }}" required></label>
@@ -660,8 +765,16 @@ def edit_route(id):
 <label>Form <select name="form_id"><option value="">-- none --</option>{% for f in forms %}<option value="{{ f.id }}" {% if f.id == r.form_id %}selected{% endif %}>{{ f.name }}</option>{% endfor %}</select></label>
 <label><input name="auth_required" type="checkbox" {% if r.auth_required %}checked{% endif %}> Auth Required</label>
 <label>Title <input name="title" value="{{ r.title }}"></label>
+<details style="margin:0.5rem 0;"><summary>Group Access</summary>
+<div style="margin:0.5rem 0 0 1rem;">
+{% for g in groups %}
+<label style="display:block;font-weight:normal;font-size:0.9em;"><input name="allowed_groups" type="checkbox" value="{{ g.id }}" {% if g.id|string in allowed_ids %}checked{% endif %}> {{ g.name }}</label>
+{% endfor %}
+{% if not groups %}<span style="color:#888;font-size:0.85em;">No groups defined</span>{% endif %}
+</div>
+</details>
 <button>Save</button>
-</form>''', r=r, modules=modules, scripts=scripts, forms=forms)
+</form>''', r=r, modules=modules, scripts=scripts, forms=forms, groups=groups, allowed_ids=allowed_ids)
 
 # ── Scripts ──
 
@@ -724,7 +837,53 @@ def edit_script(id):
     <textarea name="source_code" rows="15" style="width:100%;font-family:monospace;">{{ s.source_code }}</textarea>
   </label>
   <button style="margin-top:12px;padding:6px 16px;">Save</button>
+  <a href="{{ url_for('admin.debug_script', id=s.id) }}" style="margin-left:0.5rem;padding:6px 16px;background:#f0f0f0;color:#333;text-decoration:none;border:1px solid #ccc;border-radius:4px;display:inline-block;">Run Debug</a>
 </form>''', s=s, modules=modules)
+
+
+@admin_bp.route('/scripts/debug/<int:id>')
+@developer_or_admin_required
+def debug_script(id):
+    s = Script.query.get_or_404(id)
+    import time
+    t0 = time.time()
+    from io import StringIO
+    import sys
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+    error = None
+    output = None
+    try:
+        result = execute_script(s)
+        output = sys.stdout.getvalue()
+        duration = int((time.time() - t0) * 1000)
+    except Exception as e:
+        import traceback
+        error = traceback.format_exc()
+        duration = int((time.time() - t0) * 1000)
+    finally:
+        sys.stdout = old_stdout
+    source_lines = s.source_code.split('\n')
+    return render_admin('Debug: ' + s.name, '''
+<h2>Debug: {{ s.name }}</h2>
+<p style="color:#888;">Duration: {{ duration }}ms | Module: {{ s.module.name }}</p>
+<h3>Source Code</h3>
+<pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #ddd;border-radius:4px;">
+{% for i, line in source_lines %}
+<span style="color:#999;">{{ '%3d' % (i+1) }}</span>  {{ line }}
+{% endfor %}
+</pre>
+{% if error %}
+<h3 style="color:#c00;">Error</h3>
+<pre style="background:#fff5f5;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #fcc;border-radius:4px;">{{ error }}</pre>
+{% elif output %}
+<h3>Output</h3>
+<pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #ddd;border-radius:4px;">{{ output }}</pre>
+{% else %}
+<p>Script completed with no output.</p>
+{% endif %}
+<a href="{{ url_for('admin.edit_script', id=s.id) }}">&larr; Back to Script</a>
+''', s=s, duration=duration, source_lines=enumerate(source_lines), error=error, output=output)
 
 # ── Forms ──
 
@@ -796,7 +955,6 @@ def edit_form(id):
 </div>
 <div style="margin-top:1rem;">
 <button>Save</button>
-<a href="{{ url_for('admin.preview_form', id=f.id) }}" style="margin-left:1rem;">Full Preview Page</a>
 </div>
 </form>
 <script>
@@ -876,6 +1034,17 @@ def edit_form(id):
 
 # ── Tasks ──
 
+def _validate_cron(expr):
+    parts = expr.strip().split()
+    if len(parts) != 5:
+        return 'Must have exactly 5 space-separated fields (minute hour day month day_of_week)'
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+        CronTrigger(minute=parts[0], hour=parts[1], day=parts[2], month=parts[3], day_of_week=parts[4])
+        return None
+    except (ValueError, ImportError) as e:
+        return str(e)
+
 @admin_bp.route('/tasks')
 @admin_required
 def list_tasks():
@@ -889,11 +1058,16 @@ def new_task():
     modules = db.session.query(Module).all()
     scripts = db.session.query(Script).all()
     if request.method == 'POST':
+        cron = request.form['cron_expression']
+        err = _validate_cron(cron)
+        if err:
+            flash(f'Invalid cron expression: {err}', 'error')
+            return redirect(url_for('admin.list_tasks'))
         t = ScheduledTask(
             module_id=int(request.form['module_id']),
             name=request.form['name'],
             script_id=int(request.form['script_id']),
-            cron_expression=request.form['cron_expression'],
+            cron_expression=cron,
         )
         db.session.add(t)
         db.session.commit()
@@ -914,10 +1088,15 @@ def edit_task(id):
     modules = db.session.query(Module).all()
     scripts = db.session.query(Script).all()
     if request.method == 'POST':
+        cron = request.form['cron_expression']
+        err = _validate_cron(cron)
+        if err:
+            flash(f'Invalid cron expression: {err}', 'error')
+            return redirect(url_for('admin.list_tasks'))
         t.module_id = int(request.form['module_id'])
         t.name = request.form['name']
         t.script_id = int(request.form['script_id'])
-        t.cron_expression = request.form['cron_expression']
+        t.cron_expression = cron
         t.enabled = 'enabled' in request.form
         db.session.commit()
         return redirect(url_for('admin.list_tasks'))
@@ -1507,59 +1686,6 @@ def delete_row(table_name, id):
     db.session.commit()
     return redirect(url_for('admin.browse_table', table_name=table_name))
 
-# ── Form preview ──
-
-import json as _json
-
-@admin_bp.route('/forms/<int:id>/preview')
-@developer_or_admin_required
-def preview_form(id):
-    f = Form.query.get_or_404(id)
-    try:
-        fields = _json.loads(f.schema_json)
-    except Exception:
-        fields = []
-    if not isinstance(fields, list):
-        fields = []
-
-    from flask import request as _flask_request
-    html_parts = ['<form>']
-    for field in fields:
-        fname = field.get('name', '')
-        flabel = field.get('label', fname)
-        ftype = field.get('type', 'text')
-        required = 'required' if field.get('required', False) else ''
-        placeholder = field.get('placeholder', '')
-        html_parts.append('<div style="margin-bottom:12px;">')
-        html_parts.append('<label for="%s" style="display:block;font-weight:600;margin-bottom:4px;">%s</label>' % (fname, flabel))
-        if ftype == 'textarea':
-            html_parts.append('<textarea id="%s" name="%s" %s placeholder="%s" style="width:100%%;padding:8px;border:1px solid #ccc;border-radius:4px;min-height:100px;"></textarea>' % (fname, fname, required, placeholder))
-        elif ftype == 'select':
-            opts = field.get('options', '')
-            html_parts.append('<select id="%s" name="%s" %s style="width:100%%;padding:8px;border:1px solid #ccc;border-radius:4px;">' % (fname, fname, required))
-            for opt in opts.split(','):
-                opt = opt.strip()
-                html_parts.append('<option value="%s">%s</option>' % (opt, opt))
-            html_parts.append('</select>')
-        elif ftype == 'checkbox':
-            html_parts.append('<input type="checkbox" id="%s" name="%s" %s style="margin-top:4px;">' % (fname, fname, required))
-        elif ftype == 'file':
-            html_parts.append('<input type="file" id="%s" name="%s" %s style="width:100%%;padding:6px;border:1px solid #ccc;border-radius:4px;">' % (fname, fname, required))
-        else:
-            html_parts.append('<input type="%s" id="%s" name="%s" %s placeholder="%s" style="width:100%%;padding:8px;border:1px solid #ccc;border-radius:4px;">' % (ftype, fname, fname, required, placeholder))
-        html_parts.append('</div>')
-    html_parts.append('</form>')
-
-    return render_admin('Form Preview: ' + f.name, '''
-<div style="margin-bottom:1rem;"><a href="{{ url_for('admin.edit_form', id=f.id) }}">&larr; Back to Edit</a></div>
-<div style="max-width:500px;padding:1rem;border:1px solid #ddd;border-radius:8px;">
-  {{ preview|safe }}
-</div>
-<div style="margin-top:1rem;padding:1rem;background:#f8f9fa;border-radius:8px;">
-  <strong>Schema JSON:</strong>
-  <pre style="white-space:pre-wrap;word-break:break-word;">{{ f.schema_json }}</pre>
-</div>''', f=f, preview='\n'.join(html_parts))
-
 # ── Uploads ──
 
 import os as _os
@@ -1820,12 +1946,14 @@ def edit_settings():
         Setting.set('llm_temperature', request.form.get('llm_temperature', '0.3'))
         Setting.set('llm_max_tokens', request.form.get('llm_max_tokens', '4096'))
         Setting.set('llm_timeout', request.form.get('llm_timeout', '300'))
+        Setting.set('script_timeout', request.form.get('script_timeout', '30'))
         Setting.set('smtp_host', request.form.get('smtp_host', 'localhost'))
         Setting.set('smtp_port', request.form.get('smtp_port', '587'))
         Setting.set('smtp_user', request.form.get('smtp_user', ''))
         Setting.set('smtp_password', request.form.get('smtp_password', ''))
         Setting.set('smtp_from', request.form.get('smtp_from', 'noreply@example.com'))
         Setting.set('smtp_tls', 'true' if 'smtp_tls' in request.form else 'false')
+        Setting.set('log_retention_days', request.form.get('log_retention_days', '0'))
         flash('Settings saved')
         return redirect(url_for('admin.edit_settings'))
     disabled = Setting.get('registration_disabled', 'false') == 'true'
@@ -1838,12 +1966,14 @@ def edit_settings():
     llm_temperature = Setting.get('llm_temperature', '0.3')
     llm_max_tokens = Setting.get('llm_max_tokens', '4096')
     llm_timeout = Setting.get('llm_timeout', '300')
+    script_timeout = Setting.get('script_timeout', '30')
     smtp_host = Setting.get('smtp_host', 'localhost')
     smtp_port = Setting.get('smtp_port', '587')
     smtp_user = Setting.get('smtp_user', '')
     smtp_password = Setting.get('smtp_password', '')
     smtp_from = Setting.get('smtp_from', 'noreply@example.com')
     smtp_tls = Setting.get('smtp_tls', 'true') == 'true'
+    log_retention_days = Setting.get('log_retention_days', '0')
     return render_admin('Settings', '''
 <form method="POST">
 <h3 style="margin-top:0;">Registration</h3>
@@ -1896,6 +2026,16 @@ def edit_settings():
   <strong>Timeout (seconds)</strong><br>
   <input name="llm_timeout" type="number" min="1" step="1" value="{{ llm_timeout }}" style="padding:6px 10px;width:120px;">
 </label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Script Timeout (seconds)</strong><br>
+  <input name="script_timeout" type="number" min="1" step="1" value="{{ script_timeout }}" style="padding:6px 10px;width:120px;"><br>
+  <span style="color:#888;font-size:0.85em;">Max execution time for scripts before they are killed. Protects against runaway scripts.</span>
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Log Retention (days)</strong><br>
+  <input name="log_retention_days" type="number" min="0" step="1" value="{{ log_retention_days }}" style="padding:6px 10px;width:120px;"><br>
+  <span style="color:#888;font-size:0.85em;">Auto-delete execution logs older than this. 0 = keep forever.</span>
+</label>
 
 <h3>SMTP / Email</h3>
 <label style="display:block;margin-bottom:12px;">
@@ -1922,6 +2062,10 @@ def edit_settings():
   <input name="smtp_tls" type="checkbox" {% if smtp_tls %}checked{% endif %}>
   <strong>Use TLS</strong>
 </label>
+<label style="display:block;margin-bottom:12px;">
+  <a href="{{ url_for('admin.test_email') }}" style="padding:6px 16px;background:#f0f0f0;color:#333;text-decoration:none;border:1px solid #ccc;border-radius:4px;display:inline-block;">Send Test Email</a>
+  <span style="color:#888;font-size:0.85em;margin-left:0.5rem;">Sends a test message to your email address ({{ current_user.username }}).</span>
+</label>
 <div style="margin-top:16px;">
   <button style="padding:8px 20px;">Save All Settings</button>
 </div>
@@ -1931,10 +2075,28 @@ def edit_settings():
         llm_provider=llm_provider, llm_endpoint=llm_endpoint,
         llm_api_key=llm_api_key, llm_model=llm_model,
         llm_temperature=llm_temperature, llm_max_tokens=llm_max_tokens,
-        llm_timeout=llm_timeout,
+        llm_timeout=llm_timeout, script_timeout=script_timeout,
         smtp_host=smtp_host, smtp_port=smtp_port,
         smtp_user=smtp_user, smtp_password=smtp_password,
-        smtp_from=smtp_from, smtp_tls=smtp_tls)
+        smtp_from=smtp_from, smtp_tls=smtp_tls,
+        log_retention_days=log_retention_days)
+
+
+@admin_bp.route('/settings/test-email')
+@admin_required
+def test_email():
+    try:
+        from app.services.script_runner import _send_email
+        _send_email(
+            to=current_user.username,
+            subject='Test email from PythonAppFoundry',
+            body='<h1>Test</h1><p>If you can read this, your SMTP configuration is working.</p>',
+            html=True,
+        )
+        flash(f'Test email sent to {current_user.username}')
+    except Exception as e:
+        flash(f'Test email failed: {e}', 'error')
+    return redirect(url_for('admin.edit_settings'))
 
 
 # ── Dashboard ──
@@ -1943,7 +2105,9 @@ def edit_settings():
 @admin_required
 def dashboard():
     import platform as _platform
+    import sqlite3 as _sqlite3
     import sys as _sys
+    import flask as _flask
     import time as _time
     from datetime import timedelta
 
@@ -1967,6 +2131,15 @@ def dashboard():
     pending_users = User.query.filter_by(is_approved=False).count()
     total_uploads = Upload.query.count()
     uploads_size = db.session.execute(db.select(db.func.sum(Upload.size))).scalar() or 0
+
+    # Clean up old execution logs
+    retention_days = int(Setting.get('log_retention_days', '0'))
+    if retention_days > 0:
+        from datetime import datetime, timezone, timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        deleted = db.session.query(ExecutionLog).filter(ExecutionLog.created_at < cutoff).delete()
+        if deleted:
+            db.session.commit()
 
     recent_logs = db.session.query(ExecutionLog).order_by(ExecutionLog.created_at.desc()).limit(20).all()
     log_success = db.session.query(db.func.count(ExecutionLog.id)).filter_by(status='success').scalar() or 0
@@ -2011,8 +2184,8 @@ def dashboard():
 
     content = render_template_string(DASHBOARD_TEMPLATE,
         python_version=_platform.python_version(),
-        flask_version='3.0',
-        sqlite_version=_platform.python_version(),
+        flask_version=_flask.__version__,
+        sqlite_version=_sqlite3.sqlite_version,
         uptime=uptime_seconds,
         total_modules=total_modules, enabled_modules=enabled_modules,
         total_routes=total_routes, total_scripts=total_scripts,
