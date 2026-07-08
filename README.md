@@ -33,7 +33,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 ## Quick Start
 
 ```bash
-git clone https://github.com/<your-user>/PythonAppFoundry && cd PythonAppFoundry
+git clone https://github.com/Nurb4000/PythonAppFoundry && cd PythonAppFoundry
 pip install -r requirements.txt
 cp .env.example .env 2>/dev/null || touch .env   # defaults work for SQLite
 python3 run.py
