@@ -20,7 +20,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **CSV Export** — Every list view and data table supports CSV download.
 - **Module Versioning** — Automatic version snapshots on every import (AI Designer, BPMN) and manual version creation. Rollback to any previous state with one click, diff between versions, and add comments to track changes over time.
 - **Module Dependency Tracking** — Automatically detects when modules reference other modules' routes or scripts. Shows dependency warnings before deletion to prevent silent breakage. Manual "Scan" button to re-detect dependencies.
-- **System Dashboard** — Health overview at `/__admin/dashboard` showing module/route/script counts, system info (Python/Flask versions, uptime), recent execution logs, database table sizes, and per-module summaries. All script executions are automatically logged.
+- **System Dashboard** — Health overview at `/__admin/dashboard` showing module/route/script counts, system info (Python/Flask versions, uptime), recent execution logs with View Error/Output buttons for full details, database table sizes, and per-module summaries. All script executions are automatically logged.
 - **Webhook Support** — External services can trigger scripts via HTTP POST to `/__api/webhook/{slug}`. Configure webhooks as triggers with `event_type='webhook'`. Scripts receive the payload data for processing.
 
 ## Quick Start

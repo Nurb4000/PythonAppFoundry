@@ -237,7 +237,7 @@ curl -X POST http://localhost:5000/__api/webhook/github-push \
 System health overview at `/__admin/dashboard`. Shows:
 - **Summary cards** — counts of modules, routes, scripts, forms, tasks, triggers, users, and uploads
 - **System info** — Python/Flask versions, app uptime, scheduler status with running jobs and next run times
-- **Recent executions** — last 20 script executions with source type (route/task/trigger), name, duration, status, and error messages
+- **Recent executions** — last 20 script executions with source type (route/task/trigger/webhook), name, duration, status. Click **View Error** (red) or **View Output** (green) buttons to see full error messages or stdout in a modal popup
 - **Database tables** — row counts for all tables
 - **Module summary** — grid showing route/script/form/task/trigger counts per module
 
