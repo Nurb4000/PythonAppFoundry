@@ -9,7 +9,6 @@
   <scripts>
     <script name="gallery_handler" language="python"><![CDATA[
 gallery = DynamicModel.get_or_create('gallery_art', {
-    'id': db.Integer,
     'title': db.String(100),
     'artist': db.String(50),
     'pixels': db.Text,
