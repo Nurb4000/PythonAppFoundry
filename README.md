@@ -28,7 +28,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Cron Validation** — Invalid cron expressions are caught on save, preventing silent task failures.
 - **Log Retention** — Auto-cleanup of old execution logs configurable from Settings.
 - **Email Test Button** — Verify SMTP configuration with a single click from the Settings page.
-- **Demo Module** — Import `demos/guestbook.xml` from the Modules page for a working example of forms, DynamicModel data collection, and rendered output at the site root.
+- **Demo Modules** — Import `demos/guestbook.xml` for a working example of forms, DynamicModel data collection, and rendered output at the site root. Import `demos/pixel_art_gallery.xml` for a visual showcase of retro pixel art with a styled grid layout.
 
 ## Quick Start
 
