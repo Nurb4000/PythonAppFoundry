@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module name="Pixel Art Gallery" slug="pixel-art" version="1.0" author="Demo">
-  <description>A retro pixel-art showcase with a gallery, a random art generator, and a simple voting system.</description>
+  <description>A retro pixel-art showcase with a gallery of tiny pixel masterpieces.</description>
 
   <routes>
-    <route slug="/pixel-art" title="Pixel Art Gallery" auth_required="false">
-      <script><![CDATA[
-import random
+    <route slug="/pixel-art" method="GET" title="Pixel Art Gallery" auth_required="false" script="gallery_handler"/>
+  </routes>
 
-# Seed some pixel art pieces if table is empty
+  <scripts>
+    <script name="gallery_handler" language="python"><![CDATA[
 gallery = DynamicModel.get_or_create('gallery_art', {
     'id': db.Integer,
     'title': db.String(100),
@@ -79,14 +79,13 @@ h1 { text-align: center; font-size: 2.5rem; color: var(--accent); text-shadow: 2
 .card h3 { margin: 0.5rem 0 0.2rem; color: #fff; }
 .card .artist { color: #888; font-size: 0.8rem; }
 .card .votes { color: var(--accent); font-size: 0.85rem; margin-top: 0.3rem; }
-.card canvas { margin: 0 auto; }
 .footer { text-align: center; margin-top: 3rem; color: #555; font-size: 0.8rem; }
 </style>
 <div class="container">
   <h1>🎮 Pixel Art Gallery</h1>
   <p class="subtitle">A showcase of tiny masterpieces</p>
   <div class="stats">
-    <span>{{ total }} pieces &middot; {{ votes }} total votes &middot; 🏆 {{ top_title }}</span>
+    <span>{{ total }} pieces · {{ votes }} total votes · 🏆 {{ top_title }}</span>
   </div>
   <div class="grid">
     {% for a in art_list %}
@@ -104,6 +103,5 @@ h1 { text-align: center; font-size: 2.5rem; color: var(--accent); text-shadow: 2
     art_list=[{'title': a.title, 'artist': a.artist, 'votes': a.votes,
                'rendered': render_pixel(a.pixels, a.width, a.height)} for a in arts])
 ]]></script>
-    </route>
-  </routes>
+  </scripts>
 </module>
