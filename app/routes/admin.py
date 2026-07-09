@@ -256,7 +256,7 @@ def list_modules():
         dep_counts=dep_counts,
         new_url=url_for('admin.new_module'),
         edit_url=url_for('admin.edit_module', id=0).rsplit('/', 1)[0],
-        export_url=url_for('api.api_export', slug='').rsplit('/', 1)[0],
+        export_url=url_for('api.api_export', slug='').replace('//export', ''),
         chat_url=url_for('chat.refine_module', id=0).rsplit('/', 1)[0],
         delete_url=url_for('admin.delete_module', id=0).rsplit('/', 1)[0],
         bpmn_url=url_for('bpmn.designer', module_id=0).replace('module_id=0', 'module_id='),
@@ -296,7 +296,7 @@ MODULE_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:cente
 <td>
   <a href="{{ edit_url }}/{{ m.id }}">Edit</a>
   <a href="{{ url_for('admin.list_versions', module_id=m.id) }}">Versions</a>
-  <a href="{{ export_url }}/{{ m.slug }}">Export XML</a>
+  <a href="{{ export_url }}/{{ m.slug }}/export">Export XML</a>
   <form method="POST" action="{{ url_for('admin.clone_module', id=m.id) }}" style="display:inline">
     <button type="submit" style="background:none;border:none;color:#06c;cursor:pointer;text-decoration:underline;padding:0;font:inherit" title="Clone module">Clone</button>
   </form>

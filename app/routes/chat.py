@@ -35,7 +35,7 @@ nav .new-btn { background: #28a745; color: #fff; text-align: center; padding: 0.
 .btn-approve { background: #ffc107; color: #000; }
 .err { color: #c00; background: #ffe0e0; padding: 0.5rem; border-radius: 4px; margin: 0.5rem 0; }
 .input-area { padding: 1rem; border-top: 1px solid #ddd; display: flex; gap: 0.5rem; }
-.input-area textarea { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; resize: none; font-family: inherit; min-height: 48px; }
+.input-area textarea { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: inherit; min-height: 80px; overflow-y: auto; }
 .input-area button { padding: 0.5rem 1.5rem; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
 .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #007bff; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 0.5rem; vertical-align: middle; }
@@ -77,7 +77,7 @@ nav .new-btn { background: #28a745; color: #fff; text-align: center; padding: 0.
 {% endfor %}
 </div>
 <form class="input-area" id="chatForm" method="POST" action="{{ url_for('chat.send_message', id=session.id) }}">
-<textarea name="message" rows="2" placeholder="Describe the module you want..." required autofocus></textarea>
+<textarea name="message" rows="4" placeholder="Describe the module you want..." required autofocus></textarea>
 <button type="submit" id="sendBtn">Send</button>
 </form>
 </div>
