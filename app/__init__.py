@@ -89,7 +89,7 @@ def create_app(config_class=None):
                     and not request.path.startswith('/__auth')):
                 site_tag = f'{site_name} — ' if site_name else ''
                 if current_user.role == 'admin':
-                    bar = f'''<div id="admin-bar" style="background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
+                    bar = f'''<div id="admin-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
                 <span style="font-weight:600;color:#e94560">{site_tag}Admin</span>
                 <a href="/__admin/dashboard" style="color:#eee;text-decoration:none">Dashboard</a>
                 <a href="/__admin/modules" style="color:#eee;text-decoration:none">Modules</a>
@@ -111,7 +111,7 @@ def create_app(config_class=None):
                 <a href="/__auth/logout" style="color:#e94560;text-decoration:none">Logout</a>
             </div>'''
                 elif current_user.role == 'developer':
-                    bar = f'''<div id="admin-bar" style="background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
+                    bar = f'''<div id="admin-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
                 <span style="font-weight:600;color:#e94560">{site_tag}Dev</span>
                 <a href="/__admin/dashboard" style="color:#eee;text-decoration:none">Dashboard</a>
                 <a href="/__admin/modules" style="color:#eee;text-decoration:none">Modules</a>
@@ -127,7 +127,7 @@ def create_app(config_class=None):
                 <a href="/__auth/logout" style="color:#e94560;text-decoration:none">Logout</a>
             </div>'''
                 else:
-                    bar = f'''<div id="admin-bar" style="background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
+                    bar = f'''<div id="admin-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
                 <a href="/__auth/profile" style="color:#eee;text-decoration:none">Profile</a>
                 <span style="flex:1"></span>
                 <span>{current_user.username}</span>
@@ -135,9 +135,9 @@ def create_app(config_class=None):
                 <a href="/__auth/logout" style="color:#e94560;text-decoration:none">Logout</a>
             </div>'''
                 if '<body>' in body:
-                    body = body.replace('<body>', f'<body>{bar}', 1)
+                    body = body.replace('<body>', f'<body style="padding-top:38px">{bar}', 1)
                 else:
-                    body = f'<!DOCTYPE html><html><body>{bar}{body}</body></html>'
+                    body = f'<!DOCTYPE html><html><body style="padding-top:38px">{bar}{body}</body></html>'
 
             response.set_data(body)
         return response
