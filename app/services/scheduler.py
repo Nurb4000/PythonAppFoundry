@@ -14,6 +14,7 @@ _last_run_guard = {}
 def init_scheduler(app):
     global _scheduler, _app
     if _scheduler is not None:
+        print(f'[SCHEDULER] init_scheduler called but already running PID={os.getpid()}')
         return
     _app = app
     try:
@@ -27,11 +28,11 @@ def init_scheduler(app):
                 register_task(task)
             db.session.commit()
 
-        app.logger.info(f'Scheduler started PID={os.getpid()} WERKZEUG_RUN_MAIN={os.environ.get("WERKZEUG_RUN_MAIN")} APP_DEBUG={os.environ.get("APP_DEBUG")} tasks={len(tasks)} jobs={len(_scheduler.get_jobs())}')
+        print(f'[SCHEDULER] Started PID={os.getpid()} WERKZEUG_RUN_MAIN={os.environ.get("WERKZEUG_RUN_MAIN")} APP_DEBUG={os.environ.get("APP_DEBUG")} tasks={len(tasks)} jobs={len(_scheduler.get_jobs())}')
     except ImportError:
-        app.logger.warning('APScheduler not installed — scheduler disabled')
+        print('[SCHEDULER] APScheduler not installed — scheduler disabled')
     except Exception as e:
-        app.logger.error(f'Scheduler init failed: {e}')
+        print(f'[SCHEDULER] Init failed: {e}')
 
 
 def register_task(task):
@@ -78,8 +79,7 @@ def run_task_wrapper(task_id):
     # Dedup guard: skip if this task ran within the last 60 seconds
     last = _last_run_guard.get(task_id)
     if last and now - last < timedelta(seconds=60):
-        import logging
-        logging.getLogger(__name__).warning(f'Dedup guard blocked task {task_id} — last run {last}')
+        print(f'[SCHEDULER] Dedup guard blocked task {task_id} — last run {last} now={now}')
         return
     _last_run_guard[task_id] = now
 
@@ -87,10 +87,8 @@ def run_task_wrapper(task_id):
         task = db.session.get(ScheduledTask, task_id)
         if not task or not task.enabled:
             return
-        import logging
-        logger = logging.getLogger(__name__)
         job_count = len(_scheduler.get_jobs()) if _scheduler else 0
-        logger.info(f'Running task: {task.name} PID={os.getpid()} thread={threading.get_ident()} jobs={job_count}')
+        print(f'[SCHEDULER] Running task: {task.name} PID={os.getpid()} thread={threading.get_ident()} jobs={job_count}')
         task.last_run = now
         job = _scheduler.get_job(f'task_{task.id}') if _scheduler else None
         if job and job.next_run_time:
