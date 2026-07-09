@@ -10,6 +10,8 @@ _app = None
 
 def init_scheduler(app):
     global _scheduler, _app
+    if _scheduler is not None:
+        return
     _app = app
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
