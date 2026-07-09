@@ -59,9 +59,10 @@ It starts with SQLite for development, but uses SQLAlchemy so you can expand to 
 
 ## Guides
 
-Two guides are included in the repo:
+Three guides are included in the repo:
 
-- **`ADMIN_GUIDE.md`** — How to get started working with the system: first run, admin bar, workflow instructions, LLM/AI configuration, SMTP setup.
+- **`ADMIN_AND_DEVELOPER_GUIDE.md`** — Getting started with the system: first run, admin bar, workflow instructions, LLM/AI configuration, SMTP setup. Covers both admin and module developer tasks.
+- **`CONTRIBUTOR_GUIDE.md`** — Platform internals for developers contributing to the codebase: architecture, directory layout, models, services, security model, and development workflow.
 - **`AI_GUIDE.md`** — A guide for the LLM itself. It explains the structure of the platform, the XML bundle format, available helpers and builtins, and how to generate proper code. This is very much a moving target — as we all know how stubborn LLMs can be.
 
 ## Architecture
