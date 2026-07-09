@@ -2303,7 +2303,10 @@ function showLogDetail(id, msgEl) {
   var modal = document.getElementById('logModal');
   var content = document.getElementById('logContent');
   var message = msgEl ? msgEl.textContent || msgEl.innerText : 'No details available.';
-  content.innerHTML = '<h3>Execution Log #' + id + '</h3><pre>' + message + '</pre>';
+  content.innerHTML = '<h3>Execution Log #' + id + '</h3>';
+  var pre = document.createElement('pre');
+  pre.textContent = message;
+  content.appendChild(pre);
   modal.style.display = 'block';
 }
 document.addEventListener('click', function(e) {
