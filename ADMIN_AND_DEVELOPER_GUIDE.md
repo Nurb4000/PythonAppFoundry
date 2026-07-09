@@ -306,6 +306,60 @@ DATABASE_URL=sqlite:///data.db
 
 LLM settings are now configured in the GUI instead of `.env`.
 
+## Scaling Up: SQLite to PostgreSQL
+
+SQLite is fine for development and single-user use, but for production with multiple users you'll want PostgreSQL.
+
+### 1. Install the PostgreSQL driver
+
+```bash
+pip install psycopg2-binary
+```
+
+(Use `psycopg2` instead of `psycopg2-binary` if you have the system libpq library installed.)
+
+### 2. Create the PostgreSQL database
+
+```bash
+psql -U postgres
+CREATE DATABASE pythonappfoundry;
+CREATE USER appfoundry WITH PASSWORD 'your-password';
+GRANT ALL PRIVILEGES ON DATABASE pythonappfoundry TO appfoundry;
+\q
+```
+
+### 3. Update `.env`
+
+```
+DATABASE_URL=postgresql://appfoundry:your-password@localhost:5432/pythonappfoundry
+```
+
+### 4. Migrate your data (two options)
+
+**Option A — Fresh start** (simplest, no existing data):
+Just change `DATABASE_URL` and restart. The platform creates all tables on startup automatically via `db.create_all()`.
+
+**Option B — Migrate existing SQLite data**:
+```bash
+# Dump SQLite data to SQL
+sqlite3 instance/data.db .dump > data_dump.sql
+
+# Edit the dump to remove SQLite-specific syntax:
+#   - Remove PRAGMA lines
+#   - Remove BEGIN/COMMIT if needed
+#   - Change AUTOINCREMENT to SERIAL
+#   - Remove sqlite_sequence references
+
+# Import into PostgreSQL
+psql -U appfoundry -d pythonappfoundry -f data_dump.sql
+```
+
+### Important notes
+
+- **DynamicModel tables** (tables created by modules at runtime) are also recreated on startup — the Data Browser lets you verify they exist after migration.
+- **Sequences and auto-increment**: SQLite's `AUTOINCREMENT` and PostgreSQL's `SERIAL` / `IDENTITY` differ. After migration, check that auto-incrementing IDs work by adding a test row in the Data Browser.
+- **No Flask-Migrate needed**: The platform uses `db.create_all()` on every startup, so as long as your database URL points to PostgreSQL, all platform tables are created automatically. Schema changes to existing platform tables use raw `ALTER TABLE` in `app/__init__.py` — these run on PostgreSQL as well.
+
 ## SMTP / Email Configuration
 
 Email settings are managed via **Admin → Settings** in the GUI. Scripts use `send_email(to, subject, body, html=False)` which reads these settings automatically — no credentials should ever be hardcoded in scripts.
