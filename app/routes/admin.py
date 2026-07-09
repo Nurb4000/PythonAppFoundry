@@ -4,6 +4,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy import Table, MetaData
 import csv, io
+from datetime import datetime as _datetime, timezone as _tz
 
 from app import db
 from app.models import User, Module, Route, Script, Form, ScheduledTask, Trigger, ChatSession, ChatMessage, Upload, Setting, Group, ExecutionLog, ModuleVersion
@@ -112,6 +113,32 @@ def create_auto_version(module_id, comment=None):
         pass  # Silently fail - versioning is not critical
 
 
+def _describe_cron(expr):
+    parts = expr.strip().split()
+    if len(parts) != 5:
+        return ''
+    minute, hour, day, month, day_of_week = parts
+    if minute.startswith('*/') and hour == '*' and day == '*' and month == '*' and day_of_week == '*':
+        n = minute[2:]
+        return f'Every {n} minute{"s" if n != "1" else ""}'
+    if minute == '0' and hour.startswith('*/') and day == '*' and month == '*' and day_of_week == '*':
+        n = hour[2:]
+        return f'Every {n} hour{"s" if n != "1" else ""}'
+    if minute == '0' and hour == '0' and day == '*' and month == '*' and day_of_week == '*':
+        return 'Daily at midnight'
+    if day == '*' and month == '*' and day_of_week == '*':
+        try:
+            h, m = int(hour), int(minute)
+            return f'Daily at {h % 12 or 12}:{m:02d} {"AM" if h < 12 else "PM"}'
+        except ValueError:
+            pass
+    if minute == '0' and hour == '*' and day == '*' and month == '*' and day_of_week == '*':
+        return 'Every hour'
+    if minute == '*' and hour == '*' and day == '*' and month == '*' and day_of_week == '*':
+        return 'Every minute'
+    return ''
+
+
 class AttrProxy:
     def __init__(self, obj):
         self._obj = obj
@@ -119,9 +146,18 @@ class AttrProxy:
         if name == '_module_name':
             mod = getattr(self._obj, 'module', None)
             return getattr(mod, 'name', '') if mod else ''
+        if name == 'cron_expression':
+            expr = str(getattr(self._obj, 'cron_expression', '') or '')
+            desc = _describe_cron(expr)
+            return f'{expr}  ({desc})' if desc else expr
         val = getattr(self._obj, name, '')
         if hasattr(val, '__call__'):
             return ''
+        if isinstance(val, _datetime):
+            if val.tzinfo is not None:
+                val = val.astimezone().replace(tzinfo=None)
+            else:
+                val = val.replace(tzinfo=_tz.utc).astimezone().replace(tzinfo=None)
         return str(val or '')
 
 

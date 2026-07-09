@@ -22,6 +22,7 @@ def init_scheduler(app):
             tasks = db.session.query(ScheduledTask).filter_by(enabled=True).all()
             for task in tasks:
                 register_task(task)
+            db.session.commit()
 
         app.logger.info(f'Scheduler started with {len(tasks)} tasks')
     except ImportError:
@@ -57,6 +58,10 @@ def register_task(task):
             replace_existing=True,
             name=task.name,
         )
+        job = _scheduler.get_job(f'task_{task.id}')
+        if job and job.next_run_time:
+            from datetime import timezone
+            task.next_run = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f'Failed to register task {task.name}: {e}')
@@ -74,6 +79,9 @@ def run_task_wrapper(task_id):
         logging.getLogger(__name__).info(f'Running task: {task.name}')
         from datetime import datetime, timezone
         task.last_run = datetime.now(timezone.utc)
+        job = _scheduler.get_job(f'task_{task.id}')
+        if job and job.next_run_time:
+            task.next_run = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
         db.session.commit()
         if task.script:
             timeout = int(Setting.get('script_timeout', '30'))
@@ -109,3 +117,4 @@ def refresh_tasks():
     tasks = db.session.query(ScheduledTask).filter_by(enabled=True).all()
     for task in tasks:
         register_task(task)
+    db.session.commit()
