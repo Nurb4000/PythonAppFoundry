@@ -2064,10 +2064,23 @@ def edit_settings():
   <input name="smtp_tls" type="checkbox" {% if smtp_tls %}checked{% endif %}>
   <strong>Use TLS</strong>
 </label>
-<label style="display:block;margin-bottom:12px;">
-  <a href="{{ url_for('admin.test_email') }}" style="padding:6px 16px;background:#f0f0f0;color:#333;text-decoration:none;border:1px solid #ccc;border-radius:4px;display:inline-block;">Send Test Email</a>
-  <span style="color:#888;font-size:0.85em;margin-left:0.5rem;">Sends a test message to your email address ({{ current_user.username }}).</span>
-</label>
+<hr style="margin:20px 0;">
+<h4>Send Test Email</h4>
+<div style="background:#fafafa;border:1px solid #eee;padding:16px;border-radius:4px;margin-bottom:12px;">
+  <label style="display:block;margin-bottom:10px;">
+    <strong>To</strong><br>
+    <input name="test_to" type="email" required placeholder="you@example.com" style="padding:6px 10px;width:100%;max-width:400px;">
+  </label>
+  <label style="display:block;margin-bottom:10px;">
+    <strong>Subject</strong><br>
+    <input name="test_subject" type="text" value="Test email from PythonAppFoundry" style="padding:6px 10px;width:100%;max-width:400px;">
+  </label>
+  <label style="display:block;margin-bottom:10px;">
+    <strong>Body (HTML)</strong><br>
+    <textarea name="test_body" rows="4" style="padding:6px 10px;width:100%;max-width:400px;">&lt;h1&gt;Test&lt;/h1&gt;&lt;p&gt;If you can read this, your SMTP configuration is working.&lt;/p&gt;</textarea>
+  </label>
+  <button type="submit" formaction="{{ url_for('admin.test_email') }}" formmethod="POST" style="padding:6px 16px;background:#f0f0f0;color:#333;border:1px solid #ccc;border-radius:4px;cursor:pointer;">Send Test Email</button>
+</div>
 <div style="margin-top:16px;">
   <button style="padding:8px 20px;">Save All Settings</button>
 </div>
@@ -2084,18 +2097,21 @@ def edit_settings():
         log_retention_days=log_retention_days)
 
 
-@admin_bp.route('/settings/test-email')
+@admin_bp.route('/settings/test-email', methods=['GET', 'POST'])
 @admin_required
 def test_email():
+    if request.method == 'GET':
+        return redirect(url_for('admin.edit_settings'))
+    to = request.form.get('test_to', '')
+    subject = request.form.get('test_subject', 'Test email from PythonAppFoundry')
+    body = request.form.get('test_body', '<h1>Test</h1><p>If you can read this, your SMTP configuration is working.</p>')
+    if not to:
+        flash('Please provide a recipient (To) address.', 'error')
+        return redirect(url_for('admin.edit_settings'))
     try:
         from app.services.script_runner import _send_email
-        _send_email(
-            to=current_user.username,
-            subject='Test email from PythonAppFoundry',
-            body='<h1>Test</h1><p>If you can read this, your SMTP configuration is working.</p>',
-            html=True,
-        )
-        flash(f'Test email sent to {current_user.username}')
+        _send_email(to=to, subject=subject, body=body, html=True)
+        flash(f'Test email sent to {to}')
     except Exception as e:
         flash(f'Test email failed: {e}', 'error')
     return redirect(url_for('admin.edit_settings'))
