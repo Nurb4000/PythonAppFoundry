@@ -156,7 +156,9 @@ def create_app(config_class=None):
 
         from app.models import Route
         from app.services.scheduler import init_scheduler
-        init_scheduler(app)
+        _debug = os.environ.get('APP_DEBUG', 'true').lower() in ('1', 'true', 'yes')
+        if not _debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            init_scheduler(app)
 
         # Clean up duplicate route slugs — keep only the first for each slug
         seen = set()

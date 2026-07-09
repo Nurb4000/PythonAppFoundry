@@ -1,4 +1,6 @@
+import os
 import threading
+from datetime import datetime, timezone, timedelta
 
 from app import db
 from app.models import ScheduledTask, ExecutionLog, Setting
@@ -6,6 +8,7 @@ from app.services.script_runner import execute_script
 
 _scheduler = None
 _app = None
+_last_run_guard = {}
 
 
 def init_scheduler(app):
@@ -24,7 +27,7 @@ def init_scheduler(app):
                 register_task(task)
             db.session.commit()
 
-        app.logger.info(f'Scheduler started with {len(tasks)} tasks')
+        app.logger.info(f'Scheduler started PID={os.getpid()} WERKZEUG_RUN_MAIN={os.environ.get("WERKZEUG_RUN_MAIN")} APP_DEBUG={os.environ.get("APP_DEBUG")} tasks={len(tasks)} jobs={len(_scheduler.get_jobs())}')
     except ImportError:
         app.logger.warning('APScheduler not installed — scheduler disabled')
     except Exception as e:
@@ -71,15 +74,25 @@ def run_task_wrapper(task_id):
     app = _app
     if app is None:
         return
+    now = datetime.now(timezone.utc)
+    # Dedup guard: skip if this task ran within the last 60 seconds
+    last = _last_run_guard.get(task_id)
+    if last and now - last < timedelta(seconds=60):
+        import logging
+        logging.getLogger(__name__).warning(f'Dedup guard blocked task {task_id} — last run {last}')
+        return
+    _last_run_guard[task_id] = now
+
     with app.app_context():
         task = db.session.get(ScheduledTask, task_id)
         if not task or not task.enabled:
             return
         import logging
-        logging.getLogger(__name__).info(f'Running task: {task.name}')
-        from datetime import datetime, timezone
-        task.last_run = datetime.now(timezone.utc)
-        job = _scheduler.get_job(f'task_{task.id}')
+        logger = logging.getLogger(__name__)
+        job_count = len(_scheduler.get_jobs()) if _scheduler else 0
+        logger.info(f'Running task: {task.name} PID={os.getpid()} thread={threading.get_ident()} jobs={job_count}')
+        task.last_run = now
+        job = _scheduler.get_job(f'task_{task.id}') if _scheduler else None
         if job and job.next_run_time:
             task.next_run = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
         db.session.commit()
