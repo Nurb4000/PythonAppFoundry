@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Cat Fact Finder" slug="cat-fact-finder" version="1.0.0" author="PythonAppFoundry">
+  <description>Subscribe to receive random cat facts by email every 2 hours. Enter your email to subscribe, or click "Send Now" for an immediate cat fact. Requires login. The first visitor auto-creates the "Cat Fact Subscribers" group and secures the route — subsequent users must be added to the group by an admin.</description>
+  <routes>
+    <route slug="/cat-fact" method="GET,POST" title="Cat Fact Finder" auth_required="true" script="cat_fact_handler" form="cat_fact_form"/>
+  </routes>
+  <scripts>
+    <script name="cat_fact_handler" language="python"><![CDATA[
+import urllib.request, json
+from app.models import Group, Route as RouteModel
+
+CatFactConfig = DynamicModel.get_or_create('cat_fact_config', {
+    'email': db.String(200),
+})
+
+def send_cat_fact():
+    req = urllib.request.Request(
+        'https://catfact.ninja/fact',
+        headers={'User-Agent': 'PythonAppFoundry/1.0'},
+    )
+    resp = urllib.request.urlopen(req, timeout=10)
+    data = json.loads(resp.read())
+    fact = data['fact']
+    row = CatFactConfig.query.first()
+    if row and row.email:
+        html = f'''<h1>&#x1f431; Cat Fact</h1><p>{fact}</p><hr><p style="color:#888;font-size:0.85em;">Sent by Cat Fact Finder</p>'''
+        send_email(row.email, 'Cat Fact from PythonAppFoundry', html, html=True)
+        flash(f'Cat fact sent to {row.email}!')
+    else:
+        flash('No email configured. Save your email first.', 'error')
+
+if request.method == 'GET':
+    row = CatFactConfig.query.first()
+    email = row.email if row else ''
+    _result = render('''<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Cat Fact Finder</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { color: #e67e22; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+  .form-group input { padding: 0.5rem; width: 100%; border: 1px solid #ccc; border-radius: 4px; box-sizing:border-box; }
+  button { padding: 0.5rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+  .btn-primary { background: #e67e22; color: #fff; }
+  .btn-secondary { background: #95a5a6; color: #fff; }
+  .status { padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; }
+  .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+  .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+  hr { border: none; border-top: 1px solid #eee; margin: 1.5rem 0; }
+  .info { color: #555; font-size: 0.9rem; }
+</style></head>
+<body>
+  <h1>&#x1f431; Cat Fact Finder</h1>
+  {% set msg = get_flashed_messages(with_categories=true) %}
+  {% for cat, m in msg %}
+  <div class="status {{ cat or 'success' }}">{{ m }}</div>
+  {% endfor %}
+  <p class="info">Get a random cat fact emailed to you every 2 hours.</p>
+  <form method="POST">
+    <div class="form-group">
+      <label>Your Email</label>
+      <input name="email" type="email" value="{{ email }}" placeholder="you@example.com" required>
+    </div>
+    <button class="btn-primary" type="submit">Subscribe</button>
+  </form>
+  <hr>
+  <form method="POST">
+    <p class="info">Get a cat fact sent to your saved email right now:</p>
+    <input type="hidden" name="send_now" value="1">
+    <button class="btn-secondary" type="submit">Send Me a Cat Fact Now</button>
+  </form>
+  <hr>
+  <p class="info">&#x1f6a7; Trigger a cat fact via webhook: <code>POST /__api/webhook/cat-fact-now</code></p>
+</body>
+</html>''', email=email)
+
+elif request.form.get('send_now'):
+    send_cat_fact()
+    return redirect(url_for('dynamic.handle_dynamic', slug='cat-fact'))
+
+else:
+    email = request.form.get('email', '').strip()
+    if email:
+        row = CatFactConfig.query.first()
+        if row:
+            row.email = email
+        else:
+            db.session.add(CatFactConfig(email=email))
+        try:
+            group = Group.query.filter_by(name='Cat Fact Subscribers').first()
+            if not group:
+                group = Group(name='Cat Fact Subscribers', description='Can access the Cat Fact Finder route')
+                db.session.add(group)
+                db.session.flush()
+            if current_user.is_authenticated and group not in current_user.groups:
+                current_user.groups.append(group)
+            route = RouteModel.query.filter_by(slug='/cat-fact').first()
+            if route and not route.allowed_groups:
+                route.allowed_groups = str(group.id)
+        except Exception as e:
+            flash(f'Group setup failed: {e}', 'error')
+        db.session.commit()
+        flash(f'Saved! Cat facts will be sent to {email} every 2 hours.')
+    return redirect(url_for('dynamic.handle_dynamic', slug='cat-fact'))
+]]></script>
+
+    <script name="cat_fact_sender" language="python"><![CDATA[
+import urllib.request, json
+
+CatFactConfig = DynamicModel.get_or_create('cat_fact_config', {
+    'email': db.String(200),
+})
+
+req = urllib.request.Request(
+    'https://catfact.ninja/fact',
+    headers={'User-Agent': 'PythonAppFoundry/1.0'},
+)
+resp = urllib.request.urlopen(req, timeout=10)
+data = json.loads(resp.read())
+fact = data['fact']
+
+row = CatFactConfig.query.first()
+if row and row.email:
+    html = f'''<h1>&#x1f431; Cat Fact</h1><p>{fact}</p><hr><p style="color:#888;font-size:0.85em;">Sent by Cat Fact Finder</p>'''
+    send_email(row.email, 'Cat Fact from PythonAppFoundry', html, html=True)
+]]></script>
+  </scripts>
+  <forms>
+    <form name="cat_fact_form"><![CDATA[[
+  {"name":"email","type":"email","label":"Your Email","placeholder":"you@example.com","required":true}
+]]]></form>
+  </forms>
+  <scheduled_tasks>
+    <task name="Send Cat Fact" script="cat_fact_sender" schedule="0 */2 * * *"/>
+  </scheduled_tasks>
+  <triggers>
+    <trigger name="Cat Fact Now" event="webhook" table="cat-fact-now" script="cat_fact_sender"/>
+  </triggers>
+</module>
