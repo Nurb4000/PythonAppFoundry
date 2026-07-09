@@ -1,4 +1,5 @@
 from flask import Blueprint, request, redirect, url_for, render_template_string, abort, jsonify, flash, Response
+from app.services.scheduler import refresh_tasks
 from flask_login import login_required, current_user
 from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy import Table, MetaData
@@ -389,6 +390,7 @@ def delete_module(id):
     m.dependencies_to.delete()
     db.session.delete(m)
     db.session.commit()
+    refresh_tasks()
     tbl_msg = f' and dropped {len(dyn_tables)} table(s)' if drop_tables and dyn_tables else ''
     flash(f'Module "{name}" deleted{tbl_msg}')
     return redirect(url_for('admin.list_modules'))
@@ -1071,6 +1073,7 @@ def new_task():
         )
         db.session.add(t)
         db.session.commit()
+        refresh_tasks()
         return redirect(url_for('admin.list_tasks'))
     return render_admin('New Scheduled Task', '''
 <form method="POST">
@@ -1099,6 +1102,7 @@ def edit_task(id):
         t.cron_expression = cron
         t.enabled = 'enabled' in request.form
         db.session.commit()
+        refresh_tasks()
         return redirect(url_for('admin.list_tasks'))
     return render_admin('Edit Scheduled Task', '''
 <form method="POST">
