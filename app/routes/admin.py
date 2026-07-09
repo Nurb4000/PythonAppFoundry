@@ -2109,7 +2109,7 @@ def edit_settings():
 <div style="background:#fafafa;border:1px solid #eee;padding:16px;border-radius:4px;margin-bottom:12px;">
   <label style="display:block;margin-bottom:10px;">
     <strong>To</strong><br>
-    <input name="test_to" type="email" required placeholder="you@example.com" style="padding:6px 10px;width:100%;max-width:400px;">
+    <input name="test_to" type="email" placeholder="you@example.com" style="padding:6px 10px;width:100%;max-width:400px;">
   </label>
   <label style="display:block;margin-bottom:10px;">
     <strong>Subject</strong><br>
