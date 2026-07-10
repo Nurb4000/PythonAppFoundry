@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Sales Demo Data" slug="sales-demo" version="1.0.0" author="System">
+  <description>Seeds the SalesRecord dynamic table with 60 rows of demo sales data and provides 6 sample chart queries. Import this module, then visit /__demo/seed-sales as an admin/developer to populate the data.</description>
+
+  <routes>
+    <route slug="/__demo/seed-sales" method="GET" script="seed_sales" auth_required="true" title="Seed Sales Data"/>
+  </routes>
+
+  <scripts>
+    <script name="seed_sales" language="python"><![CDATA[
+from app.models import DynamicModel
+import random
+from datetime import datetime, timezone, timedelta
+import time as _t
+
+if not current_user or not current_user.is_authenticated:
+    _result = "<h2>Access Denied</h2><p>You must be logged in as admin or developer.</p>"
+elif current_user.role not in ('admin', 'developer'):
+    _result = "<h2>Access Denied</h2><p>Only admins and developers can seed demo data.</p>"
+else:
+    Sales = DynamicModel.get_or_create('SalesRecord', {
+        'product': db.String(100),
+        'region': db.String(50),
+        'quarter': db.String(10),
+        'units_sold': db.Integer,
+        'revenue': db.Float,
+        'sale_date': db.DateTime,
+    })
+
+    existing = session.query(Sales).count()
+    if existing > 0:
+        _result = f"<h2>Already Seeded</h2><p>SalesRecord already has {existing} rows. Delete them from <a href='/__admin/data'>Data admin</a> first if you want to re-seed.</p>"
+    else:
+        products = ['Widget Pro', 'Gadget X', 'Thingamajig', 'Doohickey', 'Whatsit']
+        regions = ['North', 'South', 'East', 'West']
+        quarters = ['Q1 2025', 'Q2 2025', 'Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026']
+        base_date = datetime(2025, 1, 15, tzinfo=timezone.utc)
+        t0 = _t.time()
+        for i in range(60):
+            q = random.choice(quarters)
+            record = Sales(
+                product=random.choice(products),
+                region=random.choice(regions),
+                quarter=q,
+                units_sold=random.randint(10, 500),
+                revenue=round(random.uniform(1000, 50000), 2),
+                sale_date=base_date + timedelta(days=random.randint(0, 540)),
+            )
+            session.add(record)
+        session.commit()
+        elapsed = int((_t.time() - t0) * 1000)
+        _result = f"<h2>Sales Data Seeded</h2><p>Inserted 60 sales records in {elapsed}ms.</p><p>Now go to <a href='/__admin/queries'>Query Reports</a> and explore the sales queries.</p>"
+]]></script>
+  </scripts>
+
+  <query_reports>
+    <query_report name="Sales by Product and Region" chart_type="bar" label_column="product" data_columns="total_units,total_revenue" chart_title="Sales by Product">
+      <description>Total units sold and revenue grouped by product and region.</description>
+      <sql>SELECT product, region, SUM(units_sold) as total_units, ROUND(SUM(revenue), 2) as total_revenue FROM salesrecord GROUP BY product, region ORDER BY product, region</sql>
+    </query_report>
+
+    <query_report name="Revenue by Quarter" chart_type="line" label_column="quarter" data_columns="total_revenue" chart_title="Revenue Trend by Quarter">
+      <description>Total revenue across each quarter as a line chart to show trends over time.</description>
+      <sql>SELECT quarter, ROUND(SUM(revenue), 2) as total_revenue FROM salesrecord GROUP BY quarter ORDER BY quarter</sql>
+    </query_report>
+
+    <query_report name="Sales by Region" chart_type="pie" label_column="region" data_columns="total_units" chart_title="Unit Sales by Region">
+      <description>Distribution of total units sold across regions.</description>
+      <sql>SELECT region, SUM(units_sold) as total_units FROM salesrecord GROUP BY region ORDER BY total_units DESC</sql>
+    </query_report>
+
+    <query_report name="Top Products by Revenue" chart_type="bar" label_column="product" data_columns="total_revenue" chart_title="Top Products by Revenue">
+      <description>Highest revenue-generating products overall.</description>
+      <sql>SELECT product, ROUND(SUM(revenue), 2) as total_revenue FROM salesrecord GROUP BY product ORDER BY total_revenue DESC</sql>
+    </query_report>
+
+    <query_report name="Quarterly Product Revenue" chart_type="radar" label_column="product" data_columns="Q1 2025,Q2 2025,Q3 2025,Q4 2025" chart_title="Product Revenue per Quarter">
+      <description>Revenue per product across four quarters — shows which products drive revenue each quarter.</description>
+      <sql>SELECT product, ROUND(SUM(CASE WHEN quarter='Q1 2025' THEN revenue ELSE 0 END), 2) as "Q1 2025", ROUND(SUM(CASE WHEN quarter='Q2 2025' THEN revenue ELSE 0 END), 2) as "Q2 2025", ROUND(SUM(CASE WHEN quarter='Q3 2025' THEN revenue ELSE 0 END), 2) as "Q3 2025", ROUND(SUM(CASE WHEN quarter='Q4 2025' THEN revenue ELSE 0 END), 2) as "Q4 2025" FROM salesrecord GROUP BY product ORDER BY product</sql>
+    </query_report>
+
+    <query_report name="Region Performance by Product" chart_type="bar" label_column="region" data_columns="Widget Pro,Gadget X,Thingamajig,Doohickey,Whatsit" chart_title="Units Sold by Region and Product">
+      <description>Breakdown of units sold per product in each region.</description>
+      <sql>SELECT region, SUM(CASE WHEN product='Widget Pro' THEN units_sold ELSE 0 END) as "Widget Pro", SUM(CASE WHEN product='Gadget X' THEN units_sold ELSE 0 END) as "Gadget X", SUM(CASE WHEN product='Thingamajig' THEN units_sold ELSE 0 END) as "Thingamajig", SUM(CASE WHEN product='Doohickey' THEN units_sold ELSE 0 END) as "Doohickey", SUM(CASE WHEN product='Whatsit' THEN units_sold ELSE 0 END) as "Whatsit" FROM salesrecord GROUP BY region ORDER BY region</sql>
+    </query_report>
+  </query_reports>
+</module>

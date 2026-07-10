@@ -126,6 +126,63 @@ def api_list_uploads():
     })
 
 
+@api_bp.route('/queries/<int:id>/run', methods=['POST'])
+@login_required
+def api_run_query(id):
+    from app.models import QueryReport
+    q = QueryReport.query.get_or_404(id)
+    import time as _t
+    t0 = _t.time()
+    columns = []
+    rows = []
+    chart_labels = []
+    chart_datasets = []
+    try:
+        sql = request.form.get('sql', q.sql)
+        result = db.session.execute(db.text(sql))
+        if result.returns_rows:
+            columns = list(result.keys())
+            rows = [list(r) for r in result.fetchall()]
+        if q.chart_type != 'none' and q.label_column and q.data_columns:
+            label_idx = None
+            for i, c in enumerate(columns):
+                if c.lower() == q.label_column.lower():
+                    label_idx = i
+                    break
+            data_col_indices = []
+            data_col_names = []
+            for dc in q.data_columns.split(','):
+                dc = dc.strip()
+                for i, c in enumerate(columns):
+                    if c.lower() == dc.lower():
+                        data_col_indices.append(i)
+                        data_col_names.append(c)
+                        break
+            if label_idx is not None and data_col_indices:
+                chart_labels = [str(r[label_idx]) for r in rows]
+                colors = ['#2563eb', '#e94560', '#28a745', '#ffc107', '#6f42c1', '#fd7e14', '#20c997', '#dc3545']
+                for j, dc_idx in enumerate(data_col_indices):
+                    chart_datasets.append({
+                        'label': data_col_names[j],
+                        'data': [float(r[dc_idx]) if r[dc_idx] is not None else 0 for r in rows],
+                        'backgroundColor': colors[j % len(colors)],
+                        'borderColor': colors[j % len(colors)],
+                        'borderWidth': 1,
+                    })
+        duration = int((_t.time() - t0) * 1000)
+        q.last_run = _t.time()
+        db.session.commit()
+        return jsonify({
+            'columns': columns, 'rows': rows,
+            'chart_labels': chart_labels, 'chart_datasets': chart_datasets,
+            'chart_title': q.chart_title,
+            'duration_ms': duration,
+        })
+    except Exception as e:
+        duration = int((_t.time() - t0) * 1000)
+        return jsonify({'error': str(e), 'duration_ms': duration}), 400
+
+
 @api_bp.route('/webhook/<slug>', methods=['POST'])
 def api_webhook(slug):
     """Public webhook endpoint. Fires triggers associated with this slug.

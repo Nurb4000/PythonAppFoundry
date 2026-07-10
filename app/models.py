@@ -109,6 +109,7 @@ class Module(db.Model):
     version = db.Column(db.String(20), default='1.0.0')
     author = db.Column(db.String(100), default='')
     enabled = db.Column(db.Boolean, default=True)
+    is_system = db.Column(db.Boolean, default=False)
     bpmn_xml = db.Column(db.Text, default='')
     bpmn_description = db.Column(db.Text, default='')
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -314,6 +315,32 @@ class Setting(db.Model):
         else:
             db.session.add(cls(key=key, value=value))
         db.session.commit()
+
+
+class QueryReport(db.Model):
+    __tablename__ = 'query_reports'
+
+    id = db.Column(db.Integer, primary_key=True)
+    module_id = db.Column(db.Integer, db.ForeignKey('modules.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, default='')
+    sql = db.Column(db.Text, nullable=False)
+    chart_type = db.Column(db.String(20), default='none')
+    label_column = db.Column(db.String(100), default='')
+    data_columns = db.Column(db.String(500), default='')
+    chart_title = db.Column(db.String(200), default='')
+    schedule_cron = db.Column(db.String(100), default='')
+    email_to = db.Column(db.String(500), default='')
+    email_subject = db.Column(db.String(200), default='')
+    last_run = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    module = db.relationship('Module', backref=db.backref('query_reports', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<QueryReport {self.name}>'
 
 
 class ExecutionLog(db.Model):

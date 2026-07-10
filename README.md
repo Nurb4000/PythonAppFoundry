@@ -17,6 +17,8 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Full Admin Panel** — CRUD for modules, routes, scripts, forms, tasks, triggers, users, groups, data tables, settings, and file uploads. All list views include column sorting, module filtering, and CSV export.
 - **Bundle Import/Export** — Modules export as XML for backup or transfer between instances. Import XML to create or update modules.
 - **SMTP Email** — Platform-wide SMTP settings; `send_email()` is available in all scripts.
+- **Chart.js Charts** — Saved SQL queries render results as bar, line, pie, doughnut, polar area, or radar charts using Chart.js (vendored, no CDN). Module scripts can also draw charts via the `render_chart()` helper.
+- **Scheduled Query Reports** — Queries with a cron schedule and email recipient run automatically; results emailed as CSV.
 - **CSV Export** — Every list view and data table supports CSV download.
 - **Module Versioning** — Automatic version snapshots on every import (AI Designer, BPMN) and manual version creation. Rollback to any previous state with one click, diff between versions, and add comments to track changes over time.
 - **Module Dependency Tracking** — Automatically detects when modules reference other modules' routes or scripts. Shows dependency warnings before deletion to prevent silent breakage. Manual "Scan" button to re-detect dependencies.

@@ -118,6 +118,20 @@ _result = "<h2>Add Item</h2><form method=POST>..."
          script: must match a <script name=""> in this bundle -->
     <trigger name="notify_new_item" event="on_insert" table="Item" script="send_notification"/>
   </triggers>
+
+  <query_reports>
+    <!-- Optional: saved SQL queries that ship with the module.
+         chart_type: bar, line, pie, doughnut, polarArea, radar, none
+         label_column: column name for chart X-axis/categories
+         data_columns: comma-separated column names for chart values
+         schedule_cron: 5-field cron for automatic execution (optional)
+         email_to: recipient for emailed CSV results (optional)
+         email_subject: subject line for emailed report (optional) -->
+    <query_report name="Items Summary" chart_type="pie" label_column="done" data_columns="count" chart_title="Items by Status">
+      <description>Count of items by completion status</description>
+      <sql>SELECT done, COUNT(*) as count FROM Item GROUP BY done</sql>
+    </query_report>
+  </query_reports>
 </module>
 ```
 
@@ -234,6 +248,7 @@ return jsonify({"status": "ok", "items": [...]})
 When a route has a form, the script has these automatically available:
 - `form_fields` — list of field dicts parsed from the form's schema
 - `render_form(action="", method="POST", submit_label="Submit", fields=form_fields)` — renders full form HTML
+- `render_chart(chart_type, labels, datasets, title, canvas_id=None)` — renders a Chart.js chart HTML; chart_type: bar, line, pie, doughnut, polarArea, radar; labels is list of category strings; datasets is list of `{'label': str, 'data': list}` dicts
 
 These are always available in every script (no import needed):
 - `DynamicModel` — factory for dynamic database tables (`DynamicModel.get_or_create(...)`)
@@ -599,13 +614,36 @@ Then in a Jinja template use the dict key, not dot-chaining:
 12. **No Flask URL converters** — route slugs must be exact paths like `/projects`, not `/project/<int:id>`. Use query parameters (`/project?project_id=1`) and read them in the script via `request.args.get('project_id')`. Never put `<` or `>` inside XML attribute values — they will break XML parsing.
 13. **Scripts must produce output** — end every script with either `return redirect(...)`, `return jsonify(...)`, `_result = <value>`, or `render(...)`. A script that does nothing will render a blank page.
 14. **Form field names must match** — `request.form.get('field_name')` in the script must match `"name":"field_name"` in the form's JSON schema exactly.
-15. **Limit imports in scripts** — the script runner provides `session`, `db`, `request`, `current_user`, `redirect`, `url_for`, `flash`, `render`, `jsonify`, `send_email`, `render_form`, `DynamicModel`, `datetime`, and `timezone` already. **Do NOT import these from anywhere** — they are pre-injected into every script. There is no `app.helpers` module.
+15. **Limit imports in scripts** — the script runner provides `session`, `db`, `request`, `current_user`, `redirect`, `url_for`, `flash`, `render`, `jsonify`, `send_email`, `render_form`, `render_chart`, `DynamicModel`, `datetime`, and `timezone` already. **Do NOT import these from anywhere** — they are pre-injected into every script. There is no `app.helpers` module.
 16. **Avoid Python syntax in Jinja2** — use `{% for item in items %}`, NOT `{% for i in range(len(items)) %}`. Use `{{ item.field }}`, NOT `{{ item["field"] }}`.
 17. **Watch for typos** — `_result` not `_reult` or `_results`. `render` not `render_template`. `session` not `sesson`.
 18. **Script runner provides common builtins** — `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `zip`, `sorted`, `min`, `max`, `sum`, `any`, `all`, `isinstance`, `type`, `hasattr`, `getattr`, `setattr`, `dir`, `print`, `ValueError`, `TypeError`, `KeyError`, `AttributeError` are all available. Do not import them.
-19. **Only use documented helpers** — `render_form(action, method, submit_label, fields=form_fields)` renders the form with its defined fields. `form_fields` is automatically available and contains the parsed field definitions from the form's JSON schema. `send_email(to, subject, body, html=False)` sends email via admin-configured SMTP. Do not invent custom function names.
+19. **Only use documented helpers** — `render_form(action, method, submit_label, fields=form_fields)` renders the form with its defined fields. `form_fields` is automatically available and contains the parsed field definitions from the form's JSON schema. `send_email(to, subject, body, html=False)` sends email via admin-configured SMTP. `render_chart(chart_type, labels, datasets, title)` renders a Chart.js chart. Do not invent custom function names.
 20. **No automatic timestamps** — DynamicModel tables have no `created_at` or `updated_at` unless you explicitly define them.
 21. **Cross-module data** — use `DynamicModel.get_or_create("TableName", {...})` to access tables from other modules. List all columns you need. You can also query the `User` model directly: `from app.models import User` then `session.query(User).all()`.
 22. **Execution timeout** — Scripts are terminated after 30 seconds by default (configurable via `script_timeout` setting). Long-running operations like bulk processing should be broken into smaller batches or designed to be idempotent so they can resume on retry. Admins can increase the timeout in Settings if needed.
 23. **Route group access** — Routes can be restricted to specific user groups. When a route has groups set, the requesting user must be logged in and belong to at least one of the selected groups. If no groups are set, any authenticated user can access auth-protected routes. Use the Groups admin section to manage group membership.
 24. **Debug mode** — Use the "Run Debug" button on the script edit page to execute a script and view its source code with line numbers, output, and timing. This is useful during development to test scripts without navigating to their route.
+25. **Never use Python f-strings with Jinja2 syntax** — `f"<h1>{{ title }}</h1>"` breaks because Python's `{` in `{{` is interpreted as an f-string expression. Use `%` formatting, `.format()`, or plain string concatenation for template strings that contain Jinja2 `{{ }}` or `{% %}` syntax.
+26. **Query reports are module-scoped** — Add a `<query_reports>` section inside `<module>` to ship saved SQL queries with the module.
+27. **Use actual table names in SQL, not model class names** — In `<sql>` queries, platform tables use snake_case names, not the Python model class names. Key mappings:
+
+    | Model Class | Actual Table Name |
+    |---|---|
+    | User | `users` |
+    | Module | `modules` |
+    | Route | `routes` |
+    | Script | `scripts` |
+    | Form | `forms` |
+    | ScheduledTask | `scheduled_tasks` |
+    | Trigger | `triggers` |
+    | ExecutionLog | `execution_logs` |
+    | Upload | `uploads` |
+    | Setting | `settings` |
+    | QueryReport | `query_reports` |
+    | ModuleVersion | `module_versions` |
+    | ModuleDependency | `module_dependencies` |
+    | ChatSession | `chat_sessions` |
+    | ChatMessage | `chat_messages` |
+
+    DynamicModel tables use the name passed to `get_or_create()` lowercased (e.g. `SalesRecord` → `salesrecord`). Each `<query_report>` needs `name`, `chart_type`, `label_column`, `data_columns`, `chart_title` attributes, plus `<description>` and `<sql>` child elements. Queries are bundled in the module's XML on export and created on import, just like routes and scripts. For platform-wide queries, target the **System Automation** module (`slug: system-automation`).

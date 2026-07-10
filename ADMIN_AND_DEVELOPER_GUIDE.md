@@ -21,6 +21,7 @@ The dark bar at the top of every page (when logged in as admin) links to all adm
 | Triggers | `/__admin/triggers` | Event-based triggers (on_insert, after_route, etc.) |
 | Users | `/__admin/users` | Manage user accounts |
 | Data | `/__admin/data` | Browse and edit any database table |
+| Queries | `/__admin/queries` | Saved SQL queries with charting, scheduling, and email reports |
 | Uploads | `/__admin/uploads` | Upload files for use in pages |
 | Settings | `/__admin/settings` | Registration controls (disable, require approval) |
 | AI Designer | `/__admin/chat` | Chat interface to generate modules via AI |
@@ -386,3 +387,66 @@ Email settings are managed via **Admin → Settings** in the GUI. Scripts use `s
 - **Module cloning**: Use the "Clone" button on the Modules list to duplicate a module as a starting point. The clone gets "(copy)" appended to its name and slug.
 - **Route group access**: When editing a route, you can restrict it to specific groups. Users must be logged in AND belong to at least one of the selected groups to access the route. Leave groups empty to allow any authenticated user.
 - **Dependency viewer**: Click the red dependency count in the Modules list to see which modules reference a given module, including the type and value of each reference. Run "Scan" on the module first to detect its references to other modules.
+- **System modules** — The **System Automation** module is auto-created on first start and cannot be deleted. Use it for platform-wide scripts, queries, and scheduled tasks. If you break it, use the **Reset** button (visible in the Modules list) to wipe all its resources back to empty.
+- **Query reports are module-scoped** — Like routes and scripts, queries now belong to a module. Create queries under the **System Automation** module for platform-wide visibility, or under app modules for app-specific reporting.
+
+## Query Reports
+
+Queries are **module-scoped**, just like routes, scripts, and forms. Each query belongs to a module and is bundled in the module's XML for export/import.
+
+### Module Association
+
+- When creating or editing a query, you select which **Module** it belongs to
+- Platform-wide queries go in the **System Automation** module (auto-created, non-removable)
+- Demo or app-specific queries belong to their respective module
+
+### Creating a Query
+
+1. Go to **Queries** (`/__admin/queries`) → **+ New Query**
+2. Select the **Module** the query belongs to
+3. Enter a **Name** and **SQL query** (any valid SQL against the database)
+4. Optionally configure the **Chart Type** (bar, line, pie, doughnut, polar area, radar)
+5. Set **Label Column** (X axis / category) and **Data Column(s)** (Y axis / value series)
+6. Click **Save** to store the query
+7. Click **Save & Run** to execute and preview results as table + chart
+
+### Scheduling & Email
+
+Open the **Schedule & Email** section on the edit page:
+
+- **Cron Schedule** — standard 5-field cron expression (e.g. `0 8 * * 1` for every Monday at 8 AM)
+- **Email To** — recipient address(es) for emailed results (sent as CSV)
+- **Email Subject** — subject line for the report email
+
+Scheduled queries run once per minute. Results are emailed only if both a cron schedule and email recipient are configured.
+
+### Bundling in Modules
+
+Queries are included in module XML under a `<query_reports>` section. When a module is exported, its queries are included. When imported, the queries are created as part of the module.
+
+See `demos/sales_demo.xml` for a module that bundles a "Sales by Product and Region" query with a data-seeding script.
+
+### System Automation Module
+
+The **System Automation** module (`system-automation`) is a built-in system module that:
+- Cannot be deleted
+- Can be reset to empty via the **Reset** button on the Modules list
+- Is the default location for platform-wide queries, scripts, and scheduled tasks
+- Ships empty — import demo modules or create your own resources
+
+### Charting in Module Scripts
+
+Module scripts can render charts using the built-in `render_chart()` helper:
+
+```python
+labels = ['Widget', 'Gadget', 'Thing', 'Doohickey']
+datasets = [
+    {'label': 'Units Sold', 'data': [100, 200, 150, 75]},
+    {'label': 'Revenue ($)', 'data': [5000, 12000, 8000, 3000]},
+]
+_result = render_chart('bar', labels, datasets, title='Sales Overview')
+```
+
+Supported chart types: `bar`, `line`, `pie`, `doughnut`, `polarArea`, `radar`.
+
+The helper auto-loads Chart.js from `/static/chart.umd.min.js` if not already present on the page. Charts render inside a responsive container (max 600px width).

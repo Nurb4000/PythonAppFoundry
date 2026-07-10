@@ -119,6 +119,7 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'render': render_template_string,
         'jsonify': flask_jsonify,
         'send_email': _send_email,
+        'render_chart': render_chart,
         'DynamicModel': DynamicModel,
         'datetime': datetime,
         'timezone': timezone,
@@ -286,3 +287,35 @@ def _inject_form_helpers(globals_dict, form):
         return '\n'.join(html)
 
     globals_dict['render_form'] = render_form
+
+
+def render_chart(chart_type, labels, datasets, title='', canvas_id=None):
+    import json
+    import secrets
+    cid = canvas_id or 'chart_' + secrets.token_hex(4)
+    data = {
+        'type': chart_type,
+        'data': {'labels': labels, 'datasets': datasets},
+        'options': {
+            'responsive': True,
+            'plugins': {
+                'title': {'display': bool(title), 'text': title} if title else {}
+            }
+        }
+    }
+    html = '''<div style="max-width:600px;margin:1rem 0;">
+  <canvas id="%s"></canvas>
+</div>
+<script>
+(function() {
+  if (typeof Chart === "undefined") {
+    var s = document.createElement("script");
+    s.src = "/static/chart.umd.min.js";
+    s.onload = function() { new Chart(document.getElementById("%s"), %s); };
+    document.head.appendChild(s);
+  } else {
+    new Chart(document.getElementById("%s"), %s);
+  }
+})();
+</script>''' % (cid, cid, json.dumps(data), cid, json.dumps(data))
+    return html

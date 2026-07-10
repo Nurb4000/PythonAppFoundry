@@ -121,6 +121,112 @@ def _run_script_in_app_context(app, script, name):
         execute_script(script, source_type='task', source_name=name)
 
 
+def _cron_matches(expression, dt):
+    """Simple cron matcher for 5-field expressions. Checks at minute granularity."""
+    try:
+        parts = expression.strip().split()
+        if len(parts) != 5:
+            return False
+        minute, hour, day, month, dow = parts
+        def _match(field, value):
+            if field == '*':
+                return True
+            for part in field.split(','):
+                if '-' in part:
+                    a, b = part.split('-', 1)
+                    if a.isdigit() and b.isdigit() and int(a) <= value <= int(b):
+                        return True
+                elif part.isdigit() and int(part) == value:
+                    return True
+                elif part == '*/1' or part == '*':
+                    return True
+                elif part.startswith('*/') and part[2:].isdigit():
+                    step = int(part[2:])
+                    if step > 0 and value % step == 0:
+                        return True
+            return False
+        return (_match(minute, dt.minute) and _match(hour, dt.hour)
+                and _match(day, dt.day) and _match(month, dt.month)
+                and _match(dow, dt.weekday()))
+    except Exception:
+        return False
+
+
+def _check_query_reports():
+    """Check and execute scheduled query reports."""
+    from app.models import QueryReport
+    now = datetime.now(timezone.utc)
+    queries = db.session.query(QueryReport).filter(
+        QueryReport.schedule_cron != '',
+        QueryReport.schedule_cron.isnot(None),
+    ).all()
+    for q in queries:
+        try:
+            if not _cron_matches(q.schedule_cron, now):
+                continue
+            # Guard: skip if this query ran within the last 60 seconds
+            if q.last_run and (now - q.last_run).total_seconds() < 60:
+                continue
+            result = db.session.execute(db.text(q.sql))
+            if result.returns_rows:
+                rows = result.fetchall()
+                if q.email_to and q.email_subject:
+                    cols = list(result.keys())
+                    output = [','.join(cols)]
+                    for row in rows:
+                        output.append(','.join(str(v) if v is not None else '' for v in row))
+                    body = '\n'.join(output)
+                    try:
+                        from app.services.script_runner import _send_email
+                        _send_email(to=q.email_to, subject=q.email_subject, body=body)
+                    except Exception:
+                        pass
+            q.last_run = now
+            db.session.commit()
+        except Exception:
+            pass
+
+
+def init_scheduler(app):
+    global _scheduler, _app
+    if _scheduler is not None:
+        print(f'[SCHEDULER] init_scheduler called but already running PID={os.getpid()}')
+        return
+    _app = app
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        _scheduler = BackgroundScheduler()
+        _scheduler.start()
+
+        with app.app_context():
+            tasks = db.session.query(ScheduledTask).filter_by(enabled=True).all()
+            for task in tasks:
+                register_task(task)
+            db.session.commit()
+            _scheduler.add_job(
+                func=_check_query_reports_wrapper,
+                trigger='interval',
+                minutes=1,
+                id='_query_report_check',
+                replace_existing=True,
+                name='Query Report Check',
+            )
+
+        print(f'[SCHEDULER] Started PID={os.getpid()} WERKZEUG_RUN_MAIN={os.environ.get("WERKZEUG_RUN_MAIN")} APP_DEBUG={os.environ.get("APP_DEBUG")} tasks={len(tasks)} jobs={len(_scheduler.get_jobs())}')
+    except ImportError:
+        print('[SCHEDULER] APScheduler not installed — scheduler disabled')
+    except Exception as e:
+        print(f'[SCHEDULER] Init failed: {e}')
+
+
+def _check_query_reports_wrapper():
+    app = _app
+    if app is None:
+        return
+    with app.app_context():
+        _check_query_reports()
+
+
 def refresh_tasks():
     if _scheduler is None:
         return

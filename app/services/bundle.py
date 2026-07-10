@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from slugify import slugify
 
 from app import db
-from app.models import Module, Route, Script, Form, ScheduledTask, Trigger
+from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport
 
 
 def export_module(module):
@@ -57,6 +57,22 @@ def export_module(module):
         tg.set('table', trigger.target_table)
         tg.set('script', trigger.script.name if trigger.script else '')
 
+    queries_elem = ET.SubElement(root, 'query_reports')
+    for q in module.query_reports:
+        elem = ET.SubElement(queries_elem, 'query_report')
+        elem.set('name', q.name or '')
+        elem.set('chart_type', q.chart_type or 'none')
+        elem.set('label_column', q.label_column or '')
+        elem.set('data_columns', q.data_columns or '')
+        elem.set('chart_title', q.chart_title or '')
+        elem.set('schedule_cron', q.schedule_cron or '')
+        elem.set('email_to', q.email_to or '')
+        elem.set('email_subject', q.email_subject or '')
+        desc = ET.SubElement(elem, 'description')
+        desc.text = q.description or ''
+        sql_elem = ET.SubElement(elem, 'sql')
+        sql_elem.text = q.sql or ''
+
     return ET.tostring(root, encoding='unicode', xml_declaration=True)
 
 
@@ -87,6 +103,7 @@ def import_module(xml_str, update_existing=False, module_id=None):
             existing.forms.delete()
             existing.scheduled_tasks.delete()
             existing.triggers.delete()
+            existing.query_reports.delete()
             # Update in place to preserve the module ID
             module = existing
             module.name = name
@@ -202,6 +219,11 @@ def import_module(xml_str, update_existing=False, module_id=None):
             )
             db.session.add(trigger)
 
+    # Query reports (scoped to this module)
+    queries_elem = root.find('query_reports')
+    if queries_elem is not None:
+        _import_queries_from_element(queries_elem, module_id=module.id)
+
     db.session.commit()
 
     # Auto-detect dependencies for the imported module
@@ -214,3 +236,71 @@ def import_module(xml_str, update_existing=False, module_id=None):
         logging.getLogger(__name__).warning(f'Failed to detect dependencies for module {module.id}: {e}')
 
     return module
+
+
+def export_queries_xml(queries=None):
+    """Export query reports as XML. Returns XML string.
+    Accepts a list of QueryReport objects, a single QueryReport, or None (all).
+    """
+    if queries is None:
+        queries = QueryReport.query.order_by(QueryReport.name).all()
+    elif isinstance(queries, QueryReport):
+        queries = [queries]
+
+    root = ET.Element('query_reports')
+
+    for q in queries:
+        elem = ET.SubElement(root, 'query_report')
+        elem.set('name', q.name or '')
+        elem.set('chart_type', q.chart_type or 'none')
+        elem.set('label_column', q.label_column or '')
+        elem.set('data_columns', q.data_columns or '')
+        elem.set('chart_title', q.chart_title or '')
+        elem.set('schedule_cron', q.schedule_cron or '')
+        elem.set('email_to', q.email_to or '')
+        elem.set('email_subject', q.email_subject or '')
+
+        desc = ET.SubElement(elem, 'description')
+        desc.text = q.description or ''
+
+        sql_elem = ET.SubElement(elem, 'sql')
+        sql_elem.text = q.sql or ''
+
+    return ET.tostring(root, encoding='unicode', xml_declaration=True)
+
+
+def _import_queries_from_element(root, module_id=None, existing_names=None):
+    """Import query reports from an <query_reports> Element. Skips duplicates.
+    Returns list of (name, status) tuples. Does NOT commit.
+    """
+    if existing_names is None:
+        existing_names = {q.name for q in QueryReport.query.all()}
+
+    results = []
+    for elem in root.findall('query_report'):
+        name = elem.get('name', '').strip()
+        if not name:
+            results.append(('(unnamed)', 'skipped: no name'))
+            continue
+        if name in existing_names:
+            results.append((name, 'skipped: already exists'))
+            continue
+
+        q = QueryReport(
+            module_id=module_id,
+            name=name,
+            description=(elem.findtext('description') or '').strip(),
+            sql=(elem.findtext('sql') or '').strip(),
+            chart_type=elem.get('chart_type', 'none'),
+            label_column=elem.get('label_column', ''),
+            data_columns=elem.get('data_columns', ''),
+            chart_title=elem.get('chart_title', ''),
+            schedule_cron=elem.get('schedule_cron', ''),
+            email_to=elem.get('email_to', ''),
+            email_subject=elem.get('email_subject', ''),
+        )
+        db.session.add(q)
+        existing_names.add(name)
+        results.append((name, 'created'))
+
+    return results

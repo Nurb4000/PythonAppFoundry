@@ -101,6 +101,7 @@ def create_app(config_class=None):
                 <a href="/__admin/users" style="color:#eee;text-decoration:none">Users</a>
                 <a href="/__admin/groups" style="color:#eee;text-decoration:none">Groups</a>
                 <a href="/__admin/data" style="color:#eee;text-decoration:none">Data</a>
+                <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
                 <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
                 <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
                 <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
@@ -118,6 +119,7 @@ def create_app(config_class=None):
                 <a href="/__admin/routes" style="color:#eee;text-decoration:none">Routes</a>
                 <a href="/__admin/scripts" style="color:#eee;text-decoration:none">Scripts</a>
                 <a href="/__admin/forms" style="color:#eee;text-decoration:none">Forms</a>
+                <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
                 <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
                 <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
                 <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
@@ -145,14 +147,36 @@ def create_app(config_class=None):
     with app.app_context():
         db.create_all()
 
-        # Migrate: add allowed_groups column to routes if missing
+        # Migrate: add missing columns
         from sqlalchemy import inspect as sa_inspect
         inspector = sa_inspect(db.engine)
-        cols = {c['name'] for c in inspector.get_columns('routes')}
-        if 'allowed_groups' not in cols:
+        routes_cols = {c['name'] for c in inspector.get_columns('routes')}
+        if 'allowed_groups' not in routes_cols:
             from sqlalchemy import text
             db.session.execute(text('ALTER TABLE routes ADD COLUMN allowed_groups TEXT DEFAULT \'\''))
             db.session.commit()
+
+        # Add is_system to modules if missing
+        mod_cols = {c['name'] for c in inspector.get_columns('modules')}
+        if 'is_system' not in mod_cols:
+            db.session.execute(text("ALTER TABLE modules ADD COLUMN is_system BOOLEAN DEFAULT 0"))
+            db.session.commit()
+
+        # Check if query_reports table exists and has module_id
+        table_names = inspector.get_table_names()
+        if 'query_reports' in table_names:
+            qr_cols = {c['name'] for c in inspector.get_columns('query_reports')}
+            if 'module_id' not in qr_cols:
+                db.session.execute(text('ALTER TABLE query_reports ADD COLUMN module_id INTEGER REFERENCES modules(id)'))
+                db.session.commit()
+                # Migrate existing queries to System Automation module
+                sys_mod = db.session.query(Module).filter_by(slug='system-automation').first()
+                if sys_mod:
+                    db.session.execute(
+                        text('UPDATE query_reports SET module_id = :mid WHERE module_id IS NULL'),
+                        {'mid': sys_mod.id}
+                    )
+                    db.session.commit()
 
         from app.models import Route
         from app.services.scheduler import init_scheduler
@@ -171,6 +195,21 @@ def create_app(config_class=None):
         for r in dupes:
             db.session.delete(r)
         if dupes:
+            db.session.commit()
+
+        # Auto-create System Automation module if missing
+        from app.models import Module
+        sys_mod = db.session.query(Module).filter_by(slug='system-automation').first()
+        if sys_mod is None:
+            sys_mod = Module(
+                name='System Automation',
+                slug='system-automation',
+                description='Built-in system module for platform-wide automations, reports, and utilities. Cannot be deleted.',
+                version='1.0.0',
+                author='System',
+                is_system=True,
+            )
+            db.session.add(sys_mod)
             db.session.commit()
 
     return app
