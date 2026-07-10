@@ -2014,6 +2014,13 @@ def admin_packages():
     output_lines = []
     install_error = ''
     selected = request.form.get('selected', '')
+    protected_pkgs = {
+        'flask', 'flask-sqlalchemy', 'flask-login', 'flask-migrate',
+        'sqlalchemy', 'werkzeug', 'jinja2', 'markupsafe',
+        'itsdangerous', 'click', 'greenlet', 'blinker',
+        'bcrypt', 'apscheduler', 'python-slugify', 'python-dotenv',
+        'cryptography', 'pip', 'setuptools', 'wheel',
+    }
 
     if request.method == 'POST':
         if 'install' in request.form:
@@ -2032,16 +2039,20 @@ def admin_packages():
         elif 'uninstall' in request.form:
             pkg = request.form.get('package', '').strip()
             if pkg:
-                cmd = [pip_bin, 'uninstall', '-y', pkg]
-                try:
-                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-                    output_lines = (r.stdout or '').splitlines() + (r.stderr or '').splitlines()
-                    if r.returncode != 0:
-                        install_error = f'Exit code {r.returncode}'
-                except subprocess.TimeoutExpired:
-                    install_error = 'Uninstall timed out after 60s'
-                except FileNotFoundError:
-                    install_error = f'pip not found at "{pip_bin}"'
+                pkg_name = pkg.split('==')[0].split('>=')[0].split('<=')[0].split('~=')[0].split('!=')[0].strip()
+                if pkg_name.lower() in protected_pkgs:
+                    install_error = f'"{pkg_name}" is a protected platform package and cannot be uninstalled.'
+                else:
+                    cmd = [pip_bin, 'uninstall', '-y', pkg]
+                    try:
+                        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                        output_lines = (r.stdout or '').splitlines() + (r.stderr or '').splitlines()
+                        if r.returncode != 0:
+                            install_error = f'Exit code {r.returncode}'
+                    except subprocess.TimeoutExpired:
+                        install_error = 'Uninstall timed out after 60s'
+                    except FileNotFoundError:
+                        install_error = f'pip not found at "{pip_bin}"'
 
     # Get installed packages list
     import json as _json
@@ -2070,11 +2081,12 @@ function fillUninstall(name) { document.getElementById('uninstall-input').value 
 <thead><tr style="background:#f4f4f4;"><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">Package</th><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">Version</th><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">Actions</th></tr></thead>
 <tbody>
 {% for pkg in packages %}
+{% set pkg_lower = pkg.name.lower() %}
 <tr style="border-bottom:1px solid #eee;">
-  <td style="padding:6px 10px;font-size:0.85em;">{{ pkg.name }}</td>
+  <td style="padding:6px 10px;font-size:0.85em;">{{ pkg.name }}{% if pkg_lower in protected_pkgs %} <span style="color:#999;font-size:0.8em;" title="Platform package \u2014 protected">&#128274;</span>{% endif %}</td>
   <td style="padding:6px 10px;font-size:0.85em;color:#666;">{{ pkg.version }}</td>
   <td style="padding:6px 10px;font-size:0.85em;">
-    <a href="#" onclick="fillUninstall('{{ pkg.name }}');return false;" style="color:#dc3545;">Uninstall</a>
+    {% if pkg_lower in protected_pkgs %}<span style="color:#999;">Protected</span>{% else %}<a href="#" onclick="fillUninstall('{{ pkg.name }}');return false;" style="color:#dc3545;">Uninstall</a>{% endif %}
   </td>
 </tr>
 {% endfor %}
@@ -2110,7 +2122,7 @@ function fillUninstall(name) { document.getElementById('uninstall-input').value 
 {% endif %}
 </div>
 </div>
-''', packages=packages, output_text=output_text, install_error=install_error, selected=selected)
+''', packages=packages, protected_pkgs=protected_pkgs, output_text=output_text, install_error=install_error, selected=selected)
 
 
 @admin_bp.route('/settings', methods=['GET', 'POST'])
