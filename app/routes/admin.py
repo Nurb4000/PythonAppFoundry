@@ -412,6 +412,15 @@ def delete_module(id):
     # Collect DynamicModel table names from the registry
     from app.models import DynamicTableRegistry
     dyn_tables = {r.table_name for r in DynamicTableRegistry.query.filter_by(module_id=m.id)}
+    # Fallback: scan module's scripts for any table name in source
+    if not dyn_tables:
+        import re as _re
+        _all_db_tables = set(sa_inspect(db.engine).get_table_names())
+        for _s in m.scripts.all():
+            for _match in _re.finditer(r'["\'](\w+)["\']', _s.source_code):
+                _name = _match.group(1).lower()
+                if _name in _all_db_tables:
+                    dyn_tables.add(_name)
 
     drop_tables = request.form.get('drop_tables') == 'on'
     if drop_tables and dyn_tables:
@@ -1409,7 +1418,7 @@ SENSITIVE_COLUMNS = {'password_hash', '_password'}
 @admin_required
 def list_tables():
     from app.models import DynamicTableRegistry
-    # Build table→modules mapping from DynamicTableRegistry
+    # Build table→modules mapping
     table_modules = {}
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
@@ -1430,6 +1439,16 @@ def list_tables():
                 table_modules[tname].append(mod_name)
         elif table_modules.get(tname) != mod_name:
             table_modules[tname] = [table_modules[tname], mod_name]
+
+    # Build script substring fallback: for any table not in the registry,
+    # scan all script source code for the table name as a substring
+    _all_scripts = db.session.query(Script).all()
+    def _find_module_for_table(tname):
+        for _s in _all_scripts:
+            if _s.module_id and tname in _s.source_code.lower():
+                mod = _s.module
+                return mod.name if mod else '?'
+        return ''
 
     filter_module = request.args.get('module', '')
     sort_col = request.args.get('sort', 'name')
@@ -1460,6 +1479,8 @@ def list_tables():
         cols = [{'name': c.name, 'type': str(c.type), 'pk': c.primary_key, 'nullable': c.nullable}
                 for c in table.columns if c.name not in SENSITIVE_COLUMNS]
         module_info = table_modules.get(name, '')
+        if not module_info:
+            module_info = _find_module_for_table(name)
         if isinstance(module_info, list):
             module_info = ', '.join(module_info)
         if filter_module and module_info != filter_module:
