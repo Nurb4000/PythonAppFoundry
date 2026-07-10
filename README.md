@@ -26,11 +26,15 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Webhook Support** — External services can trigger scripts via HTTP POST to `/__api/webhook/{slug}`. Configure webhooks as triggers with `event_type='webhook'`. Scripts receive the payload data for processing.
 - **Group-Based Route Access** — Restrict routes to specific user groups. Users must be logged in and belong to at least one allowed group to access the route.
 - **Script Debug Mode** — Run scripts directly from the editor with "Run Debug" to see source code, line numbers, output, and execution timing.
+- **Encrypted Credential Store** — API keys, tokens, and passwords stored encrypted at rest (Fernet), module-scoped, accessible in scripts via `get_credential('name')`.
+- **Built-in HTTP Client** — `call_api()` in scripts handles retries, timeouts, JSON parsing, and consistent error returns — no extra dependencies needed.
+- **Integration Health Dashboard** — Error rate, average latency, and execution log viewer per module at `/__admin/integration-health`.
+- **Incoming Email (IMAP Polling)** — Platform-level IMAP poller stores emails in `incoming_emails` table; modules claim and process them via SQL.
 - **Module Cloning** — One-click duplicate of any module from the admin list to use as a starting point.
 - **Cron Validation** — Invalid cron expressions are caught on save, preventing silent task failures.
 - **Log Retention** — Auto-cleanup of old execution logs configurable from Settings.
 - **Email Test Button** — Verify SMTP configuration with a single click from the Settings page.
-- **Demo Modules** — Import `demos/guestbook.xml` for a working example of forms, DynamicModel data collection, and rendered output at the site root. Import `demos/pixel_art_gallery.xml` for a visual showcase of retro pixel art with a styled grid layout. Import `demos/cat_fact_finder.xml` for a demo of scheduled email delivery, webhook triggers, and group-based route access control.
+- **Demo Modules** — Import `demos/guestbook.xml` for a working example of forms, DynamicModel data collection, and rendered output at the site root. Import `demos/pixel_art_gallery.xml` for a visual showcase of retro pixel art with a styled grid layout. Import `demos/cat_fact_finder.xml` for a demo of scheduled email delivery, webhook triggers, and group-based route access control. Import `demos/incoming_mail_demo.xml` for IMAP email processing with automated claiming and notification. Import `demos/api_integration_demo.xml` for an interactive API test page demonstrating `get_credential()` and `call_api()`.
 
 ## Quick Start
 

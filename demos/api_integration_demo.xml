@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="API Integration Demo" slug="api-integration-demo" version="1.0.0" author="System">
+  <description>Demonstrates credential management and the call_api() HTTP client. Provides a route to test API calls and a script that shows how to use get_credential() with call_api() for external integrations.</description>
+
+  <routes>
+    <route slug="/__demo/api-test" method="GET" script="api_test_page" auth_required="true" title="API Integration Test"/>
+    <route slug="/__demo/api-call" method="POST" script="api_call_handler" auth_required="true" title="Execute API Call"/>
+  </routes>
+
+  <scripts>
+    <script name="api_test_page" language="python"><![CDATA[
+# API Integration Demo — test page
+# Lists credentials and provides an interactive API test form
+
+from sqlalchemy import text as _sql
+
+# Find credentials belonging to this module
+module = db.session.query(Module).filter_by(slug='api-integration-demo').first()
+creds = []
+if module:
+    creds = db.session.query(Credential).filter_by(module_id=module.id).all()
+
+cred_rows = ''
+for c in creds:
+    masked = c.credential_type[:4] + '****' if c.value_encrypted else '****'
+    cred_rows += f'<tr><td>{c.name}</td><td><code>{c.credential_type}</code></td><td>{c.description or "-"}</td></tr>'
+
+_result = f"""<!DOCTYPE html>
+<html><head><title>API Integration Test</title>
+<style>
+body {{ font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }}
+h2 {{ border-bottom: 2px solid #e94560; padding-bottom: 0.5rem; }}
+pre {{ background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }}
+code {{ background: #eee; padding: 1px 4px; border-radius: 2px; font-size: 0.9em; }}
+table {{ width: 100%; border-collapse: collapse; margin: 1rem 0; }}
+th, td {{ text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }}
+th {{ background: #f8f9fa; }}
+input, select, textarea {{ padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; margin-bottom: 0.5rem; }}
+button {{ padding: 10px 24px; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; }}
+.card {{ background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 1rem; margin: 1rem 0; }}
+</style></head><body>
+<h1>API Integration Test</h1>
+<div class="card">
+<h3>Module Credentials</h3>
+<p style="color:#888;font-size:0.9em;">Credentials are encrypted at rest and module-scoped. Create them at <a href="/__admin/credentials">Credentials admin</a>.</p>
+<table>
+<thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+{cred_rows if cred_rows else '<tr><td colspan="3" style="color:#999;text-align:center;">No credentials defined yet. Create one from the <a href="/__admin/credentials/new?module_id=' + str(module.id) + '">Credentials admin</a>.</td></tr>'}
+</tbody></table>
+</div>
+
+<div class="card">
+<h3>Test API Call</h3>
+<p style="color:#888;font-size:0.9em;">Enter a URL and optional headers to test the <code>call_api()</code> helper with retry logic.</p>
+<form action="/__demo/api-call" method="POST">
+<label><strong>Method</strong>
+<select name="method">
+<option value="GET">GET</option>
+<option value="POST">POST</option>
+<option value="PUT">PUT</option>
+<option value="DELETE">DELETE</option>
+</select></label>
+<label><strong>URL</strong>
+<input name="url" type="text" value="https://api.github.com" placeholder="https://api.example.com/endpoint"></label>
+<label><strong>Headers (JSON)</strong>
+<textarea name="headers" rows="3" placeholder='{"Accept": "application/json"}'></textarea></label>
+<label><strong>Body (JSON)</strong>
+<textarea name="body" rows="4" placeholder='{"key": "value"}'></textarea></label>
+<label><strong>Timeout (seconds)</strong>
+<input name="timeout" type="number" value="15" min="1" max="120"></label>
+<label><strong>Retries</strong>
+<input name="retries" type="number" value="1" min="0" max="10"></label>
+<button type="submit">Execute API Call</button>
+</form>
+</div>
+
+<div class="card">
+<h3>Usage Examples</h3>
+<pre># In any module script:
+token = get_credential('my_api_key')
+result = call_api('GET', 'https://api.example.com/data',
+    headers={{'Authorization': 'Bearer ' + token}},
+    retries=3, backoff=2)
+if result['status_code'] == 200:
+    print('Got', len(result['body']), 'items')
+else:
+    print('Error:', result.get('error'))
+</pre>
+</div>
+</body></html>"""
+""".replace('{{', '{').replace('}}', '}')
+]]></script>
+
+    <script name="api_call_handler" language="python"><![CDATA[
+# API Integration Demo — API call handler
+# Executes a test API call using call_api() and returns the result
+
+import json as _json
+
+if request.method != 'POST':
+    _result = 'Method not allowed'
+else:
+    method = request.form.get('method', 'GET')
+    url = request.form.get('url', '').strip()
+    headers_raw = request.form.get('headers', '').strip()
+    body_raw = request.form.get('body', '').strip()
+    timeout = int(request.form.get('timeout', 15))
+    retries = int(request.form.get('retries', 1))
+
+    if not url:
+        _result = '<pre style="color:#c00;">Error: URL is required</pre>'
+        return
+
+    headers = None
+    if headers_raw:
+        try:
+            headers = _json.loads(headers_raw)
+        except _json.JSONDecodeError as e:
+            _result = f'<pre style="color:#c00;">Invalid headers JSON: {e}</pre>'
+            return
+
+    body_data = None
+    json_body = None
+    if body_raw:
+        try:
+            json_body = _json.loads(body_raw)
+        except _json.JSONDecodeError:
+            body_data = body_raw
+
+    result = call_api(
+        method=method,
+        url=url,
+        headers=headers,
+        json=json_body,
+        data=body_data,
+        timeout=timeout,
+        retries=retries,
+    )
+
+    status_color = '#080' if 200 <= result['status_code'] < 300 else '#c00'
+    body_display = result.get('body', '')
+    if isinstance(body_display, (dict, list)):
+        body_display = _json.dumps(body_display, indent=2)
+    elif len(str(body_display)) > 5000:
+        body_display = str(body_display)[:5000] + '\n\n... (truncated)'
+
+    error_display = result.get('error', '')
+    error_section = ''
+    if error_display:
+        error_section = f'<h3>Error</h3><pre style="background:#fff5f5;padding:1rem;border:1px solid #fcc;border-radius:4px;color:#c00;">{error_display}</pre>'
+
+    _result = f"""<!DOCTYPE html>
+<html><head><title>API Result</title>
+<style>
+body {{ font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }}
+pre {{ background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto; }}
+table {{ width: 100%; border-collapse: collapse; margin: 1rem 0; }}
+th, td {{ text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }}
+.card {{ background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 1rem; margin: 1rem 0; }}
+</style></head><body>
+<h1>API Call Result</h1>
+<div class="card">
+<table>
+<tr><th>URL</th><td><code>{url}</code></td></tr>
+<tr><th>Method</th><td><code>{method}</code></td></tr>
+<tr><th>Status</th><td><strong style="color:{status_color};">{result['status_code']}</strong></td></tr>
+<tr><th>Duration</th><td>{result.get('elapsed_ms', '?')}ms</td></tr>
+</table>
+</div>
+{error_section}
+<h3>Response</h3>
+<pre>{body_display}</pre>
+<p><a href="/__demo/api-test">&larr; Back to test page</a></p>
+</body></html>"""
+]]></script>
+  </scripts>
+
+</module>

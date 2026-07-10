@@ -20,12 +20,16 @@ The dark bar at the top of every page (when logged in as admin) links to all adm
 | Tasks | `/__admin/tasks` | Scheduled cron tasks |
 | Triggers | `/__admin/triggers` | Event-based triggers (on_insert, after_route, etc.) |
 | Users | `/__admin/users` | Manage user accounts |
+| Groups | `/__admin/groups` | Manage user groups for route access control |
 | Data | `/__admin/data` | Browse and edit any database table |
 | Queries | `/__admin/queries` | Saved SQL queries with charting, scheduling, and email reports |
+| Credentials | `/__admin/credentials` | Encrypted API keys, tokens, and secrets (module-scoped) |
+| Incoming | `/__admin/incoming-emails` | Emails received via IMAP polling |
 | Uploads | `/__admin/uploads` | Upload files for use in pages |
-| Settings | `/__admin/settings` | Registration controls (disable, require approval) |
 | AI Designer | `/__admin/chat` | Chat interface to generate modules via AI |
 | BPMN Designer | `/__admin/bpmn` | Visual BPMN workflow designer with AI module conversion |
+| Integrations | `/__admin/integration-health` | Script/task execution health, errors, and latency |
+| Settings | `/__admin/settings` | Registration, LLM, SMTP, IMAP, and script controls |
 | Dashboard | `/__admin/dashboard` | System health overview, execution logs, and scheduler status |
 
 ## Getting Started
@@ -107,6 +111,10 @@ Python code executed when a route is visited. Scripts run in a sandboxed environ
 - `route` — the current Route object
 - `form_fields` — list of form field dicts (if route has a form)
 - `render_form()` — renders form HTML (if route has a form)
+
+**Integration helpers:**
+- `get_credential('name')` — retrieves a module-scoped, encrypted credential (API key, token, password) from the Credentials store. Only credentials belonging to the script's own module are accessible. Never hardcode secrets in scripts.
+- `call_api(method, url, headers=None, json=None, data=None, timeout=30, retries=3, backoff=2)` — HTTP client with automatic retry on server errors (5xx) and network failures. Returns `{status_code, headers, body, elapsed_ms, error?}`. Auto-parses JSON responses.
 
 **Script result** — end your script with either:
 - `return redirect(...)`, `return render(...)`, `return jsonify(...)`
@@ -361,6 +369,108 @@ psql -U appfoundry -d pythonappfoundry -f data_dump.sql
 - **Sequences and auto-increment**: SQLite's `AUTOINCREMENT` and PostgreSQL's `SERIAL` / `IDENTITY` differ. After migration, check that auto-incrementing IDs work by adding a test row in the Data Browser.
 - **No Flask-Migrate needed**: The platform uses `db.create_all()` on every startup, so as long as your database URL points to PostgreSQL, all platform tables are created automatically. Schema changes to existing platform tables use raw `ALTER TABLE` in `app/__init__.py` — these run on PostgreSQL as well.
 
+## Credentials (Encrypted Secrets)
+
+Credentials (API keys, OAuth tokens, passwords) are stored encrypted at rest using Fernet (symmetric encryption with a key stored in `instance/credential.key`). Each credential belongs to a module and is only accessible to scripts within that module.
+
+### Managing Credentials
+
+1. Go to **Credentials** (`/__admin/credentials`) → **+ New Credential**
+2. Select the **Module** that will use this credential
+3. Enter a **Name** (e.g., `github_api_key`, `stripe_token`, `db_password`)
+4. Select the **Type**:
+   - `api_key` — generic API key or token
+   - `oauth_token` — OAuth 2.0 access token
+   - `basic_auth` — colon-separated `username:password` pair
+   - `custom` — any other secret string
+5. Enter the **Value** (shown plaintext in the form, encrypted before storage)
+6. Click **Save**
+
+### Usage in Scripts
+
+```python
+# Retrieve a credential (decrypted automatically, scoped to this module)
+api_key = get_credential('github_api_key')
+
+# Use with call_api
+result = call_api('GET', 'https://api.github.com/user/repos',
+    headers={'Authorization': 'Bearer ' + api_key, 'Accept': 'application/vnd.github.v3+json'})
+
+if result['status_code'] == 200:
+    repos = result['body']  # auto-parsed JSON list
+    _result = f"Found {len(repos)} repositories"
+else:
+    _result = f"API error: {result.get('error', result['body'][:200])}"
+```
+
+### Security Notes
+
+- Credentials are **encrypted at rest** — the raw value is never stored in the database
+- The encryption key file (`instance/credential.key`) must be preserved across deployments. If lost, credentials cannot be recovered — delete and re-create them.
+- Credentials are only accessible to scripts in the **same module**. Module A's scripts cannot access Module B's credentials.
+- Never hardcode secrets in script source code — scripts are stored in the database in plaintext.
+- The decrypted value is only available in memory during script execution and is not logged.
+
+## Incoming Email (IMAP Polling)
+
+The platform can poll an IMAP mailbox for incoming emails and store them in the `incoming_emails` table for module processing.
+
+### Configuration
+
+1. Go to **Settings** (`/__admin/settings`) → scroll to **Incoming Mail (IMAP)**
+2. Configure:
+   - **Enable IMAP polling** — enable the scheduler poll loop
+   - **IMAP Host / Port** — your mail server (default 993 for SSL)
+   - **Username / Password** — IMAP credentials
+   - **Use SSL** — enable SSL/TLS (default on)
+   - **Folder** — mailbox folder (default `INBOX`)
+   - **Poll Interval** — minutes between checks (default 5)
+   - **Mark as seen** — mark fetched messages as read on the server
+   - **Email Retention** — days to keep processed emails (0 = forever). Cleanup runs on dashboard load.
+
+### Module Processing
+
+Modules claim and process incoming emails by querying the `incoming_emails` table:
+
+```python
+# Find unprocessed emails for this module
+result = db.session.execute(db.text("""
+    SELECT id, subject, from_address, body_text
+    FROM incoming_emails
+    WHERE processed = 0
+      AND subject LIKE '%support%'
+    ORDER BY created_at ASC
+"""))
+for row in result:
+    email_id = row[0]
+    # ... process the email ...
+
+    # Mark as processed and claimed by this module
+    db.session.execute(db.text("""
+        UPDATE incoming_emails
+        SET processed = 1, module_slug = 'your-module-slug',
+            processed_at = datetime('now')
+        WHERE id = :eid
+    """), {'eid': email_id})
+db.session.commit()
+```
+
+The demo module `demos/incoming_mail_demo.xml` shows a complete example — import it from **Modules → New Module → Import from XML**.
+
+## Integration Health Dashboard
+
+The Integration Health page (`/__admin/integration-health`) provides monitoring for all script and task executions:
+
+- **Summary cards** — recent run count, error count with error rate percentage, average duration
+- **Module filter** — filter by module to see only its scripts' logs
+- **Execution logs** — sortable table with timestamp, script/task name, status, duration, and error detail viewer
+
+This is useful for:
+- Monitoring whether scheduled integration tasks are succeeding
+- Debugging API call failures in scripts
+- Spotting performance regressions (high latency or error rate)
+- Verifying a specific module's scripts are healthy
+
 ## SMTP / Email Configuration
 
 Email settings are managed via **Admin → Settings** in the GUI. Scripts use `send_email(to, subject, body, html=False)` which reads these settings automatically — no credentials should ever be hardcoded in scripts.
@@ -389,6 +499,9 @@ Email settings are managed via **Admin → Settings** in the GUI. Scripts use `s
 - **Dependency viewer**: Click the red dependency count in the Modules list to see which modules reference a given module, including the type and value of each reference. Run "Scan" on the module first to detect its references to other modules.
 - **System modules** — The **System Automation** module is auto-created on first start and cannot be deleted. Use it for platform-wide scripts, queries, and scheduled tasks. If you break it, use the **Reset** button (visible in the Modules list) to wipe all its resources back to empty.
 - **Query reports are module-scoped** — Like routes and scripts, queries now belong to a module. Create queries under the **System Automation** module for platform-wide visibility, or under app modules for app-specific reporting.
+- **Use `get_credential()` instead of hardcoding secrets** — Store API keys, tokens, and passwords in the Credentials admin page. They're encrypted at rest and module-scoped. Scripts call `get_credential('name')` to retrieve them — never put secrets in script source code.
+- **Use `call_api()` for external HTTP calls** — The built-in client handles retries, timeouts, and JSON parsing consistently. Importing `urllib` directly in scripts is discouraged — `call_api()` logs errors to the execution log automatically and gives consistent return formatting.
+- **Monitor integrations in the Health page** — The `/__admin/integration-health` page shows error rates, recent failures, and average latency per module. Visit it regularly to catch failing scripts early.
 
 ## Query Reports
 
