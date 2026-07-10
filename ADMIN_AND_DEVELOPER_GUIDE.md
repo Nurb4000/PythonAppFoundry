@@ -141,7 +141,9 @@ Field types supported: text, email, password, number, textarea, select, checkbox
 ### Data Browser
 Browse and edit any database table directly from the admin UI.
 
-- Lists all tables with row counts and column types
+- Lists all tables with row counts, column types, and **owning module** (for dynamic tables created by modules)
+- Module column is populated automatically by the `dynamic_table_registry` — no manual setup needed
+- Filter tables by owning module using the dropdown
 - Paginated row browsing (50 per page)
 - Add new rows, edit existing rows, delete rows
 - Input types auto-detect based on column type (text, number, boolean, datetime)

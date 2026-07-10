@@ -20,7 +20,7 @@ class _ModelQueryProperty:
 
 class DynamicModel:
     @staticmethod
-    def get_or_create(name, columns=None):
+    def get_or_create(name, columns=None, module_id=None):
         from sqlalchemy import inspect as _sa_inspect
 
         table_name = name.lower()
@@ -60,6 +60,22 @@ class DynamicModel:
         })
 
         _dynamic_models[name] = model
+
+        # Register ownership
+        if module_id is not None:
+            existing = DynamicTableRegistry.query.filter_by(
+                table_name=table_name, module_id=module_id
+            ).first()
+            if not existing:
+                db.session.add(DynamicTableRegistry(
+                    table_name=table_name,
+                    module_id=module_id,
+                ))
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
         logger.info(f'Created dynamic model: {name} (table: {table_name})')
         return model
 
@@ -357,6 +373,20 @@ class ExecutionLog(db.Model):
 
     def __repr__(self):
         return f'<ExecutionLog {self.source_type}:{self.source_name} {self.status}>'
+
+
+class DynamicTableRegistry(db.Model):
+    __tablename__ = 'dynamic_table_registry'
+
+    id = db.Column(db.Integer, primary_key=True)
+    module_id = db.Column(db.Integer, db.ForeignKey('modules.id'), nullable=False, index=True)
+    table_name = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    module = db.relationship('Module', backref=db.backref('dynamic_tables', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<DynamicTableRegistry {self.table_name} -> module {self.module_id}>'
 
 
 class Credential(db.Model):

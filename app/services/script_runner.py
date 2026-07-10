@@ -59,6 +59,15 @@ def _make_get_credential(module_id):
     return get_credential
 
 
+class _ModuleDynamicModel:
+    """Module-scoped DynamicModel wrapper that auto-registers table ownership."""
+    def __init__(self, module_id):
+        self._module_id = module_id
+
+    def get_or_create(self, name, columns=None):
+        return DynamicModel.get_or_create(name, columns, module_id=self._module_id)
+
+
 def _call_api(method='GET', url=None, headers=None, json=None, data=None,
               timeout=30, retries=3, backoff=2):
     """Centralized HTTP client with retry and error handling.
@@ -239,7 +248,7 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'jsonify': flask_jsonify,
         'send_email': _send_email,
         'render_chart': render_chart,
-        'DynamicModel': DynamicModel,
+        'DynamicModel': _ModuleDynamicModel(script.module_id),
         'Integer': Integer,
         'String': String,
         'DateTime': DateTime,

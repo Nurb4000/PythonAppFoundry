@@ -409,12 +409,9 @@ def delete_module(id):
 ''', name=name, dependencies=dependencies)
 
     # POST: Actually delete the module
-    # Collect DynamicModel table names used by this module's scripts
-    import re
-    dyn_tables = set()
-    for script in m.scripts.all():
-        for match in re.finditer(r'DynamicModel\.get_or_create\s*\(\s*["\'](\w+)["\']', script.source_code):
-            dyn_tables.add(match.group(1).lower())
+    # Collect DynamicModel table names from the registry
+    from app.models import DynamicTableRegistry
+    dyn_tables = {r.table_name for r in DynamicTableRegistry.query.filter_by(module_id=m.id)}
 
     drop_tables = request.form.get('drop_tables') == 'on'
     if drop_tables and dyn_tables:
@@ -427,6 +424,9 @@ def delete_module(id):
                 if table is not None:
                     table.drop(db.engine, checkfirst=True)
                     db.metadata.remove(table)
+
+    # Remove registry entries
+    DynamicTableRegistry.query.filter_by(module_id=m.id).delete()
 
     m.routes.delete()
     m.scripts.delete()
@@ -1408,8 +1408,8 @@ SENSITIVE_COLUMNS = {'password_hash', '_password'}
 @admin_bp.route('/data')
 @admin_required
 def list_tables():
-    import re
-    # Build table→modules mapping from script source_code
+    from app.models import DynamicTableRegistry
+    # Build table→modules mapping from DynamicTableRegistry
     table_modules = {}
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
@@ -1419,19 +1419,17 @@ def list_tables():
     for t in platform_tables:
         table_modules[t] = 'Platform'
 
-    scripts = db.session.query(Script).all()
-    for s in scripts:
-        mod = s.module
+    for reg in DynamicTableRegistry.query.all():
+        mod = reg.module
         mod_name = mod.name if mod else '?'
-        for m in re.finditer(r'DynamicModel\.get_or_create\s*\(\s*["\'](\w+)["\']', s.source_code):
-            tname = m.group(1).lower()
-            if tname not in table_modules:
-                table_modules[tname] = []
-            if isinstance(table_modules.get(tname), list):
-                if mod_name not in table_modules[tname]:
-                    table_modules[tname].append(mod_name)
-            elif table_modules.get(tname) != mod_name:
-                table_modules[tname] = [table_modules[tname], mod_name]
+        tname = reg.table_name
+        if tname not in table_modules:
+            table_modules[tname] = mod_name
+        elif isinstance(table_modules.get(tname), list):
+            if mod_name not in table_modules[tname]:
+                table_modules[tname].append(mod_name)
+        elif table_modules.get(tname) != mod_name:
+            table_modules[tname] = [table_modules[tname], mod_name]
 
     filter_module = request.args.get('module', '')
     sort_col = request.args.get('sort', 'name')
