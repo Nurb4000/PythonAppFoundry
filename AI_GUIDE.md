@@ -160,8 +160,7 @@ session.commit()
 
 **Critical: DynamicModel only auto-adds an `id` column.** It does NOT add `created_at`, `updated_at`, or any other automatic column. Every column you use in a query, filter, or ORDER BY must be explicitly defined in the `get_or_create()` columns dict. If you need `created_at`, add `'created_at': db.DateTime` to the dict — otherwise queries like `ORDER BY created_at` will crash.
 
-Supported column types: `db.String(n)`, `db.Integer`, `db.Boolean`, `db.Float`,
-`db.DateTime`, `db.Text`, `db.Date`, `db.LargeBinary`.
+Column types can be referenced as bare names (`String(200)`, `Integer`, `Text`, `DateTime`, `Boolean`, `Float`) or via `db.` prefix (`db.String(200)`, `db.Integer`, etc.). Both work the same way.
 
 ## Render Helper
 

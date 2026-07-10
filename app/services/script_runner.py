@@ -11,6 +11,7 @@ from io import StringIO
 from flask import request, redirect, url_for, flash, render_template_string, jsonify as flask_jsonify
 from flask_login import current_user
 from datetime import datetime, timezone
+from sqlalchemy import Integer, String, DateTime, Text, Boolean, Float, Column
 from app.models import DynamicModel
 
 from app import db
@@ -239,6 +240,13 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'send_email': _send_email,
         'render_chart': render_chart,
         'DynamicModel': DynamicModel,
+        'Integer': Integer,
+        'String': String,
+        'DateTime': DateTime,
+        'Text': Text,
+        'Boolean': Boolean,
+        'Float': Float,
+        'Column': Column,
         'datetime': datetime,
         'timezone': timezone,
         'get_credential': _make_get_credential(script.module_id),
