@@ -207,25 +207,52 @@ def create_app(config_class=None):
             db.session.commit()
 
         # Backfill DynamicTableRegistry for tables created before the registry existed
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
+        from sqlalchemy import inspect as _sa_inspect
+        from app.models import DynamicTableRegistry, Script as _Script
         try:
-            from sqlalchemy import inspect as _sa_inspect
-            from app.models import DynamicTableRegistry as _DTR, Script as _Script
             _inspector = _sa_inspect(db.engine)
             _existing_tables = set(_inspector.get_table_names())
-            _registry_names = {r.table_name for r in _DTR.query.all()}
-            import re as _re
-            for _s in _Script.query.all():
-                if not _s.module_id:
-                    continue
-                for _m in _re.finditer(r'DynamicModel\.get_or_create\s*\(\s*["\'](\w+)["\']', _s.source_code):
-                    _tname = _m.group(1).lower()
-                    if _tname in _existing_tables and _tname not in _registry_names:
-                        db.session.add(_DTR(table_name=_tname, module_id=_s.module_id))
-                        _registry_names.add(_tname)
-            if db.session.new:
-                db.session.commit()
-        except Exception:
-            pass
+            _registry_names = {r.table_name for r in db.session.query(DynamicTableRegistry.table_name).all()}
+
+            # Collect unregistered non-platform tables
+            _platform_prefixes = {'users', 'user_groups', 'groups', 'modules', 'routes',
+                                  'scripts', 'forms', 'scheduled_tasks', 'triggers',
+                                  'settings', 'uploads', 'chat_sessions', 'chat_messages',
+                                  'execution_logs', 'module_dependencies', 'module_versions',
+                                  'query_reports', 'incoming_emails', 'credentials',
+                                  'dynamic_table_registry', 'alembic_version'}
+            _unregistered = {t for t in _existing_tables
+                             if t not in _registry_names and t not in _platform_prefixes
+                             and not t.startswith('sqlite_')}
+
+            if _unregistered:
+                import re as _re
+                # Map scripts to modules, then search for table names in source code
+                _scripts_by_module = {}
+                for _s in db.session.query(_Script).all():
+                    if _s.module_id:
+                        _scripts_by_module.setdefault(_s.module_id, []).append(_s.source_code.lower())
+
+                _count = 0
+                for _tname in sorted(_unregistered):
+                    # Find which module's scripts reference this table name
+                    for _mid, _sources in _scripts_by_module.items():
+                        _refs = sum(1 for src in _sources if _tname in src)
+                        if _refs:
+                            db.session.add(DynamicTableRegistry(table_name=_tname, module_id=_mid))
+                            _count += 1
+                            break
+                    else:
+                        # Fallback: assign to any module whose scripts reference DynamicModel.get_or_create
+                        pass
+
+                if _count:
+                    db.session.commit()
+                    _log.info(f'Backfilled DynamicTableRegistry: {_count} table(s) registered')
+        except Exception as _e:
+            _log.warning(f'DynamicTableRegistry backfill failed: {_e}')
 
         # Auto-create System Automation module if missing
         from app.models import Module
