@@ -102,10 +102,12 @@ def create_app(config_class=None):
                 <a href="/__admin/groups" style="color:#eee;text-decoration:none">Groups</a>
                 <a href="/__admin/data" style="color:#eee;text-decoration:none">Data</a>
                 <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
+                <a href="/__admin/credentials" style="color:#eee;text-decoration:none">Credentials</a>
                 <a href="/__admin/incoming-emails" style="color:#eee;text-decoration:none">Incoming</a>
                 <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
                 <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
                 <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
+                <a href="/__admin/integration-health" style="color:#eee;text-decoration:none">Integrations</a>
                 <a href="/__admin/settings" style="color:#eee;text-decoration:none">Settings</a>
                 <span style="flex:1"></span>
                 <span>{current_user.username}</span>
@@ -121,6 +123,7 @@ def create_app(config_class=None):
                 <a href="/__admin/scripts" style="color:#eee;text-decoration:none">Scripts</a>
                 <a href="/__admin/forms" style="color:#eee;text-decoration:none">Forms</a>
                 <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
+                <a href="/__admin/credentials" style="color:#eee;text-decoration:none">Credentials</a>
                 <a href="/__admin/incoming-emails" style="color:#eee;text-decoration:none">Incoming</a>
                 <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
                 <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
@@ -182,6 +185,8 @@ def create_app(config_class=None):
 
         from app.models import Route
         from app.services.scheduler import init_scheduler
+        from app.services.credential_store import init_credential_store
+        init_credential_store(app)
         _debug = os.environ.get('APP_DEBUG', 'true').lower() in ('1', 'true', 'yes')
         if not _debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
             init_scheduler(app)

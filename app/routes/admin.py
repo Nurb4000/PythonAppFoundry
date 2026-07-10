@@ -7,7 +7,7 @@ import csv, io
 from datetime import datetime as _datetime, timezone as _tz
 
 from app import db
-from app.models import User, Module, Route, Script, Form, ScheduledTask, Trigger, ChatSession, ChatMessage, Upload, Setting, Group, ExecutionLog, ModuleVersion, QueryReport, IncomingEmail
+from app.models import User, Module, Route, Script, Form, ScheduledTask, Trigger, ChatSession, ChatMessage, Upload, Setting, Group, ExecutionLog, ModuleVersion, QueryReport, IncomingEmail, Credential
 from app.services.script_runner import execute_script
 
 admin_bp = Blueprint('admin', __name__)
@@ -433,6 +433,7 @@ def delete_module(id):
     m.forms.delete()
     m.scheduled_tasks.delete()
     m.triggers.delete()
+    m.credentials.delete()
     m.versions.delete()
     m.dependencies_from.delete()
     m.dependencies_to.delete()
@@ -457,6 +458,7 @@ def reset_system_module(id):
     m.scheduled_tasks.delete()
     m.triggers.delete()
     m.query_reports.delete()
+    m.credentials.delete()
     db.session.commit()
     refresh_tasks()
     flash(f'System module "{m.name}" reset to default (empty).')
@@ -1413,7 +1415,7 @@ def list_tables():
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports', 'incoming_emails'}
+                       'query_reports', 'incoming_emails', 'credentials'}
     for t in platform_tables:
         table_modules[t] = 'Platform'
 
@@ -1991,7 +1993,7 @@ def delete_table(table_name):
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports', 'incoming_emails'}
+                       'query_reports', 'incoming_emails', 'credentials'}
     if table_name in platform_tables:
         flash(f'Cannot drop platform table "{table_name}"', 'error')
         return redirect(url_for('admin.list_tables'))
@@ -2694,7 +2696,7 @@ def dashboard():
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports', 'incoming_emails'}
+                       'query_reports', 'incoming_emails', 'credentials'}
     table_stats = []
     inspector = _sa_inspect(db.engine)
     for db_name in sorted(inspector.get_table_names()):
@@ -2877,6 +2879,226 @@ def delete_incoming_email(id):
     db.session.commit()
     flash(f'Email #{id} deleted')
     return redirect(url_for('admin.list_incoming_emails'))
+
+
+@admin_bp.route('/credentials')
+@admin_required
+def list_credentials():
+    module_id = request.args.get('module_id', type=int)
+    q = db.session.query(Credential)
+    if module_id:
+        q = q.filter(Credential.module_id == module_id)
+    q = q.order_by(Credential.module_id, Credential.name)
+    creds = q.all()
+    modules = db.session.query(Module).order_by(Module.name).all()
+    return render_admin('Credentials', '''
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.new_credential') }}">+ New Credential</a>
+  <form method="GET" style="display:inline;">
+    <select name="module_id" onchange="this.form.submit()" style="padding:4px 8px;">
+      <option value="">All Modules</option>
+      {% for m in modules %}
+      <option value="{{ m.id }}" {% if module_id == m.id %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>ID</th><th>Module</th><th>Name</th><th>Type</th><th>Description</th><th>Updated</th><th>Actions</th>
+</tr></thead>
+<tbody>
+{% for c in creds %}
+<tr>
+  <td>{{ c.id }}</td>
+  <td>{% if c.module %}<a href="{{ url_for('admin.edit_module', id=c.module.id) }}">{{ c.module.name }}</a>{% else %}<span style="color:#999;">—</span>{% endif %}</td>
+  <td><strong>{{ c.name }}</strong></td>
+  <td><code>{{ c.credential_type }}</code></td>
+  <td>{{ c.description[:60] if c.description else '—' }}</td>
+  <td>{{ c.updated_at|localtime }}</td>
+  <td>
+    <a href="{{ url_for('admin.edit_credential', id=c.id) }}">Edit</a>
+    <form method="POST" action="{{ url_for('admin.delete_credential', id=c.id) }}" style="display:inline" onsubmit="return confirm('Delete credential &quot;{{ c.name }}&quot;?')">
+      <button type="submit" style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% if not creds %}<p style="color:#888;">No credentials defined. Add API keys, tokens, and secrets for your integration scripts.</p>{% endif %}''', creds=creds, modules=modules, module_id=module_id)
+
+
+@admin_bp.route('/credentials/new', methods=['GET', 'POST'])
+@admin_required
+def new_credential():
+    modules = db.session.query(Module).order_by(Module.name).all()
+    if request.method == 'POST':
+        from app.services.credential_store import encrypt_value
+        c = Credential(
+            module_id=int(request.form['module_id']),
+            name=request.form['name'],
+            credential_type=request.form.get('credential_type', 'api_key'),
+            value_encrypted=encrypt_value(request.form['value']),
+            description=request.form.get('description', ''),
+        )
+        db.session.add(c)
+        db.session.commit()
+        flash(f'Credential "{c.name}" saved')
+        return redirect(url_for('admin.list_credentials'))
+    return render_admin('New Credential', '''
+<form method="POST">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+    <label>Name <input name="name" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g. github_api_key"></label>
+    <label>Module <select name="module_id" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
+  </div>
+  <label>Type
+    <select name="credential_type" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:1rem;">
+      <option value="api_key">API Key</option>
+      <option value="oauth_token">OAuth Token</option>
+      <option value="basic_auth">Basic Auth (user:pass)</option>
+      <option value="custom">Custom / Raw</option>
+    </select>
+  </label>
+  <label style="display:block;margin-bottom:1rem;">
+    Value <textarea name="value" rows="4" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;font-family:monospace;" required></textarea>
+    <span style="color:#888;font-size:0.85em;">Stored encrypted at rest. Only accessible to scripts in the same module via <code>get_credential('name')</code>.</span>
+  </label>
+  <label style="display:block;margin-bottom:1rem;">
+    Description <input name="description" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+  </label>
+  <button style="padding:10px 24px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Save</button>
+  <a href="{{ url_for('admin.list_credentials') }}" style="margin-left:0.5rem;">Cancel</a>
+</form>''', modules=modules)
+
+
+@admin_bp.route('/credentials/edit/<int:id>', methods=['GET', 'POST'])
+@admin_required
+def edit_credential(id):
+    c = Credential.query.get_or_404(id)
+    modules = db.session.query(Module).order_by(Module.name).all()
+    if request.method == 'POST':
+        from app.services.credential_store import encrypt_value
+        c.module_id = int(request.form['module_id'])
+        c.name = request.form['name']
+        c.credential_type = request.form.get('credential_type', 'api_key')
+        c.description = request.form.get('description', '')
+        if request.form.get('value'):
+            c.value_encrypted = encrypt_value(request.form['value'])
+        db.session.commit()
+        flash(f'Credential "{c.name}" updated')
+        return redirect(url_for('admin.list_credentials'))
+    return render_admin('Edit Credential', '''
+<form method="POST">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+    <label>Name <input name="name" value="{{ c.name }}" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;"></label>
+    <label>Module <select name="module_id" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == c.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
+  </div>
+  <label>Type
+    <select name="credential_type" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:1rem;">
+      <option value="api_key" {% if c.credential_type == 'api_key' %}selected{% endif %}>API Key</option>
+      <option value="oauth_token" {% if c.credential_type == 'oauth_token' %}selected{% endif %}>OAuth Token</option>
+      <option value="basic_auth" {% if c.credential_type == 'basic_auth' %}selected{% endif %}>Basic Auth (user:pass)</option>
+      <option value="custom" {% if c.credential_type == 'custom' %}selected{% endif %}>Custom / Raw</option>
+    </select>
+  </label>
+  <label style="display:block;margin-bottom:1rem;">
+    Value <textarea name="value" rows="4" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;font-family:monospace;" placeholder="Leave blank to keep current value"></textarea>
+    <span style="color:#888;font-size:0.85em;">Stored encrypted at rest. Leave blank to keep the existing value unchanged.</span>
+  </label>
+  <label style="display:block;margin-bottom:1rem;">
+    Description <input name="description" value="{{ c.description }}" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+  </label>
+  <button style="padding:10px 24px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Update</button>
+  <a href="{{ url_for('admin.list_credentials') }}" style="margin-left:0.5rem;">Cancel</a>
+</form>''', c=c, modules=modules)
+
+
+@admin_bp.route('/credentials/<int:id>/delete', methods=['POST'])
+@admin_required
+def delete_credential(id):
+    c = Credential.query.get_or_404(id)
+    db.session.delete(c)
+    db.session.commit()
+    flash(f'Credential "{c.name}" deleted')
+    return redirect(url_for('admin.list_credentials'))
+
+
+@admin_bp.route('/integration-health')
+@admin_required
+def integration_health():
+    # Recent script execution logs — filter by script source_type
+    limit = request.args.get('limit', 100, type=int)
+    module_id = request.args.get('module_id', type=int)
+
+    logs_q = db.session.query(ExecutionLog).filter(
+        ExecutionLog.source_type.in_(['script', 'task'])
+    )
+
+    if module_id:
+        # Find scripts in this module, then filter logs by their names
+        script_names = [
+            s.name for s in db.session.query(Script.name).filter(Script.module_id == module_id)
+        ]
+        if script_names:
+            logs_q = logs_q.filter(ExecutionLog.source_name.in_(script_names))
+
+    logs_q = logs_q.order_by(ExecutionLog.created_at.desc()).limit(limit)
+    logs = logs_q.all()
+
+    # Aggregated stats
+    total_runs = len(logs)
+    errors = [l for l in logs if l.status == 'error']
+    error_rate = round(len(errors) / total_runs * 100, 1) if total_runs else 0
+    avg_duration = sum(l.duration_ms for l in logs) / total_runs if total_runs else 0
+
+    modules = db.session.query(Module).order_by(Module.name).all()
+
+    return render_admin('Integration Health', '''
+<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+  <div class="dash-card" style="flex:1;min-width:120px;"><h3>Recent Runs</h3><div class="value">{{ total_runs }}</div></div>
+  <div class="dash-card" style="flex:1;min-width:120px;"><h3>Errors</h3><div class="value" style="color:{% if errors %} #c00{% else %}#080{% endif %};">{{ errors|length }}</div><div class="sub">{{ error_rate }}% error rate</div></div>
+  <div class="dash-card" style="flex:1;min-width:120px;"><h3>Avg Duration</h3><div class="value">{{ '%d'|format(avg_duration) }}ms</div></div>
+</div>
+<form method="GET" style="margin-bottom:1rem;display:flex;gap:8px;align-items:center;">
+  <select name="module_id" onchange="this.form.submit()" style="padding:4px 8px;">
+    <option value="">All Modules</option>
+    {% for m in modules %}
+    <option value="{{ m.id }}" {% if module_id == m.id %}selected{% endif %}>{{ m.name }}</option>
+    {% endfor %}
+  </select>
+  <input name="limit" type="hidden" value="{{ limit }}">
+  <noscript><button type="submit">Filter</button></noscript>
+  {% if module_id %}<a href="{{ url_for('admin.integration_health') }}" style="color:#007bff;">Clear</a>{% endif %}
+</form>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>Time</th><th>Script / Task</th><th>Status</th><th>Duration</th><th>Detail</th>
+</tr></thead>
+<tbody>
+{% for log in logs %}
+<tr>
+  <td style="white-space:nowrap;font-size:0.85em;">{{ log.created_at|localtime }}</td>
+  <td><strong>{{ log.source_name }}</strong><br><span style="font-size:0.8em;color:#888;">{{ log.source_type }}</span></td>
+  <td><span class="{% if log.status == 'success' %}status-ok{% else %}status-err{% endif %}">{{ log.status|upper }}</span></td>
+  <td>{{ log.duration_ms }}ms</td>
+  <td>
+    {% if log.error_message %}
+    <button onclick="showLogDetail({{ log.id }}, this.nextElementSibling)" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#fee;border:1px solid #c00;color:#c00;border-radius:3px;">View Error</button>
+    <span style="display:none;">{{ log.error_message[:2000] }}</span>
+    {% elif log.stdout %}
+    <span style="color:#888;font-size:0.85em;">{{ log.stdout[:200] }}</span>
+    {% else %}<span style="color:#999;font-size:0.85em;">—</span>{% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% if not logs %}<p style="color:#888;">No script or task execution logs yet. Run a script to see results here.</p>{% endif %}
+''', logs=logs, total_runs=total_runs, errors=errors, error_rate=error_rate,
+        avg_duration=avg_duration, modules=modules, module_id=module_id, limit=limit)
 
 
 def _get_scheduler_info():

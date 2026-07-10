@@ -359,6 +359,25 @@ class ExecutionLog(db.Model):
         return f'<ExecutionLog {self.source_type}:{self.source_name} {self.status}>'
 
 
+class Credential(db.Model):
+    __tablename__ = 'credentials'
+
+    id = db.Column(db.Integer, primary_key=True)
+    module_id = db.Column(db.Integer, db.ForeignKey('modules.id'), nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    credential_type = db.Column(db.String(50), default='api_key')
+    value_encrypted = db.Column(db.Text, nullable=False)
+    description = db.Column(db.Text, default='')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    module = db.relationship('Module', backref=db.backref('credentials', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Credential {self.name} ({self.credential_type})>'
+
+
 class IncomingEmail(db.Model):
     __tablename__ = 'incoming_emails'
 

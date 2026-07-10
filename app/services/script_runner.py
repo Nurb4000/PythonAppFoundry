@@ -46,6 +46,124 @@ class ScriptTimeout(Exception):
     pass
 
 
+def _make_get_credential(module_id):
+    def get_credential(name):
+        from app.models import Credential
+        from app.services.credential_store import decrypt_value
+        c = Credential.query.filter_by(module_id=module_id, name=name).first()
+        if c is None:
+            raise NameError(f'Credential "{name}" not found for this module')
+        return decrypt_value(c.value_encrypted)
+    get_credential.__name__ = 'get_credential'
+    return get_credential
+
+
+def _call_api(method='GET', url=None, headers=None, json=None, data=None,
+              timeout=30, retries=3, backoff=2):
+    """Centralized HTTP client with retry and error handling.
+
+    Args:
+        method: HTTP method (GET, POST, PUT, PATCH, DELETE)
+        url: Full URL to call
+        headers: dict of HTTP headers
+        json: dict to send as JSON body
+        data: str or bytes to send as raw body
+        timeout: request timeout in seconds (default 30)
+        retries: number of retries on failure (default 3)
+        backoff: exponential backoff multiplier in seconds (default 2)
+
+    Returns:
+        dict with keys: status_code, headers (dict), body (parsed JSON or raw text), elapsed_ms
+    """
+    import urllib.request
+    import urllib.error
+    import json as _json
+    import time as _time
+
+    if url is None:
+        raise ValueError('url is required')
+
+    t0 = _time.time()
+
+    body_bytes = None
+    if json is not None:
+        body_bytes = _json.dumps(json).encode('utf-8')
+        if headers is None:
+            headers = {}
+        if 'Content-Type' not in headers:
+            headers['Content-Type'] = 'application/json'
+    elif data is not None:
+        if isinstance(data, str):
+            body_bytes = data.encode('utf-8')
+        else:
+            body_bytes = data
+
+    last_error = None
+    for attempt in range(1 + retries):
+        try:
+            req = urllib.request.Request(url, data=body_bytes, method=method.upper())
+            if headers:
+                for k, v in headers.items():
+                    req.add_header(k, v)
+
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+                content_type = resp.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    body = _json.loads(raw.decode('utf-8'))
+                else:
+                    body = raw.decode('utf-8', errors='replace')
+
+                elapsed = int((_time.time() - t0) * 1000)
+                return {
+                    'status_code': resp.status,
+                    'headers': dict(resp.headers),
+                    'body': body,
+                    'elapsed_ms': elapsed,
+                }
+
+        except urllib.error.HTTPError as e:
+            last_error = e
+            if attempt < retries and e.code >= 500:
+                _time.sleep(backoff * (2 ** attempt))
+                continue
+            elapsed = int((_time.time() - t0) * 1000)
+            try:
+                err_body = e.read().decode('utf-8', errors='replace')
+            except Exception:
+                err_body = str(e)
+            return {
+                'status_code': e.code,
+                'headers': dict(e.headers),
+                'body': err_body,
+                'elapsed_ms': elapsed,
+                'error': str(e),
+            }
+
+        except Exception as e:
+            last_error = e
+            if attempt < retries:
+                _time.sleep(backoff * (2 ** attempt))
+                continue
+            elapsed = int((_time.time() - t0) * 1000)
+            return {
+                'status_code': 0,
+                'headers': {},
+                'body': str(e),
+                'elapsed_ms': elapsed,
+                'error': str(e),
+            }
+
+    elapsed = int((_time.time() - t0) * 1000)
+    return {
+        'status_code': 0,
+        'headers': {},
+        'body': str(last_error),
+        'elapsed_ms': elapsed,
+        'error': str(last_error),
+    }
+
+
 def execute_script(script, route=None, extra_globals=None, source_type='route', source_name=None):
     if source_name is None:
         source_name = script.name
@@ -123,6 +241,8 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'DynamicModel': DynamicModel,
         'datetime': datetime,
         'timezone': timezone,
+        'get_credential': _make_get_credential(script.module_id),
+        'call_api': _call_api,
     }
 
     if extra_globals:
