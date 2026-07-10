@@ -30,6 +30,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Built-in HTTP Client** — `call_api()` in scripts handles retries, timeouts, JSON parsing, and consistent error returns — no extra dependencies needed.
 - **Integration Health Dashboard** — Error rate, average latency, and execution log viewer per module at `/__admin/integration-health`.
 - **Incoming Email (IMAP Polling)** — Platform-level IMAP poller stores emails in `incoming_emails` table; modules claim and process them via SQL.
+- **Package Management** — Install, list, and uninstall Python packages from `/__admin/packages`. Module XML can declare `<requirements>` for auto-install on import. No server restart needed.
 - **Module Cloning** — One-click duplicate of any module from the admin list to use as a starting point.
 - **Cron Validation** — Invalid cron expressions are caught on save, preventing silent task failures.
 - **Log Retention** — Auto-cleanup of old execution logs configurable from Settings.
