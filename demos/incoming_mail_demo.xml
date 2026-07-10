@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Incoming Mail Demo" slug="incoming-mail-demo" version="1.0.0" author="System">
+  <description>Demonstrates incoming email processing. Scans every 5 minutes for emails containing {Test0000}, sends a notification email, logs activity in a module table, and marks the email as processed.</description>
+
+  <scripts>
+    <script name="process-test-emails" language="python"><![CDATA[
+# Incoming Mail Demo — process-test-emails
+# Scans incoming_emails for unprocessed emails containing {Test0000}
+# Sends notification email, logs to module table, marks processed
+
+MODULE_SLUG = 'incoming-mail-demo'
+TABLE_NAME = 'IncomingMailDemoLog'
+
+# Create module log table if not exists
+table = DynamicModel.get_or_create(TABLE_NAME, {
+    'incoming_email_id': Integer,
+    'subject': String(500),
+    'from_address': String(500),
+    'action': String(100),
+    'processed_at': DateTime,
+})
+
+# Find unprocessed emails with {Test0000}
+result = db.session.execute(db.text("""
+    SELECT id, subject, from_address, body_text, body_html
+    FROM incoming_emails
+    WHERE processed = 0
+      AND (subject LIKE '%{Test0000}%' OR body_text LIKE '%{Test0000}%' OR body_html LIKE '%{Test0000}%')
+    ORDER BY created_at ASC
+"""))
+
+count = 0
+for row in result.fetchall():
+    email_id = row[0]
+    subject = row[1] or '(no subject)'
+    from_addr = row[2] or 'unknown'
+    body_text = row[3] or ''
+    body_html = row[4] or ''
+
+    # Send notification email
+    email_body = (
+        '<h2>Test Email Processed</h2>'
+        '<p><strong>From:</strong> ' + from_addr + '<br>'
+        '<strong>Subject:</strong> ' + subject + '<br>'
+        '<strong>Email ID:</strong> #' + str(email_id) + '</p>'
+        '<hr><pre>' + body_text[:2000] + '</pre>'
+    )
+
+    try:
+        send_email(
+            to='test@test.com',
+            subject='[Incoming Mail Demo] ' + subject[:80],
+            body=email_body,
+            html=True,
+        )
+    except Exception as e:
+        print('Email send failed: ' + str(e))
+
+    # Mark email as processed and claimed by this module
+    db.session.execute(db.text("""
+        UPDATE incoming_emails
+        SET processed = 1, module_slug = :slug, processed_at = datetime('now')
+        WHERE id = :eid
+    """), {'slug': MODULE_SLUG, 'eid': email_id})
+
+    # Log to module table
+    log_entry = table.insert().values(
+        incoming_email_id=email_id,
+        subject=subject,
+        from_address=from_addr,
+        action='processed_{Test0000}',
+        processed_at=datetime.now(timezone.utc),
+    )
+    db.session.execute(log_entry)
+    count += 1
+
+db.session.commit()
+print('Processed {} incoming test email(s)'.format(count))
+]]></script>
+  </scripts>
+
+  <scheduled_tasks>
+    <task name="Process Test Emails" script="process-test-emails" schedule="*/5 * * * *" />
+  </scheduled_tasks>
+</module>

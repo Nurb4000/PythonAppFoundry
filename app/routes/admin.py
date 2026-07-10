@@ -2038,6 +2038,7 @@ def edit_settings():
         Setting.set('imap_poll_interval', request.form.get('imap_poll_interval', '5'))
         Setting.set('imap_enabled', 'true' if 'imap_enabled' in request.form else 'false')
         Setting.set('imap_mark_seen', 'true' if 'imap_mark_seen' in request.form else 'false')
+        Setting.set('imap_retention_days', request.form.get('imap_retention_days', '0'))
         flash('Settings saved')
         return redirect(url_for('admin.edit_settings'))
     disabled = Setting.get('registration_disabled', 'false') == 'true'
@@ -2067,6 +2068,7 @@ def edit_settings():
     imap_poll_interval = Setting.get('imap_poll_interval', '5')
     imap_enabled = Setting.get('imap_enabled', 'false') == 'true'
     imap_mark_seen = Setting.get('imap_mark_seen', 'false') == 'true'
+    imap_retention_days = Setting.get('imap_retention_days', '0')
     return render_admin('Settings', '''
 <form method="POST">
 <h3 style="margin-top:0;">Registration</h3>
@@ -2169,6 +2171,11 @@ def edit_settings():
   <strong>Mark messages as seen after fetching</strong><br>
   <span style="color:#888;font-size:0.85em;">If unchecked, the system will fetch unseen messages but leave them unseen on the server.</span>
 </label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Email Retention (days)</strong><br>
+  <input name="imap_retention_days" type="number" min="0" step="1" value="{{ imap_retention_days }}" style="padding:6px 10px;width:120px;"><br>
+  <span style="color:#888;font-size:0.85em;">Auto-delete processed incoming emails older than this. 0 = keep forever.</span>
+</label>
 
 <h3>SMTP / Email</h3>
 <label style="display:block;margin-bottom:12px;">
@@ -2229,7 +2236,8 @@ def edit_settings():
         imap_host=imap_host, imap_port=imap_port, imap_user=imap_user,
         imap_password=imap_password, imap_use_ssl=imap_use_ssl,
         imap_folder=imap_folder, imap_poll_interval=imap_poll_interval,
-        imap_enabled=imap_enabled, imap_mark_seen=imap_mark_seen)
+        imap_enabled=imap_enabled, imap_mark_seen=imap_mark_seen,
+        imap_retention_days=imap_retention_days)
 
 
 @admin_bp.route('/settings/test-email', methods=['GET', 'POST'])
@@ -2657,6 +2665,17 @@ def dashboard():
         from datetime import datetime, timezone, timedelta
         cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
         deleted = db.session.query(ExecutionLog).filter(ExecutionLog.created_at < cutoff).delete()
+        if deleted:
+            db.session.commit()
+
+    # Clean up old incoming emails
+    imap_retention_days = int(Setting.get('imap_retention_days', '0'))
+    if imap_retention_days > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=imap_retention_days)
+        deleted = db.session.query(IncomingEmail).filter(
+            IncomingEmail.processed == True,
+            IncomingEmail.created_at < cutoff,
+        ).delete()
         if deleted:
             db.session.commit()
 
