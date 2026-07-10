@@ -1511,8 +1511,32 @@ def list_tables():
         for v in (vv if isinstance(vv, list) else [vv])
     ))
 
+    # Debug: check what's happening with incomingmaildemolog
+    _debug_info = ''
+    if request.args.get('debug'):
+        _dbg_scripts = db.session.query(Script).count()
+        _dbg_tables = set(sa_inspect(db.engine).get_table_names())
+        _dbg_has_table = 'incomingmaildemolog' in _dbg_tables
+        _dbg_fallback = _find_module_for_table('incomingmaildemolog')
+        _dbg_script_count = db.session.query(Script).filter(
+            Script.source_code.ilike('%incomingmaildemolog%')
+        ).count()
+        _module_names_in_db = ', '.join(m.name for m in db.session.query(Module).all())
+        _debug_info = f'''
+<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:1rem;margin-bottom:1rem;font-size:0.85em;">
+<strong>Debug Info:</strong><br>
+Scripts in DB: {_dbg_scripts}<br>
+Modules: {_module_names_in_db or '(none)'}<br>
+Table 'incomingmaildemolog' exists: {_dbg_has_table}<br>
+Fallback result: '{_dbg_fallback}'<br>
+Scripts mentioning 'incomingmaildemolog': {_dbg_script_count}<br>
+Registry entries: {DynamicTableRegistry.query.count()}
+</div>'''
+
     return render_admin('Database Tables', '''
+{{ debug_info }}
 <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+  <a href="?debug=1" style="color:#888;font-size:0.85em;margin-right:8px;">Debug</a>
   <form method="GET" style="display:inline;">
     <select name="module" onchange="this.form.submit()" style="padding:4px 8px;">
       <option value="">All Modules</option>
