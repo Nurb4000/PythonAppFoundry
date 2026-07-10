@@ -2044,25 +2044,43 @@ def admin_packages():
                     install_error = f'pip not found at "{pip_bin}"'
 
     # Get installed packages list
-    pip_output = ''
+    import json as _json
+    packages = []
     try:
-        r = subprocess.run([pip_bin, 'list', '--format=columns'], capture_output=True, text=True, timeout=30)
+        r = subprocess.run([pip_bin, 'list', '--format=json'], capture_output=True, text=True, timeout=30)
         if r.returncode == 0:
-            pip_output = r.stdout
+            packages = _json.loads(r.stdout)
         else:
-            pip_output = f'Error listing packages:\n{r.stderr}'
+            install_error = f'Error listing packages:\n{r.stderr}'
     except FileNotFoundError:
-        pip_output = f'pip not found at "{pip_bin}"'
+        install_error = f'pip not found at "{pip_bin}"'
 
     output_text = '\n'.join(output_lines)
     return render_admin('Python Packages', '''
+<script>
+function fillPkg(name) { document.getElementById('pkg-input').value = name; }
+function fillUninstall(name) { document.getElementById('uninstall-input').value = name; }
+</script>
 <h2>Python Packages</h2>
 
 <div style="display:flex;gap:24px;flex-wrap:wrap;">
 <div style="flex:1;min-width:300px;">
 <h3>Installed Packages</h3>
-<div style="max-height:500px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
-<pre style="margin:0;padding:8px;font-size:0.85em;white-space:pre;">{{ pip_output }}</pre>
+<div style="max-height:500px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;">
+<table style="width:100%;border-collapse:collapse;">
+<thead><tr style="background:#f4f4f4;"><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">Package</th><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">Version</th><th style="padding:6px 10px;text-align:left;border-bottom:1px solid #ddd;">Actions</th></tr></thead>
+<tbody>
+{% for pkg in packages %}
+<tr style="border-bottom:1px solid #eee;">
+  <td style="padding:6px 10px;font-size:0.85em;">{{ pkg.name }}</td>
+  <td style="padding:6px 10px;font-size:0.85em;color:#666;">{{ pkg.version }}</td>
+  <td style="padding:6px 10px;font-size:0.85em;">
+    <a href="#" onclick="fillPkg('{{ pkg.name }}');return false;" style="color:#2563eb;">Install</a>
+    <a href="#" onclick="fillUninstall('{{ pkg.name }}');return false;" style="color:#dc3545;margin-left:8px;">Uninstall</a>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
 </div>
 </div>
 
@@ -2071,17 +2089,17 @@ def admin_packages():
 <form method="POST" style="margin-bottom:24px;">
 <label style="display:block;margin-bottom:8px;">
   <strong>Package name</strong><br>
-  <input name="package" type="text" value="{{ selected }}" placeholder="requests requests==2.31.0" style="padding:6px 10px;width:100%;max-width:400px;"><br>
+  <input id="pkg-input" name="package" type="text" value="{{ selected }}" placeholder="requests requests==2.31.0" style="padding:6px 10px;width:100%;max-width:400px;"><br>
   <span style="color:#888;font-size:0.85em;">Name with optional <code>==version</code>. Multiple space-separated names are allowed.</span>
 </label>
 <button name="install" type="submit" style="padding:8px 20px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Install</button>
 </form>
 
 <h3>Uninstall Package</h3>
-<form method="POST" onsubmit="return confirm('Uninstall {{ selected }}?')">
+<form method="POST" onsubmit="return confirm('Uninstall ' + document.getElementById('uninstall-input').value + '?')">
 <label style="display:block;margin-bottom:8px;">
   <strong>Package name</strong><br>
-  <input name="package" type="text" value="{{ selected }}" placeholder="requests" style="padding:6px 10px;width:100%;max-width:400px;"><br>
+  <input id="uninstall-input" name="package" type="text" value="{{ selected }}" placeholder="requests" style="padding:6px 10px;width:100%;max-width:400px;"><br>
 </label>
 <button name="uninstall" type="submit" style="padding:8px 20px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;">Uninstall</button>
 </form>
@@ -2094,7 +2112,7 @@ def admin_packages():
 {% endif %}
 </div>
 </div>
-''', pip_output=pip_output, output_text=output_text, install_error=install_error, selected=selected)
+''', packages=packages, output_text=output_text, install_error=install_error, selected=selected)
 
 
 @admin_bp.route('/settings', methods=['GET', 'POST'])
