@@ -1517,6 +1517,7 @@ def list_tables():
         _dbg_scripts = db.session.query(Script).count()
         _dbg_tables = set(sa_inspect(db.engine).get_table_names())
         _dbg_has_table = 'incomingmaildemolog' in _dbg_tables
+        _dbg_in_metadata = 'incomingmaildemolog' in db.metadata.tables
         _dbg_fallback = _find_module_for_table('incomingmaildemolog')
         _dbg_script_count = db.session.query(Script).filter(
             Script.source_code.ilike('%incomingmaildemolog%')
@@ -1527,10 +1528,13 @@ def list_tables():
 <strong>Debug Info:</strong><br>
 Scripts in DB: {_dbg_scripts}<br>
 Modules: {_module_names_in_db or '(none)'}<br>
-Table 'incomingmaildemolog' exists: {_dbg_has_table}<br>
+Table 'incomingmaildemolog' in DB: {_dbg_has_table}<br>
+Table 'incomingmaildemolog' in metadata: {_dbg_in_metadata}<br>
 Fallback result: '{_dbg_fallback}'<br>
 Scripts mentioning 'incomingmaildemolog': {_dbg_script_count}<br>
-Registry entries: {DynamicTableRegistry.query.count()}
+Registry entries: {DynamicTableRegistry.query.count()}<br>
+DB tables: {', '.join(sorted(_dbg_tables))}<br>
+Metadata tables: {', '.join(sorted(db.metadata.tables.keys()))}
 </div>'''
 
     return render_admin('Database Tables', '''
