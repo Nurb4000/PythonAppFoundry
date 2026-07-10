@@ -1424,7 +1424,7 @@ def list_tables():
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports', 'incoming_emails', 'credentials'}
+                       'query_reports', 'incoming_emails', 'dynamic_table_registry', 'credentials'}
     for t in platform_tables:
         table_modules[t] = 'Platform'
 
@@ -1515,6 +1515,7 @@ def list_tables():
     _debug_info = ''
     if request.args.get('debug'):
         _dbg_scripts = db.session.query(Script).count()
+        _dbg_url = str(db.engine.url)
         _dbg_tables = set(sa_inspect(db.engine).get_table_names())
         _dbg_has_table = 'incomingmaildemolog' in _dbg_tables
         _dbg_in_metadata = 'incomingmaildemolog' in db.metadata.tables
