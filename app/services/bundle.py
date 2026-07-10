@@ -231,9 +231,36 @@ def import_module(xml_str, update_existing=False, module_id=None):
         from app.services.dependencies import detect_dependencies
         detect_dependencies(module.id)
     except Exception as e:
-        # Log but don't fail the import if dependency detection fails
         import logging
         logging.getLogger(__name__).warning(f'Failed to detect dependencies for module {module.id}: {e}')
+
+    # Install requirements from XML <requirements> element
+    req_elem = root.find('requirements')
+    if req_elem is not None and req_elem.text and req_elem.text.strip():
+        import subprocess, logging
+        pip = subprocess.run(['pip', '--version'], capture_output=True, text=True, timeout=15)
+        if pip.returncode == 0:
+            for line in req_elem.text.strip().splitlines():
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                try:
+                    r = subprocess.run(
+                        ['pip', 'install'] + line.split(),
+                        capture_output=True, text=True, timeout=120
+                    )
+                    if r.returncode != 0:
+                        logging.getLogger(__name__).warning(
+                            f'pip install failed for "{line}":\n{r.stderr[:500]}'
+                        )
+                except Exception as e:
+                    logging.getLogger(__name__).warning(
+                        f'pip install error for "{line}": {e}'
+                    )
+        else:
+            logging.getLogger(__name__).warning(
+                f'pip not available, skipping requirements install:\n{pip.stderr[:500]}'
+            )
 
     return module
 

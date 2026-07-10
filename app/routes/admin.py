@@ -3,7 +3,7 @@ from app.services.scheduler import refresh_tasks
 from flask_login import login_required, current_user
 from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy import Table, MetaData
-import csv, io
+import csv, io, subprocess
 from datetime import datetime as _datetime, timezone as _tz
 
 from app import db
@@ -2008,6 +2008,96 @@ def delete_table(table_name):
 
 
 # ── Settings ──
+
+@admin_bp.route('/packages', methods=['GET', 'POST'])
+@admin_required
+def admin_packages():
+    pip_bin = 'pip'
+    output_lines = []
+    install_error = ''
+    selected = request.form.get('selected', '')
+
+    if request.method == 'POST':
+        if 'install' in request.form:
+            pkg = request.form.get('package', '').strip()
+            if pkg:
+                cmd = [pip_bin, 'install'] + pkg.split()
+                try:
+                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                    output_lines = (r.stdout or '').splitlines() + (r.stderr or '').splitlines()
+                    if r.returncode != 0:
+                        install_error = f'Exit code {r.returncode}'
+                except subprocess.TimeoutExpired:
+                    install_error = 'Install timed out after 120s'
+                except FileNotFoundError:
+                    install_error = f'pip not found at "{pip_bin}"'
+        elif 'uninstall' in request.form:
+            pkg = request.form.get('package', '').strip()
+            if pkg:
+                cmd = [pip_bin, 'uninstall', '-y', pkg]
+                try:
+                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                    output_lines = (r.stdout or '').splitlines() + (r.stderr or '').splitlines()
+                    if r.returncode != 0:
+                        install_error = f'Exit code {r.returncode}'
+                except subprocess.TimeoutExpired:
+                    install_error = 'Uninstall timed out after 60s'
+                except FileNotFoundError:
+                    install_error = f'pip not found at "{pip_bin}"'
+
+    # Get installed packages list
+    pip_output = ''
+    try:
+        r = subprocess.run([pip_bin, 'list', '--format=columns'], capture_output=True, text=True, timeout=30)
+        if r.returncode == 0:
+            pip_output = r.stdout
+        else:
+            pip_output = f'Error listing packages:\n{r.stderr}'
+    except FileNotFoundError:
+        pip_output = f'pip not found at "{pip_bin}"'
+
+    output_text = '\n'.join(output_lines)
+    return render_admin('Python Packages', '''
+<h2>Python Packages</h2>
+
+<div style="display:flex;gap:24px;flex-wrap:wrap;">
+<div style="flex:1;min-width:300px;">
+<h3>Installed Packages</h3>
+<div style="max-height:500px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;">
+<pre style="margin:0;padding:8px;font-size:0.85em;white-space:pre;">{{ pip_output }}</pre>
+</div>
+</div>
+
+<div style="flex:1;min-width:300px;">
+<h3>Install Package</h3>
+<form method="POST" style="margin-bottom:24px;">
+<label style="display:block;margin-bottom:8px;">
+  <strong>Package name</strong><br>
+  <input name="package" type="text" value="{{ selected }}" placeholder="requests requests==2.31.0" style="padding:6px 10px;width:100%;max-width:400px;"><br>
+  <span style="color:#888;font-size:0.85em;">Name with optional <code>==version</code>. Multiple space-separated names are allowed.</span>
+</label>
+<button name="install" type="submit" style="padding:8px 20px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Install</button>
+</form>
+
+<h3>Uninstall Package</h3>
+<form method="POST" onsubmit="return confirm('Uninstall {{ selected }}?')">
+<label style="display:block;margin-bottom:8px;">
+  <strong>Package name</strong><br>
+  <input name="package" type="text" value="{{ selected }}" placeholder="requests" style="padding:6px 10px;width:100%;max-width:400px;"><br>
+</label>
+<button name="uninstall" type="submit" style="padding:8px 20px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;">Uninstall</button>
+</form>
+
+{% if output_text %}
+<h3>Command Output</h3>
+<div style="max-height:400px;overflow-y:auto;border:1px solid {% if install_error %}#fcc{% else %} #ddd{% endif %};border-radius:4px;background:#f4f4f4;padding:8px;">
+<pre style="margin:0;font-size:0.85em;white-space:pre-wrap;">{{ output_text }}</pre>
+</div>
+{% endif %}
+</div>
+</div>
+''', pip_output=pip_output, output_text=output_text, install_error=install_error, selected=selected)
+
 
 @admin_bp.route('/settings', methods=['GET', 'POST'])
 @admin_required

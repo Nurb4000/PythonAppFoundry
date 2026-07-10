@@ -25,6 +25,7 @@ The dark bar at the top of every page (when logged in as admin) links to all adm
 | Queries | `/__admin/queries` | Saved SQL queries with charting, scheduling, and email reports |
 | Credentials | `/__admin/credentials` | Encrypted API keys, tokens, and secrets (module-scoped) |
 | Incoming | `/__admin/incoming-emails` | Emails received via IMAP polling |
+| Packages | `/__admin/packages` | Manage Python packages (install, list, uninstall) |
 | Uploads | `/__admin/uploads` | Upload files for use in pages |
 | AI Designer | `/__admin/chat` | Chat interface to generate modules via AI |
 | BPMN Designer | `/__admin/bpmn` | Visual BPMN workflow designer with AI module conversion |
@@ -470,6 +471,28 @@ This is useful for:
 - Debugging API call failures in scripts
 - Spotting performance regressions (high latency or error rate)
 - Verifying a specific module's scripts are healthy
+
+## Python Packages
+
+The Packages page (`/__admin/packages`) lets you install, list, and uninstall Python packages at runtime. No server restart is needed — packages are available to script executions immediately after installation.
+
+- **Install**: Enter a package name (e.g., `requests`, `requests==2.31.0`, `pandas numpy` for multiple) and click Install. Output from `pip install` is shown.
+- **Uninstall**: Enter a package name and click Uninstall (confirms first).
+- **List**: Shows the full output of `pip list --format=columns`.
+
+### Declaring Requirements in Module XML
+
+Module XML bundles can include a `<requirements>` element to auto-install dependencies on import:
+
+```xml
+<requirements>
+requests==2.31.0
+pandas
+# comments are ignored
+</requirements>
+```
+
+When the module is imported (via AI Designer, BPMN, or XML import), each requirement is installed via `pip install` automatically. Failed installs are logged but do not block module import.
 
 ## SMTP / Email Configuration
 

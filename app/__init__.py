@@ -104,6 +104,7 @@ def create_app(config_class=None):
                 <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
                 <a href="/__admin/credentials" style="color:#eee;text-decoration:none">Credentials</a>
                 <a href="/__admin/incoming-emails" style="color:#eee;text-decoration:none">Incoming</a>
+                <a href="/__admin/packages" style="color:#eee;text-decoration:none">Packages</a>
                 <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
                 <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
                 <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
@@ -125,6 +126,7 @@ def create_app(config_class=None):
                 <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
                 <a href="/__admin/credentials" style="color:#eee;text-decoration:none">Credentials</a>
                 <a href="/__admin/incoming-emails" style="color:#eee;text-decoration:none">Incoming</a>
+                <a href="/__admin/packages" style="color:#eee;text-decoration:none">Packages</a>
                 <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
                 <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
                 <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
