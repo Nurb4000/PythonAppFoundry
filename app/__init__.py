@@ -206,6 +206,27 @@ def create_app(config_class=None):
         if dupes:
             db.session.commit()
 
+        # Backfill DynamicTableRegistry for tables created before the registry existed
+        try:
+            from sqlalchemy import inspect as _sa_inspect
+            from app.models import DynamicTableRegistry as _DTR, Script as _Script
+            _inspector = _sa_inspect(db.engine)
+            _existing_tables = set(_inspector.get_table_names())
+            _registry_names = {r.table_name for r in _DTR.query.all()}
+            import re as _re
+            for _s in _Script.query.all():
+                if not _s.module_id:
+                    continue
+                for _m in _re.finditer(r'DynamicModel\.get_or_create\s*\(\s*["\'](\w+)["\']', _s.source_code):
+                    _tname = _m.group(1).lower()
+                    if _tname in _existing_tables and _tname not in _registry_names:
+                        db.session.add(_DTR(table_name=_tname, module_id=_s.module_id))
+                        _registry_names.add(_tname)
+            if db.session.new:
+                db.session.commit()
+        except Exception:
+            pass
+
         # Auto-create System Automation module if missing
         from app.models import Module
         sys_mod = db.session.query(Module).filter_by(slug='system-automation').first()
