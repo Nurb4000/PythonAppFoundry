@@ -211,6 +211,14 @@ def init_scheduler(app):
                 replace_existing=True,
                 name='Query Report Check',
             )
+            _scheduler.add_job(
+                func=_check_incoming_mail_wrapper,
+                trigger='interval',
+                minutes=1,
+                id='_incoming_mail_check',
+                replace_existing=True,
+                name='Incoming Mail Check',
+            )
 
         print(f'[SCHEDULER] Started PID={os.getpid()} WERKZEUG_RUN_MAIN={os.environ.get("WERKZEUG_RUN_MAIN")} APP_DEBUG={os.environ.get("APP_DEBUG")} tasks={len(tasks)} jobs={len(_scheduler.get_jobs())}')
     except ImportError:
@@ -225,6 +233,31 @@ def _check_query_reports_wrapper():
         return
     with app.app_context():
         _check_query_reports()
+
+
+def _check_incoming_mail():
+    from app.services.incoming_mail import poll_incoming_mail
+    try:
+        poll_interval = int(Setting.get('imap_poll_interval', '5'))
+    except (ValueError, TypeError):
+        poll_interval = 5
+    now = datetime.now(timezone.utc)
+    last = _last_run_guard.get('_imap')
+    if last and (now - last).total_seconds() < poll_interval * 60:
+        return
+    _last_run_guard['_imap'] = now
+    try:
+        poll_incoming_mail()
+    except Exception:
+        pass
+
+
+def _check_incoming_mail_wrapper():
+    app = _app
+    if app is None:
+        return
+    with app.app_context():
+        _check_incoming_mail()
 
 
 def refresh_tasks():

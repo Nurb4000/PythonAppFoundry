@@ -357,3 +357,23 @@ class ExecutionLog(db.Model):
 
     def __repr__(self):
         return f'<ExecutionLog {self.source_type}:{self.source_name} {self.status}>'
+
+
+class IncomingEmail(db.Model):
+    __tablename__ = 'incoming_emails'
+
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.String(500), default='')
+    subject = db.Column(db.String(500), default='')
+    from_address = db.Column(db.String(500), nullable=False)
+    to_address = db.Column(db.String(500), default='')
+    body_text = db.Column(db.Text, default='')
+    body_html = db.Column(db.Text, default='')
+    attachments = db.Column(db.Text, default='')
+    module_slug = db.Column(db.String(200), default='')
+    processed = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    processed_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f'<IncomingEmail {self.subject!r} from {self.from_address}>'

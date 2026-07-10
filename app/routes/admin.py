@@ -7,7 +7,7 @@ import csv, io
 from datetime import datetime as _datetime, timezone as _tz
 
 from app import db
-from app.models import User, Module, Route, Script, Form, ScheduledTask, Trigger, ChatSession, ChatMessage, Upload, Setting, Group, ExecutionLog, ModuleVersion, QueryReport
+from app.models import User, Module, Route, Script, Form, ScheduledTask, Trigger, ChatSession, ChatMessage, Upload, Setting, Group, ExecutionLog, ModuleVersion, QueryReport, IncomingEmail
 from app.services.script_runner import execute_script
 
 admin_bp = Blueprint('admin', __name__)
@@ -1413,7 +1413,7 @@ def list_tables():
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports'}
+                       'query_reports', 'incoming_emails'}
     for t in platform_tables:
         table_modules[t] = 'Platform'
 
@@ -1991,7 +1991,7 @@ def delete_table(table_name):
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports'}
+                       'query_reports', 'incoming_emails'}
     if table_name in platform_tables:
         flash(f'Cannot drop platform table "{table_name}"', 'error')
         return redirect(url_for('admin.list_tables'))
@@ -2029,6 +2029,15 @@ def edit_settings():
         Setting.set('smtp_from', request.form.get('smtp_from', 'noreply@example.com'))
         Setting.set('smtp_tls', 'true' if 'smtp_tls' in request.form else 'false')
         Setting.set('log_retention_days', request.form.get('log_retention_days', '0'))
+        Setting.set('imap_host', request.form.get('imap_host', ''))
+        Setting.set('imap_port', request.form.get('imap_port', '993'))
+        Setting.set('imap_user', request.form.get('imap_user', ''))
+        Setting.set('imap_password', request.form.get('imap_password', ''))
+        Setting.set('imap_use_ssl', 'true' if 'imap_use_ssl' in request.form else 'false')
+        Setting.set('imap_folder', request.form.get('imap_folder', 'INBOX'))
+        Setting.set('imap_poll_interval', request.form.get('imap_poll_interval', '5'))
+        Setting.set('imap_enabled', 'true' if 'imap_enabled' in request.form else 'false')
+        Setting.set('imap_mark_seen', 'true' if 'imap_mark_seen' in request.form else 'false')
         flash('Settings saved')
         return redirect(url_for('admin.edit_settings'))
     disabled = Setting.get('registration_disabled', 'false') == 'true'
@@ -2049,6 +2058,15 @@ def edit_settings():
     smtp_from = Setting.get('smtp_from', 'noreply@example.com')
     smtp_tls = Setting.get('smtp_tls', 'true') == 'true'
     log_retention_days = Setting.get('log_retention_days', '0')
+    imap_host = Setting.get('imap_host', '')
+    imap_port = Setting.get('imap_port', '993')
+    imap_user = Setting.get('imap_user', '')
+    imap_password = Setting.get('imap_password', '')
+    imap_use_ssl = Setting.get('imap_use_ssl', 'true') == 'true'
+    imap_folder = Setting.get('imap_folder', 'INBOX')
+    imap_poll_interval = Setting.get('imap_poll_interval', '5')
+    imap_enabled = Setting.get('imap_enabled', 'false') == 'true'
+    imap_mark_seen = Setting.get('imap_mark_seen', 'false') == 'true'
     return render_admin('Settings', '''
 <form method="POST">
 <h3 style="margin-top:0;">Registration</h3>
@@ -2112,6 +2130,46 @@ def edit_settings():
   <span style="color:#888;font-size:0.85em;">Auto-delete execution logs older than this. 0 = keep forever.</span>
 </label>
 
+<h3>Incoming Mail (IMAP)</h3>
+<label style="display:block;margin-bottom:12px;">
+  <input name="imap_enabled" type="checkbox" {% if imap_enabled %}checked{% endif %}>
+  <strong>Enable IMAP polling</strong><br>
+  <span style="color:#888;font-size:0.85em;">When enabled, the scheduler will check for new emails on the configured IMAP mailbox.</span>
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>IMAP Host</strong><br>
+  <input name="imap_host" type="text" value="{{ imap_host }}" placeholder="imap.example.com" style="padding:6px 10px;width:100%;max-width:400px;">
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Port</strong><br>
+  <input name="imap_port" type="number" value="{{ imap_port }}" style="padding:6px 10px;width:120px;">
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Username</strong><br>
+  <input name="imap_user" type="text" value="{{ imap_user }}" style="padding:6px 10px;width:100%;max-width:400px;">
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Password</strong><br>
+  <input name="imap_password" type="password" value="{{ imap_password }}" style="padding:6px 10px;width:100%;max-width:400px;">
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <input name="imap_use_ssl" type="checkbox" {% if imap_use_ssl %}checked{% endif %}>
+  <strong>Use SSL</strong>
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Folder</strong><br>
+  <input name="imap_folder" type="text" value="{{ imap_folder }}" style="padding:6px 10px;width:200px;">
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Poll Interval (minutes)</strong><br>
+  <input name="imap_poll_interval" type="number" min="1" value="{{ imap_poll_interval }}" style="padding:6px 10px;width:120px;">
+</label>
+<label style="display:block;margin-bottom:12px;">
+  <input name="imap_mark_seen" type="checkbox" {% if imap_mark_seen %}checked{% endif %}>
+  <strong>Mark messages as seen after fetching</strong><br>
+  <span style="color:#888;font-size:0.85em;">If unchecked, the system will fetch unseen messages but leave them unseen on the server.</span>
+</label>
+
 <h3>SMTP / Email</h3>
 <label style="display:block;margin-bottom:12px;">
   <strong>SMTP Host</strong><br>
@@ -2167,7 +2225,11 @@ def edit_settings():
         smtp_host=smtp_host, smtp_port=smtp_port,
         smtp_user=smtp_user, smtp_password=smtp_password,
         smtp_from=smtp_from, smtp_tls=smtp_tls,
-        log_retention_days=log_retention_days)
+        log_retention_days=log_retention_days,
+        imap_host=imap_host, imap_port=imap_port, imap_user=imap_user,
+        imap_password=imap_password, imap_use_ssl=imap_use_ssl,
+        imap_folder=imap_folder, imap_poll_interval=imap_poll_interval,
+        imap_enabled=imap_enabled, imap_mark_seen=imap_mark_seen)
 
 
 @admin_bp.route('/settings/test-email', methods=['GET', 'POST'])
@@ -2613,7 +2675,7 @@ def dashboard():
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports'}
+                       'query_reports', 'incoming_emails'}
     table_stats = []
     inspector = _sa_inspect(db.engine)
     for db_name in sorted(inspector.get_table_names()):
@@ -2657,6 +2719,145 @@ def dashboard():
         module_summary=module_summary,
     )
     return render_template_string(ADMIN_TEMPLATE, title='Dashboard', content=content)
+
+
+@admin_bp.route('/incoming-emails')
+@admin_required
+def list_incoming_emails():
+    sort_col = request.args.get('sort', 'created_at')
+    sort_order = request.args.get('order', 'desc')
+    search = request.args.get('search', '')
+    q = db.session.query(IncomingEmail)
+    if search:
+        q = q.filter(
+            db.or_(
+                IncomingEmail.subject.ilike(f'%{search}%'),
+                IncomingEmail.from_address.ilike(f'%{search}%'),
+            )
+        )
+    sort_attr = getattr(IncomingEmail, sort_col, None)
+    if sort_attr is not None:
+        q = q.order_by(sort_attr.desc() if sort_order == 'desc' else sort_attr.asc())
+    else:
+        q = q.order_by(IncomingEmail.created_at.desc())
+    emails = q.all()
+
+    if request.args.get('format') == 'csv':
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(['id', 'message_id', 'subject', 'from_address', 'to_address', 'processed', 'created_at'])
+        for e in emails:
+            w.writerow([e.id, e.message_id, e.subject, e.from_address, e.to_address, e.processed, e.created_at])
+        return Response(buf.getvalue(), mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=incoming_emails.csv'})
+
+    return render_admin('Incoming Emails', '''
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+  <form method="GET" style="display:flex;gap:8px;align-items:center;flex:1;">
+    <input name="search" type="text" placeholder="Search subject or sender..." value="{{ search }}" style="padding:6px 12px;border:1px solid #ddd;border-radius:4px;flex:1;max-width:300px;">
+    <button type="submit" style="padding:6px 12px;">Search</button>
+    {% if search %}<a href="{{ url_for('admin.list_incoming_emails') }}" style="color:#007bff;text-decoration:none;">Clear</a>{% endif %}
+  </form>
+  <a href="?format=csv{% if search %}&search={{ search }}{% endif %}" style="margin-left:auto;">Export CSV</a>
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th><a href="?sort=id&order={% if sort_col == 'id' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">ID{% if sort_col == 'id' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Subject</th>
+  <th><a href="?sort=from_address&order={% if sort_col == 'from_address' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">From{% if sort_col == 'from_address' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>To</th>
+  <th><a href="?sort=processed&order={% if sort_col == 'processed' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Status{% if sort_col == 'processed' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=module_slug&order={% if sort_col == 'module_slug' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Module{% if sort_col == 'module_slug' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=created_at&order={% if sort_col == 'created_at' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Received{% if sort_col == 'created_at' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for e in emails %}
+<tr>
+  <td>{{ e.id }}</td>
+  <td><strong>{{ e.subject[:80] if e.subject else '(no subject)' }}</strong></td>
+  <td>{{ e.from_address[:60] }}</td>
+  <td>{{ e.to_address[:60] if e.to_address else '—' }}</td>
+  <td>{% if e.processed %}<span style="color:#080;">Processed</span>{% else %}<span style="color:#856404;">Pending</span>{% endif %}</td>
+  <td>{{ e.module_slug or '—' }}</td>
+  <td style="white-space:nowrap;">{{ e.created_at|localtime }}</td>
+  <td>
+    <a href="{{ url_for('admin.view_incoming_email', id=e.id) }}">View</a>
+    {% if not e.processed %}
+    <form method="POST" action="{{ url_for('admin.mark_incoming_processed', id=e.id) }}" style="display:inline">
+      <button type="submit" style="background:none;border:none;color:#080;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Mark Done</button>
+    </form>
+    {% endif %}
+    <form method="POST" action="{{ url_for('admin.delete_incoming_email', id=e.id) }}" style="display:inline" onsubmit="return confirm('Delete email #{{ e.id }}?')">
+      <button type="submit" style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Delete</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% if not emails %}
+<p style="color:#888;">No incoming emails yet. Configure IMAP settings and enable polling to start receiving emails.</p>
+{% endif %}''', emails=emails, sort_col=sort_col, sort_order=sort_order, search=search)
+
+
+@admin_bp.route('/incoming-emails/<int:id>')
+@admin_required
+def view_incoming_email(id):
+    e = IncomingEmail.query.get_or_404(id)
+    return render_admin(f'Email: {e.subject or "(no subject)"}', '''
+<h2>{{ e.subject or '(no subject)' }}</h2>
+<table>
+<tr><th>ID</th><td>{{ e.id }}</td></tr>
+<tr><th>From</th><td>{{ e.from_address }}</td></tr>
+<tr><th>To</th><td>{{ e.to_address }}</td></tr>
+<tr><th>Message-ID</th><td><code>{{ e.message_id }}</code></td></tr>
+<tr><th>Received</th><td>{{ e.created_at|localtime }}</td></tr>
+<tr><th>Status</th><td>{% if e.processed %}Processed{% else %}Pending{% endif %}</td></tr>
+{% if e.module_slug %}<tr><th>Claimed By</th><td>{{ e.module_slug }}</td></tr>{% endif %}
+{% if e.attachments %}<tr><th>Attachments</th><td>{{ e.attachments }}</td></tr>{% endif %}
+</table>
+{% if e.body_html %}
+<h3>HTML Body</h3>
+<div style="border:1px solid #ddd;border-radius:4px;padding:1rem;margin-bottom:1rem;max-height:500px;overflow-y:auto;background:#fff;">
+  {{ e.body_html|safe }}
+</div>
+{% endif %}
+{% if e.body_text %}
+<h3>Plain Text Body</h3>
+<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow:auto;white-space:pre-wrap;word-wrap:break-word;">{{ e.body_text }}</pre>
+{% endif %}
+<div style="margin-top:1rem;">
+  <a href="{{ url_for('admin.list_incoming_emails') }}">&larr; Back</a>
+  {% if not e.processed %}
+  <form method="POST" action="{{ url_for('admin.mark_incoming_processed', id=e.id) }}" style="display:inline;margin-left:0.5rem;">
+    <button type="submit" style="background:#080;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;">Mark as Processed</button>
+  </form>
+  {% endif %}
+</div>''', e=e)
+
+
+@admin_bp.route('/incoming-emails/<int:id>/processed', methods=['POST'])
+@admin_required
+def mark_incoming_processed(id):
+    e = IncomingEmail.query.get_or_404(id)
+    from datetime import datetime, timezone
+    e.processed = True
+    e.processed_at = datetime.now(timezone.utc)
+    db.session.commit()
+    flash(f'Email #{id} marked as processed')
+    return redirect(url_for('admin.view_incoming_email', id=id))
+
+
+@admin_bp.route('/incoming-emails/<int:id>/delete', methods=['POST'])
+@admin_required
+def delete_incoming_email(id):
+    e = IncomingEmail.query.get_or_404(id)
+    db.session.delete(e)
+    db.session.commit()
+    flash(f'Email #{id} deleted')
+    return redirect(url_for('admin.list_incoming_emails'))
 
 
 def _get_scheduler_info():
