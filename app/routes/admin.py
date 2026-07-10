@@ -1579,7 +1579,7 @@ Registry entries: {DynamicTableRegistry.query.count()}
 {% endfor %}
 </tbody></table>
 </div>''', tables=tables, module_names=module_names, filter_module=filter_module,
-       sort_col=sort_col, sort_order=sort_order)
+       sort_col=sort_col, sort_order=sort_order, debug_info=_debug_info)
 
 @admin_bp.route('/data/<table_name>/')
 @admin_required
