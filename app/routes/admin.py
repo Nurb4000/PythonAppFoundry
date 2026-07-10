@@ -2058,7 +2058,6 @@ def admin_packages():
     output_text = '\n'.join(output_lines)
     return render_admin('Python Packages', '''
 <script>
-function fillPkg(name) { document.getElementById('pkg-input').value = name; }
 function fillUninstall(name) { document.getElementById('uninstall-input').value = name; }
 </script>
 <h2>Python Packages</h2>
@@ -2075,8 +2074,7 @@ function fillUninstall(name) { document.getElementById('uninstall-input').value 
   <td style="padding:6px 10px;font-size:0.85em;">{{ pkg.name }}</td>
   <td style="padding:6px 10px;font-size:0.85em;color:#666;">{{ pkg.version }}</td>
   <td style="padding:6px 10px;font-size:0.85em;">
-    <a href="#" onclick="fillPkg('{{ pkg.name }}');return false;" style="color:#2563eb;">Install</a>
-    <a href="#" onclick="fillUninstall('{{ pkg.name }}');return false;" style="color:#dc3545;margin-left:8px;">Uninstall</a>
+    <a href="#" onclick="fillUninstall('{{ pkg.name }}');return false;" style="color:#dc3545;">Uninstall</a>
   </td>
 </tr>
 {% endfor %}
@@ -2089,7 +2087,7 @@ function fillUninstall(name) { document.getElementById('uninstall-input').value 
 <form method="POST" style="margin-bottom:24px;">
 <label style="display:block;margin-bottom:8px;">
   <strong>Package name</strong><br>
-  <input id="pkg-input" name="package" type="text" value="{{ selected }}" placeholder="requests requests==2.31.0" style="padding:6px 10px;width:100%;max-width:400px;"><br>
+  <input name="package" type="text" value="{{ selected }}" placeholder="requests requests==2.31.0" style="padding:6px 10px;width:100%;max-width:400px;"><br>
   <span style="color:#888;font-size:0.85em;">Name with optional <code>==version</code>. Multiple space-separated names are allowed.</span>
 </label>
 <button name="install" type="submit" style="padding:8px 20px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Install</button>
