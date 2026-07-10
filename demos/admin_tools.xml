@@ -1,65 +1,60 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<module name="Admin Tools" slug="admin-tools" version="1.0.0" author="System">
-  <description>Demo administrative tools: user reports, error email reports, and scheduled monitoring. Import this module to explore query reports, scheduled tasks, and scripting features.</description>
-
-  <routes>
-    <route slug="/__admin-tools/user-report" method="GET" script="user_report_page" auth_required="true" title="User Report"/>
-    <route slug="/__admin-tools/error-report" method="GET" script="error_report_page" auth_required="true" title="Error Report"/>
-  </routes>
-
-  <scripts>
-    <script name="user_report_page" language="python"><![CDATA[
+<?xml version='1.0' encoding='utf-8'?>
+<module name="Admin Tools" slug="admin-tools" version="1.0.1" author="System"><description>Demo administrative tools: user reports, error email reports, and scheduled monitoring. Import this module to explore query reports, scheduled tasks, and scripting features.</description><routes><route slug="/__admin-tools/user-report" method="GET" title="User Report" auth_required="true" script="user_report_page" /><route slug="/__admin-tools/error-report" method="GET" title="Error Report" auth_required="true" script="error_report_page" /></routes><scripts><script name="user_report_page" language="python">
 from app.models import User
 import time as _t
+
 t0 = _t.time()
 users = session.query(User).order_by(User.username).all()
 rows = []
 for u in users:
     status = "active" if u.is_active else "disabled"
     approved = "approved" if u.is_approved else "pending"
-    rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (u.id, u.username, u.role, status, approved))
+    rows.append("&lt;tr&gt;&lt;td&gt;%s&lt;/td&gt;&lt;td&gt;%s&lt;/td&gt;&lt;td&gt;%s&lt;/td&gt;&lt;td&gt;%s&lt;/td&gt;&lt;td&gt;%s&lt;/td&gt;&lt;/tr&gt;" % (u.id, u.username, u.role, status, approved))
 rows_html = "\n".join(rows)
 elapsed = int((_t.time() - t0) * 1000)
-template = """<h2>User Accounts</h2>
-<p style="color:#888;">{{ users|length }} user(s) &mdash; generated in %dms</p>
-<div class="table-wrap"><table>
-<thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Status</th><th>Approval</th></tr></thead>
-<tbody>%s</tbody>
-</table></div>
-<p><a href="/__admin-tools/error-report">View Error Report</a></p>""" % (elapsed, rows_html)
-_result = render(template, users=users)
-]]></script>
 
-    <script name="error_report_page" language="python"><![CDATA[
+template = """&lt;h2&gt;User Accounts&lt;/h2&gt;
+&lt;p style="color:#888;"&gt;{{ users|length }} user(s) &amp;mdash; generated in {{ elapsed }}ms&lt;/p&gt;
+&lt;div class="table-wrap"&gt;&lt;table&gt;
+&lt;thead&gt;&lt;tr&gt;&lt;th&gt;ID&lt;/th&gt;&lt;th&gt;Username&lt;/th&gt;&lt;th&gt;Role&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;th&gt;Approval&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+&lt;tbody&gt;{{ rows_html|safe }}&lt;/tbody&gt;
+&lt;/table&gt;&lt;/div&gt;
+&lt;p&gt;&lt;a href="/__admin-tools/error-report"&gt;View Error Report&lt;/a&gt;&lt;/p&gt;"""
+
+_result = render(template, users=users, elapsed=elapsed, rows_html=rows_html)
+</script><script name="error_report_page" language="python">
 from app.models import ExecutionLog
 from datetime import datetime, timezone, timedelta
 import time as _t
+
 t0 = _t.time()
 cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 errors = session.query(ExecutionLog).filter(
     ExecutionLog.status == 'error',
-    ExecutionLog.created_at >= cutoff
+    ExecutionLog.created_at &gt;= cutoff
 ).order_by(ExecutionLog.created_at.desc()).limit(50).all()
+
 rows = []
 for e in errors:
-    rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td style='color:#c00;'>%sms</td></tr>" % (e.created_at, e.source_type, e.source_name, e.duration_ms))
+    dur = int(e.duration_ms) if e.duration_ms is not None else 0
+    rows.append("&lt;tr&gt;&lt;td&gt;%s&lt;/td&gt;&lt;td&gt;%s&lt;/td&gt;&lt;td&gt;%s&lt;/td&gt;&lt;td style='color:#c00;'&gt;%sms&lt;/td&gt;&lt;/tr&gt;" % (e.created_at, e.source_type, e.source_name, dur))
 rows_html = "\n".join(rows)
 elapsed = int((_t.time() - t0) * 1000)
-template = """<h2>Recent Errors (Last 7 Days)</h2>
-<p style="color:#888;">{{ errors|length }} error(s) found &mdash; generated in %dms</p>
-{% if errors %}
-<div class="table-wrap"><table>
-<thead><tr><th>Time</th><th>Source</th><th>Name</th><th>Duration</th></tr></thead>
-<tbody>%s</tbody>
-</table></div>
-{% else %}
-<p style="color:#888;">No errors in the last 7 days.</p>
-{% endif %}
-<p><a href="/__admin-tools/user-report">View User Report</a></p>""" % (elapsed, rows_html)
-_result = render(template, errors=errors)
-]]></script>
 
-    <script name="email_error_report" language="python"><![CDATA[
+template = """&lt;h2&gt;Recent Errors (Last 7 Days)&lt;/h2&gt;
+&lt;p style="color:#888;"&gt;{{ errors|length }} error(s) found &amp;mdash; generated in {{ elapsed }}ms&lt;/p&gt;
+{% if errors %}
+&lt;div class="table-wrap"&gt;&lt;table&gt;
+&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Time&lt;/th&gt;&lt;th&gt;Source&lt;/th&gt;&lt;th&gt;Name&lt;/th&gt;&lt;th&gt;Duration&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+&lt;tbody&gt;{{ rows_html|safe }}&lt;/tbody&gt;
+&lt;/table&gt;&lt;/div&gt;
+{% else %}
+&lt;p style="color:#888;"&gt;No errors in the last 7 days.&lt;/p&gt;
+{% endif %}
+&lt;p&gt;&lt;a href="/__admin-tools/user-report"&gt;View User Report&lt;/a&gt;&lt;/p&gt;"""
+
+_result = render(template, errors=errors, elapsed=elapsed, rows_html=rows_html)
+</script><script name="email_error_report" language="python">
 """Scheduled task: emails a summary of recent errors to the configured recipient.
 Uses send_email() which reads SMTP settings from Admin → Settings."""
 from app.models import ExecutionLog
@@ -67,7 +62,7 @@ from datetime import datetime, timezone, timedelta
 
 recent = session.query(ExecutionLog).filter(
     ExecutionLog.status == 'error',
-    ExecutionLog.created_at >= datetime.now(timezone.utc) - timedelta(days=1)
+    ExecutionLog.created_at &gt;= datetime.now(timezone.utc) - timedelta(days=1)
 ).order_by(ExecutionLog.created_at.desc()).all()
 
 if not recent:
@@ -83,32 +78,4 @@ else:
     body = "\n".join(lines)
     send_email(to='admin@example.com', subject='Daily Error Report', body=body)
     _result = f"Sent error report ({len(recent)} errors) to admin@example.com"
-]]></script>
-  </scripts>
-
-  <query_reports>
-    <query_report name="User Accounts Overview" chart_type="pie" label_column="role" data_columns="count" chart_title="Users by Role">
-      <description>Count of user accounts grouped by role (admin, developer, user).</description>
-      <sql>SELECT role, COUNT(*) as count FROM users GROUP BY role ORDER BY count DESC</sql>
-    </query_report>
-
-    <query_report name="Active vs Inactive Users" chart_type="pie" label_column="status" data_columns="count" chart_title="User Status Distribution">
-      <description>Breakdown of active vs disabled user accounts.</description>
-      <sql>SELECT CASE WHEN is_active=1 THEN 'active' ELSE 'disabled' END as status, COUNT(*) as count FROM users GROUP BY status ORDER BY count DESC</sql>
-    </query_report>
-
-    <query_report name="Recent Execution Errors" chart_type="bar" label_column="source_name" data_columns="error_count" chart_title="Top Error Sources">
-      <description>Most frequently failing scripts and tasks in the last 7 days.</description>
-      <sql>SELECT source_name, COUNT(*) as error_count FROM execution_logs WHERE status='error' AND created_at >= datetime('now', '-7 days') GROUP BY source_name ORDER BY error_count DESC LIMIT 10</sql>
-    </query_report>
-
-    <query_report name="Execution Log Summary" chart_type="bar" label_column="source_type" data_columns="total_runs,errors" chart_title="Execution Runs vs Errors by Source Type">
-      <description>Total executions and error counts grouped by source type (script, task, trigger).</description>
-      <sql>SELECT source_type, COUNT(*) as total_runs, SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) as errors FROM execution_logs WHERE created_at >= datetime('now', '-7 days') GROUP BY source_type ORDER BY total_runs DESC</sql>
-    </query_report>
-  </query_reports>
-
-  <scheduled_tasks>
-    <task name="Daily Error Email" script="email_error_report" schedule="0 8 * * *"/>
-  </scheduled_tasks>
-</module>
+</script></scripts><forms /><scheduled_tasks><task name="Daily Error Email" script="email_error_report" schedule="0 8 * * *" /></scheduled_tasks><triggers /><query_reports><query_report name="User Accounts Overview" chart_type="pie" label_column="role" data_columns="count" chart_title="Users by Role" schedule_cron="" email_to="" email_subject=""><description>Count of user accounts grouped by role (admin, developer, user).</description><sql>SELECT role, COUNT(*) as count FROM users GROUP BY role ORDER BY count DESC</sql></query_report><query_report name="Active vs Inactive Users" chart_type="pie" label_column="status" data_columns="count" chart_title="User Status Distribution" schedule_cron="" email_to="" email_subject=""><description>Breakdown of active vs disabled user accounts.</description><sql>SELECT CASE WHEN is_active=1 THEN 'active' ELSE 'disabled' END as status, COUNT(*) as count FROM users GROUP BY status ORDER BY count DESC</sql></query_report><query_report name="Recent Execution Errors" chart_type="bar" label_column="source_name" data_columns="error_count" chart_title="Top Error Sources" schedule_cron="" email_to="" email_subject=""><description>Most frequently failing scripts and tasks in the last 7 days.</description><sql>SELECT source_name, COUNT(*) as error_count FROM execution_logs WHERE status='error' AND created_at &gt;= datetime('now', '-7 days') GROUP BY source_name ORDER BY error_count DESC LIMIT 10</sql></query_report><query_report name="Execution Log Summary" chart_type="bar" label_column="source_type" data_columns="total_runs,errors" chart_title="Execution Runs vs Errors by Source Type" schedule_cron="" email_to="" email_subject=""><description>Total executions and error counts grouped by source type (script, task, trigger).</description><sql>SELECT source_type, COUNT(*) as total_runs, SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) as errors FROM execution_logs WHERE created_at &gt;= datetime('now', '-7 days') GROUP BY source_type ORDER BY total_runs DESC</sql></query_report></query_reports></module>
