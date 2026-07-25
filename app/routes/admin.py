@@ -340,9 +340,13 @@ def new_module():
             except Exception as e:
                 flash(f'Import failed: {e}', 'error')
                 return redirect(url_for('admin.list_modules'))
+        slug = request.form['slug'].strip()
+        if not slugify(slug) == slug:
+            flash(f'Slug "{slug}" contains invalid characters. Use only letters, numbers, hyphens, and underscores.', 'error')
+            return redirect(url_for('admin.new_module'))
         m = Module(
             name=request.form['name'],
-            slug=request.form['slug'],
+            slug=slug,
             description=request.form.get('description', ''),
             version=request.form.get('version', '1.0.0'),
             author=request.form.get('author', ''),
