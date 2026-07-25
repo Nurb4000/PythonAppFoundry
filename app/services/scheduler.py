@@ -11,30 +11,6 @@ _app = None
 _last_run_guard = {}
 
 
-def init_scheduler(app):
-    global _scheduler, _app
-    if _scheduler is not None:
-        print(f'[SCHEDULER] init_scheduler called but already running PID={os.getpid()}')
-        return
-    _app = app
-    try:
-        from apscheduler.schedulers.background import BackgroundScheduler
-        _scheduler = BackgroundScheduler()
-        _scheduler.start()
-
-        with app.app_context():
-            tasks = db.session.query(ScheduledTask).filter_by(enabled=True).all()
-            for task in tasks:
-                register_task(task)
-            db.session.commit()
-
-        print(f'[SCHEDULER] Started PID={os.getpid()} WERKZEUG_RUN_MAIN={os.environ.get("WERKZEUG_RUN_MAIN")} APP_DEBUG={os.environ.get("APP_DEBUG")} tasks={len(tasks)} jobs={len(_scheduler.get_jobs())}')
-    except ImportError:
-        print('[SCHEDULER] APScheduler not installed — scheduler disabled')
-    except Exception as e:
-        print(f'[SCHEDULER] Init failed: {e}')
-
-
 def register_task(task):
     if _scheduler is None:
         return
