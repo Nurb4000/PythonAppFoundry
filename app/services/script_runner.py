@@ -360,14 +360,9 @@ def _save_log(entry):
 
 
 def _wrap_in_function(source):
-    lines = source.split('\n')
-    indented = []
-    for line in lines:
-        if line.strip():
-            indented.append('    ' + line)
-        else:
-            indented.append(line)
-    return 'def _script():\n' + '\n'.join(indented) + '\n    return _result\n'
+    import textwrap
+    body = textwrap.indent(source, '    ')
+    return f'def _script():\n{body}\n    return _result\n'
 
 
 def _inject_form_helpers(globals_dict, form):
