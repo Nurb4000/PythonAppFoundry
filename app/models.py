@@ -11,6 +11,7 @@ from app import db
 logger = logging.getLogger(__name__)
 
 _dynamic_models = {}
+_dynamic_base = declarative_base()
 
 
 class _ModelQueryProperty:
@@ -50,9 +51,7 @@ class DynamicModel:
         table = Table(table_name, db.metadata, *cols, extend_existing=True)
         table.create(db.engine, checkfirst=True)
 
-        Base = declarative_base()
-
-        model = type(name, (Base,), {
+        model = type(name, (_dynamic_base,), {
             '__table__': table,
             '__tablename__': table_name,
             '__repr__': lambda self: f'<{name} id={getattr(self, "id", None)}>',
