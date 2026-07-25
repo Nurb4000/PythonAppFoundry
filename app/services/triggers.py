@@ -31,12 +31,13 @@ def fire_triggers(event_type, target_table, context=None):
             logger.error(f'Trigger {trigger.name} failed: {e}')
 
 
-def fire_webhook(webhook_slug, payload=None):
+def fire_webhook(webhook_slug, payload=None, provided_token=None):
     """Fire triggers for a webhook event.
     
     Args:
         webhook_slug: The webhook identifier (used as event_type)
         payload: Optional dictionary with request data to pass to the script
+        provided_token: Optional auth token from the request to validate against trigger
     """
     if payload is None:
         payload = {}
@@ -51,6 +52,11 @@ def fire_webhook(webhook_slug, payload=None):
     for trigger in triggers:
         if not trigger.script:
             continue
+        # Check auth token if configured
+        if trigger.auth_token:
+            if not provided_token or not __import__('secrets').compare_digest(trigger.auth_token, provided_token):
+                logger.warning(f'Webhook trigger {trigger.name}: invalid auth token')
+                continue
         try:
             logger.info(f'Firing webhook trigger: {trigger.name} ({webhook_slug})')
             execute_script(trigger.script, source_type='webhook', source_name=trigger.name, extra_globals={

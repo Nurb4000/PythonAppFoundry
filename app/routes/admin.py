@@ -1260,6 +1260,7 @@ def new_trigger():
 <label>Event Type <select name="event_type"><option>on_insert</option><option>on_update</option><option>on_delete</option><option>after_route</option><option>webhook</option></select></label>
 <label>Target Table <input name="target_table" placeholder="table_name or webhook-slug"></label>
 <label>Script <select name="script_id">{% for s in scripts %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
+<label>Auth Token (optional, for webhook triggers) <input name="auth_token" placeholder="Leave blank for public"></label>
 <button>Save</button>
 </form>''', modules=modules, scripts=scripts)
 
@@ -1277,6 +1278,7 @@ def edit_trigger(id):
         tg.target_table = request.form['target_table']
         tg.script_id = int(request.form['script_id'])
         tg.enabled = 'enabled' in request.form
+        tg.auth_token = request.form.get('auth_token', '').strip()
         db.session.commit()
         return redirect(url_for('admin.list_triggers'))
     return render_admin('Edit Trigger', '''
@@ -1288,6 +1290,7 @@ def edit_trigger(id):
 <label>Target Table <input name="target_table" value="{{ tg.target_table }}"></label>
 <label>Script <select name="script_id">{% for s in scripts %}<option value="{{ s.id }}" {% if s.id == tg.script_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
 <label><input name="enabled" type="checkbox" {% if tg.enabled %}checked{% endif %}> Enabled</label>
+<label>Auth Token (optional) <input name="auth_token" value="{{ tg.auth_token }}" placeholder="Leave blank for public"></label>
 <button>Save</button>
 </form>''', tg=tg, modules=modules, scripts=scripts)
 

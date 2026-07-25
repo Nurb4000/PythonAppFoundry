@@ -188,7 +188,7 @@ def api_webhook(slug):
     """Public webhook endpoint. Fires triggers associated with this slug.
     
     Accepts JSON or form data in the request body.
-    No authentication required - secure by obscurity (unique slug).
+    Optional auth: include ?token=XXX or Authorization: Bearer XXX header.
     """
     from app.services.triggers import fire_webhook
     
@@ -201,6 +201,9 @@ def api_webhook(slug):
         for key, value in request.files.items():
             payload[key] = value.filename
     
-    fire_webhook(slug, payload)
+    # Extract auth token from query param or header
+    provided_token = request.args.get('token') or request.headers.get('Authorization', '').replace('Bearer ', '')
+    
+    fire_webhook(slug, payload, provided_token=provided_token)
     
     return jsonify({'status': 'ok', 'webhook': slug})

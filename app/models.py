@@ -258,6 +258,7 @@ class Trigger(db.Model):
     target_table = db.Column(db.String(100), nullable=False)
     script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=True)
     enabled = db.Column(db.Boolean, default=True)
+    auth_token = db.Column(db.String(200), default='')
 
     module = db.relationship('Module', backref=db.backref('triggers', lazy='dynamic'))
     script = db.relationship('Script')
