@@ -232,7 +232,6 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'IndexError': IndexError,
         'AttributeError': AttributeError,
         'Exception': Exception,
-        '__import__': __import__,
     }
 
     safe_globals = {
