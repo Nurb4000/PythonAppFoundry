@@ -42,6 +42,12 @@ def create_app(config_class=None):
     app.register_blueprint(chat_bp)
     app.register_blueprint(bpmn_bp)
 
+    from app.services.csrf import generate_csrf_token
+
+    @app.context_processor
+    def inject_csrf():
+        return dict(csrf_token=generate_csrf_token)
+
     from datetime import datetime as _datetime, timezone as _tz
 
     @app.template_filter('localtime')

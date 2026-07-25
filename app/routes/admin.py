@@ -1,5 +1,6 @@
 from flask import Blueprint, request, redirect, url_for, render_template_string, abort, jsonify, flash, Response
 from app.services.scheduler import refresh_tasks
+from app.services.csrf import csrf_protect, csrf_token
 from flask_login import login_required, current_user
 from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy import Table, MetaData
@@ -309,10 +310,12 @@ MODULE_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:cente
   </form>
   {% if m.is_system %}
   <form method="POST" action="{{ url_for('admin.reset_system_module', id=m.id) }}" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" style="background:none;border:none;color:#856404;cursor:pointer;text-decoration:underline;padding:0;font:inherit" onclick="return confirm('Reset &quot;{{ m.name }}&quot; to default? This will delete all routes, scripts, forms, tasks, triggers, and queries.');">Reset</button>
   </form>
   {% else %}
   <form method="POST" action="{{ delete_url }}/{{ m.id }}" style="display:inline" onsubmit="var c=this.querySelector('[name=drop_tables]');return confirm('Delete module &quot;{{ m.name }}&quot;'+(c&&c.checked?' including its database tables?':' and all its routes, scripts, forms?'))">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label style="font-weight:normal;font-size:0.85em;"><input name="drop_tables" type="checkbox"> Drop tables</label>
     <button type="submit" style="background:none;border:none;color:#d00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
   </form>
@@ -324,6 +327,7 @@ MODULE_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:cente
 
 @admin_bp.route('/modules/new', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def new_module():
     if request.method == 'POST':
         if 'import_xml' in request.files and request.files['import_xml'].filename:
@@ -350,12 +354,14 @@ def new_module():
 <details style="margin-bottom:1rem;"><summary style="cursor:pointer;color:#06c;">Import from XML</summary>
 <div style="margin:0.5rem 0 0 1rem;">
 <form method="POST" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>XML file <input name="import_xml" type="file" accept=".xml"></label>
   <button>Import</button>
 </form>
 </div>
 </details>
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" required></label>
 <label>Slug <input name="slug" required></label>
 <label>Description <textarea name="description"></textarea></label>
@@ -366,6 +372,7 @@ def new_module():
 
 @admin_bp.route('/modules/delete/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def delete_module(id):
     m = Module.query.get_or_404(id)
     name = m.name
@@ -398,6 +405,7 @@ def delete_module(id):
 {% endif %}
 
 <form method="POST" onsubmit="return confirm('Are you sure you want to delete this module? This cannot be undone.');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div style="margin:1.5rem 0;">
     <label style="display:block;margin-bottom:0.5rem;"><input type="checkbox" name="drop_tables"> Also drop DynamicModel tables created by this module</label>
   </div>
@@ -456,6 +464,7 @@ def delete_module(id):
 
 @admin_bp.route('/modules/<int:id>/reset', methods=['POST'])
 @admin_required
+@csrf_protect
 def reset_system_module(id):
     m = Module.query.get_or_404(id)
     if not m.is_system:
@@ -476,6 +485,7 @@ def reset_system_module(id):
 
 @admin_bp.route('/modules/<int:module_id>/scan-dependencies', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def scan_dependencies(module_id):
     """Scan a module's scripts for references to other modules and create dependency records."""
     m = db.session.get(Module, module_id)
@@ -545,6 +555,7 @@ def view_dependencies(module_id):
 
 @admin_bp.route('/modules/clone/<int:id>', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def clone_module(id):
     m = Module.query.get_or_404(id)
     from app.services.bundle import export_module, import_module
@@ -579,6 +590,7 @@ def edit_module(id):
     full_xml = export_module(m)
     return render_admin('Edit Module', '''
 <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
     <label style="flex:2;min-width:140px;">Name <input name="name" value="{{ m.name }}" required style="width:100%;"></label>
     <label style="flex:2;min-width:140px;">Slug <input name="slug" value="{{ m.slug }}" required style="width:100%;"></label>
@@ -604,6 +616,7 @@ def edit_module(id):
       </form>
     </label>
     <form method="POST" action="{{ url_for('admin.delete_module', id=m.id) }}" style="display:inline" onsubmit="var c=this.querySelector('[name=drop_tables]');return confirm('Delete module &quot;{{ m.name }}&quot;'+(c&&c.checked?' including its database tables?':' and all its routes, scripts, forms?'))">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label style="font-weight:normal;font-size:0.85em;cursor:pointer;"><input name="drop_tables" type="checkbox"> Drop tables</label>
       <button type="submit" style="background:none;border:none;color:#d00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
     </form>
@@ -617,6 +630,7 @@ def edit_module(id):
 
 @admin_bp.route('/modules/import_xml/<int:id>', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def import_module_xml(id):
     m = Module.query.get_or_404(id)
     if 'file' not in request.files:
@@ -647,6 +661,7 @@ def list_versions(module_id):
 <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
   <a href="{{ url_for('admin.edit_module', id=m.id) }}">Back to Module</a>
   <form method="POST" action="{{ url_for('admin.create_version', module_id=m.id) }}" style="display:inline;flex:1;max-width:400px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="text" name="comment" placeholder="Version comment (e.g., 'Added contact form')" style="flex:1;padding:6px 12px;border:1px solid #ddd;border-radius:4px;">
     <button type="submit" style="padding:6px 16px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;">Create Version</button>
   </form>
@@ -672,6 +687,7 @@ def list_versions(module_id):
   <td>
     {% if not v.is_current %}
     <form method="POST" action="{{ url_for('admin.restore_version', version_id=v.id) }}" style="display:inline" onsubmit="return confirm('Restore module to version {{ v.version_number }}? This will replace the current state.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" style="background:none;border:none;color:#2563eb;cursor:pointer;text-decoration:underline;padding:0;font:inherit;">Restore</button>
     </form>
     {% endif %}
@@ -692,6 +708,7 @@ def list_versions(module_id):
 
 @admin_bp.route('/modules/<int:module_id>/versions/create', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def create_version(module_id):
     m = Module.query.get_or_404(module_id)
     comment = request.form.get('comment', '')
@@ -706,6 +723,7 @@ def create_version(module_id):
 
 @admin_bp.route('/modules/versions/<int:version_id>/restore', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def restore_version(version_id):
     v = ModuleVersion.query.get_or_404(version_id)
     try:
@@ -765,6 +783,7 @@ def list_routes():
 
 @admin_bp.route('/routes/new', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def new_route():
     modules = db.session.query(Module).all()
     scripts = db.session.query(Script).all()
@@ -792,6 +811,7 @@ def new_route():
         return redirect(url_for('admin.list_routes'))
     return render_admin('New Route', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Slug <input name="slug" required></label>
 <label>Methods <input name="methods" value="GET"></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
@@ -813,6 +833,7 @@ def new_route():
 
 @admin_bp.route('/routes/edit/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def edit_route(id):
     r = Route.query.get_or_404(id)
     modules = db.session.query(Module).all()
@@ -838,6 +859,7 @@ def edit_route(id):
     allowed_ids = set(r.allowed_groups.split(',') if r.allowed_groups else [])
     return render_admin('Edit Route', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Slug <input name="slug" value="{{ r.slug }}" required></label>
 <label>Methods <input name="methods" value="{{ r.methods }}"></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == r.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
@@ -867,6 +889,7 @@ def list_scripts():
 
 @admin_bp.route('/scripts/new', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def new_script():
     modules = db.session.query(Module).all()
     if request.method == 'POST':
@@ -882,6 +905,7 @@ def new_script():
         return redirect(url_for('admin.list_scripts'))
     return render_admin('New Script', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" required></label>
 <label>Language <input name="language" value="python"></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
@@ -892,6 +916,7 @@ def new_script():
 
 @admin_bp.route('/scripts/edit/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def edit_script(id):
     s = Script.query.get_or_404(id)
     modules = db.session.query(Module).all()
@@ -905,6 +930,7 @@ def edit_script(id):
         return redirect(url_for('admin.list_scripts'))
     return render_admin('Edit Script', '''
 <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
     <label style="flex:2;min-width:140px;">Name <input name="name" value="{{ s.name }}" required style="width:100%;"></label>
     <label style="flex:1;min-width:100px;">Language <input name="language" value="{{ s.language }}" style="width:100%;"></label>
@@ -975,6 +1001,7 @@ def list_forms():
 
 @admin_bp.route('/forms/new', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def new_form():
     modules = db.session.query(Module).all()
     if request.method == 'POST':
@@ -988,6 +1015,7 @@ def new_form():
         return redirect(url_for('admin.list_forms'))
     return render_admin('New Form', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" required></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
 <label>Schema (JSON) <textarea name="schema_json" rows="10" style="width:100%;font-family:monospace">[{"name":"field1","type":"text","label":"Field 1","required":true}]</textarea></label>
@@ -996,6 +1024,7 @@ def new_form():
 
 @admin_bp.route('/forms/edit/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def edit_form(id):
     f = Form.query.get_or_404(id)
     modules = db.session.query(Module).all()
@@ -1017,6 +1046,7 @@ def edit_form(id):
 @media (max-width: 768px) { .split-editor { grid-template-columns:1fr; } }
 </style>
 <form method="POST" id="formEditor">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" value="{{ f.name }}" required></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == f.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
 <div class="split-editor">
@@ -1134,6 +1164,7 @@ def list_tasks():
 
 @admin_bp.route('/tasks/new', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def new_task():
     modules = db.session.query(Module).all()
     scripts = db.session.query(Script).all()
@@ -1155,6 +1186,7 @@ def new_task():
         return redirect(url_for('admin.list_tasks'))
     return render_admin('New Scheduled Task', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" required></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
 <label>Script <select name="script_id">{% for s in scripts %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
@@ -1164,6 +1196,7 @@ def new_task():
 
 @admin_bp.route('/tasks/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def edit_task(id):
     t = ScheduledTask.query.get_or_404(id)
     modules = db.session.query(Module).all()
@@ -1184,6 +1217,7 @@ def edit_task(id):
         return redirect(url_for('admin.list_tasks'))
     return render_admin('Edit Scheduled Task', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" value="{{ t.name }}" required></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == t.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
 <label>Script <select name="script_id">{% for s in scripts %}<option value="{{ s.id }}" {% if s.id == t.script_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
@@ -1203,6 +1237,7 @@ def list_triggers():
 
 @admin_bp.route('/triggers/new', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def new_trigger():
     modules = db.session.query(Module).all()
     scripts = db.session.query(Script).all()
@@ -1219,6 +1254,7 @@ def new_trigger():
         return redirect(url_for('admin.list_triggers'))
     return render_admin('New Trigger', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" required></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
 <label>Event Type <select name="event_type"><option>on_insert</option><option>on_update</option><option>on_delete</option><option>after_route</option><option>webhook</option></select></label>
@@ -1229,6 +1265,7 @@ def new_trigger():
 
 @admin_bp.route('/triggers/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def edit_trigger(id):
     tg = Trigger.query.get_or_404(id)
     modules = db.session.query(Module).all()
@@ -1244,6 +1281,7 @@ def edit_trigger(id):
         return redirect(url_for('admin.list_triggers'))
     return render_admin('Edit Trigger', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" value="{{ tg.name }}" required></label>
 <label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == tg.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
 <label>Event Type <select name="event_type"><option {% if tg.event_type=='on_insert' %}selected{% endif %}>on_insert</option><option {% if tg.event_type=='on_update' %}selected{% endif %}>on_update</option><option {% if tg.event_type=='on_delete' %}selected{% endif %}>on_delete</option><option {% if tg.event_type=='after_route' %}selected{% endif %}>after_route</option><option {% if tg.event_type=='webhook' %}selected{% endif %}>webhook</option></select></label>
@@ -1314,15 +1352,18 @@ def list_users():
     <a href="{{ url_for('admin.edit_user', id=u.id) }}">Edit</a>
     {% if not u.is_approved %}
       <form method="POST" action="{{ url_for('admin.approve_user', id=u.id) }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button style="background:none;border:none;color:#080;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Approve</button>
       </form>
     {% endif %}
     {% if u.is_active and u.is_approved %}
       <form method="POST" action="{{ url_for('admin.disable_user', id=u.id) }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Disable</button>
       </form>
     {% elif not u.is_active %}
       <form method="POST" action="{{ url_for('admin.enable_user', id=u.id) }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button style="background:none;border:none;color:#080;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Enable</button>
       </form>
     {% endif %}
@@ -1334,6 +1375,7 @@ def list_users():
 
 @admin_bp.route('/users/<int:id>/approve', methods=['POST'])
 @admin_required
+@csrf_protect
 def approve_user(id):
     u = db.session.get(User, id)
     if u:
@@ -1344,6 +1386,7 @@ def approve_user(id):
 
 @admin_bp.route('/users/<int:id>/disable', methods=['POST'])
 @admin_required
+@csrf_protect
 def disable_user(id):
     u = db.session.get(User, id)
     if u:
@@ -1353,6 +1396,7 @@ def disable_user(id):
 
 @admin_bp.route('/users/<int:id>/enable', methods=['POST'])
 @admin_required
+@csrf_protect
 def enable_user(id):
     u = db.session.get(User, id)
     if u:
@@ -1362,6 +1406,7 @@ def enable_user(id):
 
 @admin_bp.route('/users/new', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def new_user():
     import bcrypt
     if request.method == 'POST':
@@ -1378,6 +1423,7 @@ def new_user():
         return redirect(url_for('admin.list_users'))
     return render_admin('New User', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Username <input name="username" required></label>
 <label>Password <input name="password" type="password" required></label>
 <label>Role <select name="role"><option>admin</option><option>developer</option><option>user</option></select></label>
@@ -1388,6 +1434,7 @@ def new_user():
 
 @admin_bp.route('/users/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def edit_user(id):
     u = User.query.get_or_404(id)
     import bcrypt
@@ -1402,6 +1449,7 @@ def edit_user(id):
         return redirect(url_for('admin.list_users'))
     return render_admin('Edit User', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Username <input name="username" value="{{ u.username }}" required></label>
 <label>Password <input name="password" type="password" placeholder="Leave blank to keep"></label>
 <label>Role <select name="role"><option {% if u.role=='admin' %}selected{% endif %}>admin</option><option {% if u.role=='developer' %}selected{% endif %}>developer</option><option {% if u.role=='user' %}selected{% endif %}>user</option></select></label>
@@ -1576,6 +1624,7 @@ Metadata tables: {', '.join(sorted(db.metadata.tables.keys()))}
     <a href="{{ url_for('admin.browse_table', table_name=t.name) }}">Browse</a>
     {% if not t.is_platform %}
     <form method="POST" action="{{ url_for('admin.delete_table', table_name=t.name) }}" style="display:inline" onsubmit="return confirm('Drop table &quot;{{ t.name }}&quot; and all its data?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" style="background:none;border:none;color:#d00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
     </form>
     {% endif %}
@@ -1637,6 +1686,7 @@ def browse_table(table_name):
   <td style="white-space:nowrap;">
     <a href="{{ url_for('admin.edit_row', table_name=table_name, id=row['id']) }}">Edit</a>
     <form method="POST" action="{{ url_for('admin.delete_row', table_name=table_name, id=row['id']) }}" style="display:inline" onsubmit="return confirm('Delete row {{ row['id'] }}?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Delete</button>
     </form>
   </td>
@@ -1687,6 +1737,7 @@ def new_row(table_name):
 
     return render_admin('New Row: ' + table_name, '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 {% for c in columns %}
 <label style="display:block;margin-bottom:8px;">
   <strong>{{ c.name }}</strong>
@@ -1776,6 +1827,7 @@ def edit_row(table_name, id):
 
     return render_admin('Edit Row: ' + table_name, '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 {% for info in columns %}
 <label style="display:block;margin-bottom:8px;">
   <strong>{{ info.name }}</strong>
@@ -1799,6 +1851,7 @@ def edit_row(table_name, id):
 
 @admin_bp.route('/data/<table_name>/<int:id>/delete', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def delete_row(table_name, id):
     if table_name not in db.metadata.tables:
         return 'Table not found', 404
@@ -1853,6 +1906,7 @@ def list_uploads():
     return render_admin('File Manager', '''
 <div style="margin-bottom:1rem;display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
   <form method="POST" action="{{ url_for('admin.upload_file') }}" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;flex:1;min-width:300px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="file" name="file" required style="flex:1;">
     <button type="submit" style="padding:6px 16px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;">Upload</button>
   </form>
@@ -1922,6 +1976,7 @@ def list_uploads():
 
 @admin_bp.route('/uploads/upload', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def upload_file():
     if 'file' not in request.files:
         flash('No file')
@@ -1942,6 +1997,7 @@ def upload_file():
 
 @admin_bp.route('/uploads/<int:id>/delete', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def delete_upload(id):
     upload = db.session.get(Upload, id)
     if not upload:
@@ -1976,6 +2032,7 @@ def list_groups():
   <td>
     <a href="{{ url_for('admin.edit_group', id=g.id) }}">Edit</a>
     <form method="POST" action="{{ url_for('admin.delete_group', id=g.id) }}" style="display:inline" onsubmit="return confirm('Delete group {{ g.name }}?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Delete</button>
     </form>
   </td>
@@ -1985,6 +2042,7 @@ def list_groups():
 
 @admin_bp.route('/groups/new', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def new_group():
     if request.method == 'POST':
         g = Group(name=request.form['name'], description=request.form.get('description', ''))
@@ -1993,6 +2051,7 @@ def new_group():
         return redirect(url_for('admin.list_groups'))
     return render_admin('New Group', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" required></label>
 <label>Description <textarea name="description" rows="3" style="width:100%;max-width:400px;"></textarea></label>
 <button>Save</button>
@@ -2000,6 +2059,7 @@ def new_group():
 
 @admin_bp.route('/groups/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def edit_group(id):
     g = Group.query.get_or_404(id)
     users = db.session.query(User).order_by(User.username).all()
@@ -2027,6 +2087,7 @@ def edit_group(id):
 
 @admin_bp.route('/groups/<int:id>/delete', methods=['POST'])
 @admin_required
+@csrf_protect
 def delete_group(id):
     g = Group.query.get_or_404(id)
     db.session.delete(g)
@@ -2036,6 +2097,7 @@ def delete_group(id):
 
 @admin_bp.route('/data/<table_name>/delete', methods=['POST'])
 @admin_required
+@csrf_protect
 def delete_table(table_name):
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
@@ -2147,6 +2209,7 @@ function fillUninstall(name) { document.getElementById('uninstall-input').value 
 <div style="flex:1;min-width:300px;">
 <h3>Install Package</h3>
 <form method="POST" style="margin-bottom:24px;">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label style="display:block;margin-bottom:8px;">
   <strong>Package name</strong><br>
   <input name="package" type="text" value="{{ selected }}" placeholder="requests requests==2.31.0" style="padding:6px 10px;width:100%;max-width:400px;"><br>
@@ -2157,6 +2220,7 @@ function fillUninstall(name) { document.getElementById('uninstall-input').value 
 
 <h3>Uninstall Package</h3>
 <form method="POST" onsubmit="return confirm('Uninstall ' + document.getElementById('uninstall-input').value + '?')">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label style="display:block;margin-bottom:8px;">
   <strong>Package name</strong><br>
   <input id="uninstall-input" name="package" type="text" value="{{ selected }}" placeholder="requests" style="padding:6px 10px;width:100%;max-width:400px;"><br>
@@ -2177,6 +2241,7 @@ function fillUninstall(name) { document.getElementById('uninstall-input').value 
 
 @admin_bp.route('/settings', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def edit_settings():
     if request.method == 'POST':
         Setting.set('registration_disabled', 'true' if 'registration_disabled' in request.form else 'false')
@@ -2239,6 +2304,7 @@ def edit_settings():
     imap_retention_days = Setting.get('imap_retention_days', '0')
     return render_admin('Settings', '''
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <h3 style="margin-top:0;">Registration</h3>
 <label style="display:block;margin-bottom:12px;">
   <strong>Site Name</strong><br>
@@ -2410,6 +2476,7 @@ def edit_settings():
 
 @admin_bp.route('/settings/test-email', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def test_email():
     if request.method == 'GET':
         return redirect(url_for('admin.edit_settings'))
@@ -2467,6 +2534,7 @@ QUERY_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:center
     <a href="{{ url_for('admin.run_query', id=q.id) }}">Run</a>
     <a href="{{ url_for('admin.edit_query', id=q.id) }}">Edit</a>
     <form method="POST" action="{{ url_for('admin.delete_query', id=q.id) }}" style="display:inline" onsubmit="return confirm('Delete query &quot;{{ q.name }}&quot;?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
     </form>
   </td>
@@ -2481,6 +2549,7 @@ QUERY_LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:center
 QUERY_FORM_TEMPLATE = '''<script src="/static/chart.umd.min.js"></script>
 <div id="queryApp">
 <form method="POST" action="{{ action }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
   <div>
     <label style="display:block;font-weight:600;margin-bottom:4px;">Name</label>
@@ -2651,6 +2720,7 @@ def list_queries():
 
 @admin_bp.route('/queries/new', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def new_query():
     modules = db.session.query(Module).order_by(Module.name).all()
     if request.method == 'POST':
@@ -2679,6 +2749,7 @@ def new_query():
 
 @admin_bp.route('/queries/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def edit_query(id):
     q = QueryReport.query.get_or_404(id)
     modules = db.session.query(Module).order_by(Module.name).all()
@@ -2702,6 +2773,7 @@ def edit_query(id):
 
 @admin_bp.route('/queries/<int:id>/delete', methods=['POST'])
 @developer_or_admin_required
+@csrf_protect
 def delete_query(id):
     q = QueryReport.query.get_or_404(id)
     db.session.delete(q)
@@ -2973,10 +3045,12 @@ def list_incoming_emails():
     <a href="{{ url_for('admin.view_incoming_email', id=e.id) }}">View</a>
     {% if not e.processed %}
     <form method="POST" action="{{ url_for('admin.mark_incoming_processed', id=e.id) }}" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" style="background:none;border:none;color:#080;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Mark Done</button>
     </form>
     {% endif %}
     <form method="POST" action="{{ url_for('admin.delete_incoming_email', id=e.id) }}" style="display:inline" onsubmit="return confirm('Delete email #{{ e.id }}?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Delete</button>
     </form>
   </td>
@@ -3019,6 +3093,7 @@ def view_incoming_email(id):
   <a href="{{ url_for('admin.list_incoming_emails') }}">&larr; Back</a>
   {% if not e.processed %}
   <form method="POST" action="{{ url_for('admin.mark_incoming_processed', id=e.id) }}" style="display:inline;margin-left:0.5rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" style="background:#080;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;">Mark as Processed</button>
   </form>
   {% endif %}
@@ -3027,6 +3102,7 @@ def view_incoming_email(id):
 
 @admin_bp.route('/incoming-emails/<int:id>/processed', methods=['POST'])
 @admin_required
+@csrf_protect
 def mark_incoming_processed(id):
     e = IncomingEmail.query.get_or_404(id)
     from datetime import datetime, timezone
@@ -3039,6 +3115,7 @@ def mark_incoming_processed(id):
 
 @admin_bp.route('/incoming-emails/<int:id>/delete', methods=['POST'])
 @admin_required
+@csrf_protect
 def delete_incoming_email(id):
     e = IncomingEmail.query.get_or_404(id)
     db.session.delete(e)
@@ -3086,6 +3163,7 @@ def list_credentials():
   <td>
     <a href="{{ url_for('admin.edit_credential', id=c.id) }}">Edit</a>
     <form method="POST" action="{{ url_for('admin.delete_credential', id=c.id) }}" style="display:inline" onsubmit="return confirm('Delete credential &quot;{{ c.name }}&quot;?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
     </form>
   </td>
@@ -3098,6 +3176,7 @@ def list_credentials():
 
 @admin_bp.route('/credentials/new', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def new_credential():
     modules = db.session.query(Module).order_by(Module.name).all()
     if request.method == 'POST':
@@ -3115,6 +3194,7 @@ def new_credential():
         return redirect(url_for('admin.list_credentials'))
     return render_admin('New Credential', '''
 <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
     <label>Name <input name="name" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g. github_api_key"></label>
     <label>Module <select name="module_id" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
@@ -3141,6 +3221,7 @@ def new_credential():
 
 @admin_bp.route('/credentials/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def edit_credential(id):
     c = Credential.query.get_or_404(id)
     modules = db.session.query(Module).order_by(Module.name).all()
@@ -3157,6 +3238,7 @@ def edit_credential(id):
         return redirect(url_for('admin.list_credentials'))
     return render_admin('Edit Credential', '''
 <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
     <label>Name <input name="name" value="{{ c.name }}" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;"></label>
     <label>Module <select name="module_id" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == c.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
@@ -3183,6 +3265,7 @@ def edit_credential(id):
 
 @admin_bp.route('/credentials/<int:id>/delete', methods=['POST'])
 @admin_required
+@csrf_protect
 def delete_credential(id):
     c = Credential.query.get_or_404(id)
     db.session.delete(c)
