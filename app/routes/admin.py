@@ -2842,6 +2842,8 @@ new Chart(document.getElementById('reportChart'), {
 
 # ── Dashboard ──
 
+_dashboard_start_time = None
+
 @admin_bp.route('/dashboard')
 @admin_required
 def dashboard():
@@ -2852,11 +2854,10 @@ def dashboard():
     import time as _time
     from datetime import timedelta
 
-    app_start_time = getattr(dashboard, '_start_time', None)
-    if app_start_time is None:
-        dashboard._start_time = _time.time()
-        app_start_time = _time.time()
-    uptime_seconds = _time.time() - app_start_time
+    global _dashboard_start_time
+    if _dashboard_start_time is None:
+        _dashboard_start_time = _time.time()
+    uptime_seconds = _time.time() - _dashboard_start_time
 
     total_modules = Module.query.count()
     enabled_modules = Module.query.filter_by(enabled=True).count()
