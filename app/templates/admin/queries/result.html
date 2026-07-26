@@ -1,0 +1,29 @@
+<script src="/static/chart.umd.min.js"></script>
+<h2>{{ q.name }}</h2>
+<p style="color:#888;">{{ q.description }}</p>
+{% if error %}
+<div style="color:#c00;background:#fee;padding:1rem;border-radius:4px;border:1px solid #fcc;">
+  <strong>Error:</strong> {{ error }}
+</div>
+{% else %}
+{% if chart_type %}
+<div style="max-width:600px;margin:1rem 0;">
+  <canvas id="reportChart"></canvas>
+</div>
+<script>
+new Chart(document.getElementById('reportChart'), {
+  type: '{{ chart_type }}',
+  data: { labels: {{ chart_labels|tojson|safe }}, datasets: {{ chart_datasets|tojson|safe }} },
+  options: { responsive: true, plugins: { title: { display: true, text: '{{ chart_title }}' } } }
+});
+</script>
+{% endif %}
+<div class="table-wrap">
+<table>
+<thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+<tbody>{% for r in rows %}<tr>{% for v in r %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table>
+</div>
+<p style="font-size:0.85em;color:#888;">{{ rows|length }} row(s) in {{ duration }}ms</p>
+<a href="{{ url_for('admin.queries.edit_query', id=q.id) }}">&larr; Edit Query</a>
+{% endif %}

@@ -1,0 +1,48 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+  <a href="{{ url_for('admin.queries.new_query') }}">+ New Query</a>
+  <form method="GET" style="display:inline;margin-left:auto;">
+    <select name="module_id" onchange="this.form.submit()" style="padding:6px;border:1px solid #ccc;border-radius:4px;">
+      <option value="">All modules</option>
+      {% for m in modules %}
+      <option value="{{ m.id }}" {% if selected_module_id == m.id %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+    <noscript><button type="submit">Filter</button></noscript>
+  </form>
+</div>
+{% if queries %}
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th><a href="?sort=id&order={% if sort_col == 'id' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">id{% if sort_col == 'id' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=name&order={% if sort_col == 'name' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">Name{% if sort_col == 'name' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Module</th>
+  <th><a href="?sort=chart_type&order={% if sort_col == 'chart_type' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">Chart{% if sort_col == 'chart_type' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Schedule</th>
+  <th><a href="?sort=last_run&order={% if sort_col == 'last_run' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">Last Run{% if sort_col == 'last_run' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for q in queries %}
+<tr>
+  <td>{{ q.id }}</td>
+  <td><strong>{{ q.name }}</strong></td>
+  <td>{% if q.module %}<a href="{{ url_for('admin.modules.edit_module', id=q.module.id) }}">{{ q.module.name }}</a>{% else %}<span style="color:#999;">—</span>{% endif %}</td>
+  <td>{% if q.chart_type != 'none' %}{{ q.chart_type }}{% else %}<span style="color:#999;">—</span>{% endif %}</td>
+  <td>{% if q.schedule_cron %}<code>{{ q.schedule_cron }}</code>{% else %}<span style="color:#999;">—</span>{% endif %}</td>
+  <td>{{ q.last_run|localtime if q.last_run else '<span style="color:#999;">never</span>'|safe }}</td>
+  <td style="white-space:nowrap;">
+    <a href="{{ url_for('admin.queries.run_query', id=q.id) }}">Run</a>
+    <a href="{{ url_for('admin.queries.edit_query', id=q.id) }}">Edit</a>
+    <form method="POST" action="{{ url_for('admin.queries.delete_query', id=q.id) }}" style="display:inline" onsubmit="return confirm('Delete query &quot;{{ q.name }}&quot;?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% else %}
+<p style="color:#888;">No queries defined yet.</p>
+{% endif %}

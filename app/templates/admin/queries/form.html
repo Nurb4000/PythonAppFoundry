@@ -1,0 +1,146 @@
+<script src="/static/chart.umd.min.js"></script>
+<div id="queryApp">
+<form method="POST" action="{{ action }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+  <div>
+    <label style="display:block;font-weight:600;margin-bottom:4px;">Name</label>
+    <input name="name" value="{{ q.name }}" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+  </div>
+  <div>
+    <label style="display:block;font-weight:600;margin-bottom:4px;">Module</label>
+    <select name="module_id" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+      {% for m in modules %}
+      <option value="{{ m.id }}" {% if q.module_id == m.id %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+  <div>
+    <label style="display:block;font-weight:600;margin-bottom:4px;">Chart Type</label>
+    <select name="chart_type" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+      <option value="none" {% if q.chart_type == 'none' %}selected{% endif %}>Table only (no chart)</option>
+      <option value="bar" {% if q.chart_type == 'bar' %}selected{% endif %}>Bar</option>
+      <option value="line" {% if q.chart_type == 'line' %}selected{% endif %}>Line</option>
+      <option value="pie" {% if q.chart_type == 'pie' %}selected{% endif %}>Pie</option>
+      <option value="doughnut" {% if q.chart_type == 'doughnut' %}selected{% endif %}>Doughnut</option>
+      <option value="polarArea" {% if q.chart_type == 'polarArea' %}selected{% endif %}>Polar Area</option>
+      <option value="radar" {% if q.chart_type == 'radar' %}selected{% endif %}>Radar</option>
+    </select>
+  </div>
+  <div>
+    <label style="display:block;font-weight:600;margin-bottom:4px;">Description</label>
+    <input name="description" value="{{ q.description }}" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+  </div>
+</div>
+
+<div style="margin-bottom:1rem;">
+  <label style="display:block;font-weight:600;margin-bottom:4px;">SQL Query</label>
+  <textarea name="sql" rows="8" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;font-family:monospace;font-size:0.9em;" required>{{ q.sql }}</textarea>
+  <div style="font-size:0.85em;color:#888;margin-top:4px;">Use <code>-- limit N</code> in your query to control row count for charts.</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">
+  <div>
+    <label style="display:block;font-weight:600;margin-bottom:4px;">Label Column (X axis)</label>
+    <input name="label_column" value="{{ q.label_column }}" placeholder="e.g. name, date" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+  </div>
+  <div>
+    <label style="display:block;font-weight:600;margin-bottom:4px;">Data Column(s) (Y axis)</label>
+    <input name="data_columns" value="{{ q.data_columns }}" placeholder="e.g. count, total" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+  </div>
+  <div>
+    <label style="display:block;font-weight:600;margin-bottom:4px;">Chart Title</label>
+    <input name="chart_title" value="{{ q.chart_title }}" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+  </div>
+</div>
+
+<details style="margin-bottom:1rem;border:1px solid #ddd;border-radius:4px;padding:0.75rem;">
+  <summary style="cursor:pointer;font-weight:600;color:#555;">Schedule &amp; Email</summary>
+  <div style="margin-top:0.75rem;display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+    <div>
+      <label style="display:block;font-weight:600;margin-bottom:4px;">Cron Schedule</label>
+      <input name="schedule_cron" value="{{ q.schedule_cron }}" placeholder="e.g. 0 8 * * 1" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+      <div style="font-size:0.85em;color:#888;margin-top:2px;">Leave blank for manual only.</div>
+    </div>
+    <div>
+      <label style="display:block;font-weight:600;margin-bottom:4px;">Email To</label>
+      <input name="email_to" value="{{ q.email_to }}" placeholder="user@example.com" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+    </div>
+    <div>
+      <label style="display:block;font-weight:600;margin-bottom:4px;">Email Subject</label>
+      <input name="email_subject" value="{{ q.email_subject }}" placeholder="Report: {{ q.name }}" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+    </div>
+  </div>
+</details>
+
+<div style="display:flex;gap:0.75rem;">
+  <button type="submit" style="padding:10px 24px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1em;">Save</button>
+  {% if q.id %}
+  <button type="button" onclick="runQuery({{ q.id }})" style="padding:10px 24px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1em;">Save &amp; Run</button>
+  {% endif %}
+  <a href="{{ url_for('admin.queries.list_queries') }}" style="padding:10px 24px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1em;text-decoration:none;">Cancel</a>
+</div>
+</form>
+
+<div id="queryResults" style="margin-top:1.5rem;display:none;">
+  <h3>Results</h3>
+  <div id="chartContainer" style="max-width:600px;margin:1rem 0;display:none;"><canvas id="resultChart"></canvas></div>
+  <div id="resultTable"></div>
+  <div id="resultError" style="color:#c00;"></div>
+</div>
+</div>
+
+<script>
+function runQuery(id) {
+  var form = document.getElementById('queryApp').querySelector('form');
+  var formData = new FormData(form);
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  fetch('/__api/queries/' + id + '/run', { method: 'POST', body: formData })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.textContent = 'Save & Run';
+      var results = document.getElementById('queryResults');
+      results.style.display = 'block';
+      var chartContainer = document.getElementById('chartContainer');
+      var errorDiv = document.getElementById('resultError');
+      errorDiv.innerHTML = '';
+      if (data.error) {
+        errorDiv.textContent = data.error;
+        return;
+      }
+      var tableHtml = '<div class="table-wrap"><table><thead><tr>';
+      data.columns.forEach(function(c) { tableHtml += '<th>' + c + '</th>'; });
+      tableHtml += '</tr></thead><tbody>';
+      data.rows.forEach(function(r) {
+        tableHtml += '<tr>';
+        r.forEach(function(v) { tableHtml += '<td>' + (v != null ? v : '') + '</td>'; });
+        tableHtml += '</tr>';
+      });
+      tableHtml += '</tbody></table></div><p style="font-size:0.85em;color:#888;">' + data.rows.length + ' row(s) in ' + data.duration_ms + 'ms</p>';
+      document.getElementById('resultTable').innerHTML = tableHtml;
+      var chartType = form.querySelector('[name=chart_type]').value;
+      if (chartType !== 'none' && data.chart_labels && data.chart_datasets) {
+        chartContainer.style.display = 'block';
+        var ctx = document.getElementById('resultChart').getContext('2d');
+        if (window._resultChart) window._resultChart.destroy();
+        window._resultChart = new Chart(ctx, {
+          type: chartType,
+          data: { labels: data.chart_labels, datasets: data.chart_datasets },
+          options: { responsive: true, plugins: { title: { display: !!(data.chart_title), text: data.chart_title || '' } } }
+        });
+      } else {
+        chartContainer.style.display = 'none';
+      }
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = 'Save & Run';
+      document.getElementById('resultError').textContent = 'Request failed: ' + err.message;
+    });
+}
+</script>
