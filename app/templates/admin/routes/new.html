@@ -1,0 +1,14 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Slug <input name="slug" required></label>
+<label>Methods <input name="methods" value="GET"></label>
+<label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
+<label>Script <select name="script_id"><option value="">-- none --</option>{% for s in scripts %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
+<label>Form <select name="form_id"><option value="">-- none --</option>{% for f in forms %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select></label>
+<label><input name="auth_required" type="checkbox"> Auth Required</label>
+<label>Title <input name="title"></label>
+<details style="margin:0.5rem 0;"><summary>Group Access</summary>
+<div style="margin:0.5rem 0 0 1rem;">{% for g in groups %}<label style="display:block;font-weight:normal;font-size:0.9em;"><input name="allowed_groups" type="checkbox" value="{{ g.id }}"> {{ g.name }}</label>{% endfor %}{% if not groups %}<span style="color:#888;font-size:0.85em;">No groups defined</span>{% endif %}</div>
+</details>
+<button>Save</button>
+</form>

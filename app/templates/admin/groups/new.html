@@ -1,0 +1,6 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Name <input name="name" required></label>
+<label>Description <textarea name="description" rows="3" style="width:100%;max-width:400px;"></textarea></label>
+<button>Save</button>
+</form>

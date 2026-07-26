@@ -1,0 +1,12 @@
+<form method="POST">
+<label>Name <input name="name" value="{{ g.name }}" required></label>
+<label>Description <textarea name="description" rows="3" style="width:100%;max-width:400px;">{{ g.description }}</textarea></label>
+<p><strong>Members</strong></p>
+{% for u in users %}
+<label style="display:block;font-weight:normal;">
+  <input name="user_ids" type="checkbox" value="{{ u.id }}" {% if u.id in selected_ids %}checked{% endif %}>
+  {{ u.username }} ({{ u.role }})
+</label>
+{% endfor %}
+<button>Save</button>
+</form>

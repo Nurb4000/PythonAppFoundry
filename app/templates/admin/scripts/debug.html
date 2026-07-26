@@ -1,0 +1,6 @@
+<h2>Debug: {{ s.name }}</h2>
+<p style="color:#888;">Duration: {{ duration }}ms | Module: {{ s.module.name }}</p>
+<h3>Source Code</h3>
+<pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #ddd;border-radius:4px;">{% for item in source_lines %}<span style="color:#999;">{{ '%3d' % item.line_num }}</span>  {{ item.line }}{% endfor %}</pre>
+{% if error %}<h3 style="color:#c00;">Error</h3><pre style="background:#fff5f5;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #fcc;border-radius:4px;">{{ error }}</pre>{% elif output %}<h3>Output</h3><pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #ddd;border-radius:4px;">{{ output }}</pre>{% else %}<p>Script completed with no output.</p>{% endif %}
+<a href="{{ url_for('admin.scripts.edit_script', id=s.id) }}">&larr; Back to Script</a>

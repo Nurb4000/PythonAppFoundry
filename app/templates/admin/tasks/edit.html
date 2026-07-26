@@ -1,0 +1,9 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Name <input name="name" value="{{ t.name }}" required></label>
+<label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == t.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
+<label>Script <select name="script_id">{% for s in scripts %}<option value="{{ s.id }}" {% if s.id == t.script_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+<label>Cron Expression <input name="cron_expression" value="{{ t.cron_expression }}" required></label>
+<label><input name="enabled" type="checkbox" {% if t.enabled %}checked{% endif %}> Enabled</label>
+<button>Save</button>
+</form>

@@ -12,7 +12,7 @@ This module provides common patterns used across admin routes:
 from datetime import datetime as _datetime, timezone as _tz
 from functools import wraps
 
-from flask import abort, current_app, render_template_string, request, Response
+from flask import abort, current_app, render_template, render_template_string, request, Response
 import csv, io
 
 from app import db
@@ -175,7 +175,10 @@ LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:center;margi
 
 def render_admin(title, content_template, **kwargs):
     """Render an admin page with the standard layout."""
-    content = render_template_string(content_template, **kwargs)
+    if content_template.endswith('.html'):
+        content = render_template(content_template, **kwargs)
+    else:
+        content = render_template_string(content_template, **kwargs)
     return render_template_string(ADMIN_TEMPLATE, title=title, content=content)
 
 

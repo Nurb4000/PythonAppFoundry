@@ -1,0 +1,20 @@
+<a href="{{ url_for('admin.groups.new_group') }}">+ New Group</a>
+<table>
+<thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Members</th><th></th></tr></thead>
+<tbody>
+{% for g in groups %}
+<tr>
+  <td>{{ g.id }}</td>
+  <td>{{ g.name }}</td>
+  <td>{{ g.description[:60] if g.description else '' }}</td>
+  <td>{{ g.users|length }}</td>
+  <td>
+    <a href="{{ url_for('admin.groups.edit_group', id=g.id) }}">Edit</a>
+    <form method="POST" action="{{ url_for('admin.groups.delete_group', id=g.id) }}" style="display:inline" onsubmit="return confirm('Delete group {{ g.name }}?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Delete</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>

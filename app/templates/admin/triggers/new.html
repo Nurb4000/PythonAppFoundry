@@ -1,0 +1,10 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Name <input name="name" required></label>
+<label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
+<label>Event Type <select name="event_type"><option>on_insert</option><option>on_update</option><option>on_delete</option><option>after_route</option><option>webhook</option></select></label>
+<label>Target Table <input name="target_table" placeholder="table_name or webhook-slug"></label>
+<label>Script <select name="script_id">{% for s in scripts %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
+<label>Auth Token (optional, for webhook triggers) <input name="auth_token" placeholder="Leave blank for public"></label>
+<button>Save</button>
+</form>
