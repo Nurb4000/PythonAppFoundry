@@ -109,3 +109,45 @@ def view_all_dependencies(module_id):
   </div>
 </div>
 ''', module=module, incoming=incoming, outgoing=outgoing)
+
+
+@dependency_extended_bp.route('/modules/<int:module_id>/dependencies/stats')
+@admin_required
+def dependency_stats(module_id):
+    """View dependency statistics for a module."""
+    from app.models import ModuleDependency, Module
+    
+    module = db.session.get(Module, module_id)
+    if not module:
+        flash('Module not found', 'error')
+        return redirect(url_for('admin.list_modules'))
+    
+    # Count incoming and outgoing dependencies
+    incoming_count = ModuleDependency.query.filter_by(target_module_id=module_id).count()
+    outgoing_count = ModuleDependency.query.filter_by(source_module_id=module_id).count()
+    
+    # Count by type
+    route_refs = ModuleDependency.query.filter_by(source_module_id=module_id, dependency_type='route_reference').count()
+    script_refs = ModuleDependency.query.filter_by(source_module_id=module_id, dependency_type='script_reference').count()
+    form_refs = ModuleDependency.query.filter_by(source_module_id=module_id, dependency_type='form_reference').count()
+    
+    return render_admin(f'Dependency Stats: {module.name}', '''
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+  <div class="dash-card">
+    <h3>Summary</h3>
+    <ul style="margin:0;padding-left:1.5rem;line-height:1.8;">
+      <li><strong>Incoming:</strong> {{ incoming_count }}</li>
+      <li><strong>Outgoing:</strong> {{ outgoing_count }}</li>
+    </ul>
+  </div>
+  
+  <div class="dash-card">
+    <h3>By Type (Outgoing)</h3>
+    <ul style="margin:0;padding-left:1.5rem;line-height:1.8;">
+      <li>Route References: {{ route_refs }}</li>
+      <li>Script References: {{ script_refs }}</li>
+      <li>Form References: {{ form_refs }}</li>
+    </ul>
+  </div>
+</div>
+''', module=module, incoming_count=incoming_count, outgoing_count=outgoing_count, route_refs=route_refs, script_refs=script_refs, form_refs=form_refs)
