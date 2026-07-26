@@ -4,6 +4,28 @@ from flask import Blueprint, request, redirect, url_for, flash
 backup_extended_bp = Blueprint('backup_extended', __name__)
 
 
+@backup_extended_bp.route('/backup/restore-latest', methods=['POST'])
+@admin_required
+@csrf_protect
+def restore_latest_backup():
+    """Restore from the latest backup."""
+    from app.services.backup import list_backups, restore_backup
+    
+    backups = list_backups()
+    if not backups:
+        flash('No backups available', 'error')
+        return redirect(url_for('admin.list_backups'))
+    
+    latest = backups[0]  # Most recent first
+    try:
+        restore_backup(latest['path'])
+        flash(f'Restored from {latest["filename"]}. Restart the application to apply changes.')
+    except Exception as e:
+        flash(f'Restore failed: {e}', 'error')
+    
+    return redirect(url_for('admin.list_backups'))
+
+
 @backup_extended_bp.route('/backup/schedule', methods=['GET', 'POST'])
 @admin_required
 @csrf_protect
