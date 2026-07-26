@@ -1,8 +1,8 @@
 """Admin routes for module management."""
-from flask import Blueprint, request, redirect, url_for, render_template, render_template_string, flash
+from flask import Blueprint, request, redirect, url_for, render_template, flash
 from app.services.csrf import csrf_protect
 from app.services.validation import validate_slug
-from app.services.admin_utils import developer_or_admin_required, admin_required, create_auto_version, render_admin, ADMIN_TEMPLATE
+from app.services.admin_utils import developer_or_admin_required, admin_required, create_auto_version, render_admin
 from app.services.scheduler import refresh_tasks
 from app import db
 from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport
@@ -41,10 +41,7 @@ def list_modules():
         delete_url=url_for('admin.modules.delete_module', id=0).rsplit('/', 1)[0],
         bpmn_url=url_for('bpmn.designer', module_id=0).replace('module_id=0', 'module_id='),
         sort_col=sort_col, sort_order=sort_order)
-    return render_template_string(ADMIN_TEMPLATE, title='Modules', content=content)
-
-
-MODULE_LIST_TEMPLATE_REMOVED = True
+    return render_template('admin/base.html', title='Modules', content=content)
 
 
 @modules_bp.route('/new', methods=['GET', 'POST'])

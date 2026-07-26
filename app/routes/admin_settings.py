@@ -1,4 +1,4 @@
-from flask import Blueprint, request, redirect, url_for, render_template_string, flash
+from flask import Blueprint, request, redirect, url_for, flash
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, render_admin
 from app import db

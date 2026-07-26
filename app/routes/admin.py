@@ -1,4 +1,4 @@
-from flask import Blueprint, request, redirect, url_for, render_template_string, abort, jsonify, flash, Response
+from flask import Blueprint, request, redirect, url_for, abort, jsonify, flash, Response
 from app.services.scheduler import refresh_tasks
 from app.services.csrf import csrf_protect, csrf_token
 from app.services.validation import validate_slug, validate_route_slug, validate_cron_expression
@@ -10,8 +10,6 @@ from app.services.admin_utils import (
     render_admin as _render_admin,
     list_view as _list_view,
     _export_csv as _export_csv_util,
-    ADMIN_TEMPLATE,
-    LIST_TEMPLATE,
 )
 from flask_login import login_required, current_user
 from sqlalchemy import func, inspect as sa_inspect

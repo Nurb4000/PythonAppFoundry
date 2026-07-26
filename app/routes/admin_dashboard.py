@@ -1,5 +1,5 @@
-from flask import Blueprint, request, redirect, url_for, render_template, render_template_string, flash
-from app.services.admin_utils import admin_required, render_admin, ADMIN_TEMPLATE
+from flask import Blueprint, request, redirect, url_for, render_template, flash
+from app.services.admin_utils import admin_required, render_admin
 from app import db
 from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, User, Upload, Setting, ExecutionLog, IncomingEmail
 
@@ -135,7 +135,7 @@ def dashboard():
         table_stats=table_stats, total_rows=total_rows,
         module_summary=module_summary,
     )
-    return render_template_string(ADMIN_TEMPLATE, title='Dashboard', content=content)
+    return render_template('admin/base.html', title='Dashboard', content=content)
 
 
 
