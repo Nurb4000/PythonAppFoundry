@@ -133,7 +133,7 @@ def import_module_route(id):
             pass
         
         flash(f'Module "{module.name}" imported successfully!')
-        return redirect(url_for('admin.list_modules'))
+        return redirect(url_for('admin.modules.list_modules'))
     except Exception as e:
         flash(f'Import failed: {e}', 'error')
         return redirect(url_for('chat.view_session', id=id))

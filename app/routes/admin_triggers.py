@@ -6,14 +6,14 @@ from app.models import Module, Script, Trigger
 
 triggers_bp = Blueprint('triggers', __name__)
 
-@triggers_bp.route('/triggers')
+@triggers_bp.route('/')
 @admin_required
 def list_triggers():
     return list_view(Trigger, 'triggers',
         ['id', 'name', 'event_type', 'target_table', 'enabled'],
         'admin.triggers.edit_trigger', 'admin.triggers.new_trigger', has_module=True)
 
-@triggers_bp.route('/triggers/new', methods=['GET', 'POST'])
+@triggers_bp.route('/new', methods=['GET', 'POST'])
 @admin_required
 @csrf_protect
 def new_trigger():
@@ -32,7 +32,7 @@ def new_trigger():
         return redirect(url_for('admin.triggers.list_triggers'))
     return render_admin('New Trigger', 'admin/triggers/new.html', modules=modules, scripts=scripts)
 
-@triggers_bp.route('/triggers/edit/<int:id>', methods=['GET', 'POST'])
+@triggers_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
 @csrf_protect
 def edit_trigger(id):

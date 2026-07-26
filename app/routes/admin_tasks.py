@@ -20,14 +20,14 @@ def _validate_cron(expr):
         return str(e)
     return None
 
-@tasks_bp.route('/tasks')
+@tasks_bp.route('/')
 @admin_required
 def list_tasks():
     return list_view(ScheduledTask, 'scheduled tasks',
         ['id', 'name', 'cron_expression', 'enabled', 'last_run', 'next_run'],
         'admin.tasks.edit_task', 'admin.tasks.new_task', has_module=True)
 
-@tasks_bp.route('/tasks/new', methods=['GET', 'POST'])
+@tasks_bp.route('/new', methods=['GET', 'POST'])
 @admin_required
 @csrf_protect
 def new_task():
@@ -51,7 +51,7 @@ def new_task():
         return redirect(url_for('admin.tasks.list_tasks'))
     return render_admin('New Scheduled Task', 'admin/tasks/new.html', modules=modules, scripts=scripts)
 
-@tasks_bp.route('/tasks/edit/<int:id>', methods=['GET', 'POST'])
+@tasks_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
 @csrf_protect
 def edit_task(id):

@@ -188,7 +188,7 @@ def create_app(config_class=None):
                 <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
                 <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
                 <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
-                <a href="/__admin/integration-health" style="color:#eee;text-decoration:none">Integrations</a>
+                <a href="/__admin/dashboard/integration-health" style="color:#eee;text-decoration:none">Integrations</a>
                 <a href="/__admin/settings" style="color:#eee;text-decoration:none">Settings</a>
                 <span style="flex:1"></span>
                 <span>{current_user.username}</span>
@@ -236,7 +236,7 @@ def create_app(config_class=None):
 
         # Migrate: add missing columns
         from sqlalchemy import inspect as sa_inspect
-        engine = db.get_engine(app)
+        engine = db.get_engine()
         inspector = sa_inspect(engine)
         routes_cols = {c['name'] for c in inspector.get_columns('routes')}
         if 'allowed_groups' not in routes_cols:

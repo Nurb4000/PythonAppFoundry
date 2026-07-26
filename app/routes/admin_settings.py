@@ -7,7 +7,7 @@ from app.models import Setting
 settings_bp = Blueprint('settings', __name__)
 
 
-@settings_bp.route('/settings', methods=['GET', 'POST'])
+@settings_bp.route('/', methods=['GET', 'POST'])
 @admin_required
 @csrf_protect
 def edit_settings():
@@ -88,7 +88,7 @@ def edit_settings():
         imap_retention_days=imap_retention_days)
 
 
-@settings_bp.route('/settings/test-email', methods=['GET', 'POST'])
+@settings_bp.route('/test-email', methods=['GET', 'POST'])
 @admin_required
 @csrf_protect
 def test_email():

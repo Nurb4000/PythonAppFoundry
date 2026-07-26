@@ -20,7 +20,7 @@ def backup_database():
         return redirect(url_for('admin.dashboard.dashboard'))
 
 
-@backup_bp.route('/backups')
+@backup_bp.route('/list')
 @admin_required
 def list_backups():
     """List available backups."""
@@ -29,7 +29,7 @@ def list_backups():
     return render_admin('Backups', 'admin/backup/list.html', backups=backups)
 
 
-@backup_bp.route('/backups/<path:path>/download')
+@backup_bp.route('/<path:path>/download')
 @admin_required
 def download_backup(path):
     """Download a backup file."""
@@ -42,7 +42,7 @@ def download_backup(path):
     return redirect(url_for('admin.backup.list_backups'))
 
 
-@backup_bp.route('/backups/<path:path>/delete', methods=['POST'])
+@backup_bp.route('/<path:path>/delete', methods=['POST'])
 @admin_required
 @csrf_protect
 def delete_backup(path):
@@ -58,7 +58,7 @@ def delete_backup(path):
     return redirect(url_for('admin.backup.list_backups'))
 
 
-@backup_bp.route('/backups/restore/<path:path>', methods=['POST'])
+@backup_bp.route('/restore/<path:path>', methods=['POST'])
 @admin_required
 @csrf_protect
 def restore_backup(path):

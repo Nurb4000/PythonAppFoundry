@@ -106,11 +106,11 @@ def login():
                 return redirect(next_page)
             if current_user.role == 'admin':
                 if db.session.query(Route).count() == 0:
-                    next_page = url_for('admin.list_modules')
+                    next_page = url_for('admin.modules.list_modules')
                 else:
                     next_page = '/'
             elif current_user.role == 'developer':
-                next_page = url_for('admin.list_modules')
+                next_page = url_for('admin.modules.list_modules')
             else:
                 next_page = url_for('auth.profile')
             return redirect(next_page)

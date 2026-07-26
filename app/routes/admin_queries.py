@@ -11,7 +11,7 @@ queries_bp = Blueprint('queries', __name__)
 
 
 
-@queries_bp.route('/queries')
+@queries_bp.route('/')
 @developer_or_admin_required
 def list_queries():
     selected_module_id = request.args.get('module_id', type=int)
@@ -36,7 +36,7 @@ def list_queries():
                         sort_col=sort_col, sort_order=sort_order)
 
 
-@queries_bp.route('/queries/new', methods=['GET', 'POST'])
+@queries_bp.route('/new', methods=['GET', 'POST'])
 @developer_or_admin_required
 @csrf_protect
 def new_query():
@@ -65,7 +65,7 @@ def new_query():
     return render_admin('New Query', 'admin/queries/form.html', q=q, modules=modules, action=url_for('admin.queries.new_query'))
 
 
-@queries_bp.route('/queries/<int:id>', methods=['GET', 'POST'])
+@queries_bp.route('/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
 @csrf_protect
 def edit_query(id):
@@ -89,7 +89,7 @@ def edit_query(id):
     return render_admin('Edit: ' + q.name, 'admin/queries/form.html', q=q, modules=modules, action=url_for('admin.queries.edit_query', id=q.id))
 
 
-@queries_bp.route('/queries/<int:id>/delete', methods=['POST'])
+@queries_bp.route('/<int:id>/delete', methods=['POST'])
 @developer_or_admin_required
 @csrf_protect
 def delete_query(id):
@@ -100,7 +100,7 @@ def delete_query(id):
     return redirect(url_for('admin.queries.list_queries'))
 
 
-@queries_bp.route('/queries/<int:id>/run')
+@queries_bp.route('/<int:id>/run')
 @developer_or_admin_required
 def run_query(id):
     q = QueryReport.query.get_or_404(id)

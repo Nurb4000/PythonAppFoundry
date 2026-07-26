@@ -6,13 +6,13 @@ from app.models import Form, Module
 
 forms_bp = Blueprint('forms', __name__)
 
-@forms_bp.route('/forms')
+@forms_bp.route('/')
 @developer_or_admin_required
 def list_forms():
     return list_view(Form, 'forms', ['id', 'name'],
         'admin.forms.edit_form', 'admin.forms.new_form', has_module=True)
 
-@forms_bp.route('/forms/new', methods=['GET', 'POST'])
+@forms_bp.route('/new', methods=['GET', 'POST'])
 @developer_or_admin_required
 @csrf_protect
 def new_form():
@@ -28,7 +28,7 @@ def new_form():
         return redirect(url_for('admin.forms.list_forms'))
     return render_admin('New Form', 'admin/forms/new.html', modules=modules)
 
-@forms_bp.route('/forms/edit/<int:id>', methods=['GET', 'POST'])
+@forms_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
 @csrf_protect
 def edit_form(id):
