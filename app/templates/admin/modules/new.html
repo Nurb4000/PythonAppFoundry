@@ -11,6 +11,7 @@
     <div id="previewContent"></div>
     <form method="POST" enctype="multipart/form-data" id="importSubmitForm" style="margin-top:1rem;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="file" name="import_xml" id="importSubmitFile" style="display:none;">
       <button type="submit">Confirm Import</button>
       <button type="button" onclick="document.getElementById('importPreview').style.display='none'" style="margin-left:0.5rem;background:#6c757d;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;">Cancel</button>
     </form>
@@ -44,6 +45,7 @@ function previewImport() {
       html += '</p><ul><li>Scripts: ' + p.counts.scripts + '</li><li>Routes: ' + p.counts.routes + '</li><li>Forms: ' + p.counts.forms + '</li><li>Tasks: ' + p.counts.tasks + '</li><li>Triggers: ' + p.counts.triggers + '</li></ul>';
       document.getElementById('previewContent').innerHTML = html;
       document.getElementById('importPreview').style.display = 'block';
+      document.getElementById('importSubmitFile').files = fileInput.files;
     })
     .catch(function(err) { alert('Request failed: ' + err.message); });
 }
