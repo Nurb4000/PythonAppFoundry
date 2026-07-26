@@ -77,6 +77,11 @@ def create_app(config_class=None):
     def jinja_attr(obj, name):
         return getattr(obj, name, '')
 
+    @app.route('/healthz')
+    def health_check():
+        from flask import jsonify
+        return jsonify({'status': 'ok'}), 200
+
     @app.after_request
     def inject_admin_bar(response):
         if response.content_type and 'text/html' in response.content_type:
