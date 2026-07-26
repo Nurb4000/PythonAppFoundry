@@ -8,7 +8,7 @@ from sqlalchemy import Table
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, developer_or_admin_required, render_admin
 from app import db
-from app.models import Script, DynamicTableRegistry
+from app.models import Script, DynamicTableRegistry, Module
 
 data_bp = Blueprint('data', __name__)
 
@@ -107,8 +107,7 @@ def list_tables():
             headers={'Content-Disposition': 'attachment; filename=tables.csv'})
 
     module_names = sorted(set(
-        v for vv in table_modules.values()
-        for v in (vv if isinstance(vv, list) else [vv])
+        m.name for m in Module.query.order_by(Module.name).all()
     ))
 
     return render_admin('Database Tables', 'admin/data/list.html', tables=tables, module_names=module_names, filter_module=filter_module,
