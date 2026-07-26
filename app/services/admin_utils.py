@@ -106,71 +106,7 @@ class AttrProxy:
         return str(val or '')
 
 
-ADMIN_TEMPLATE = '''<!DOCTYPE html>
-<html>
-<head><title>Admin - {{ title }}</title>
-<style>
-body { font-family: system-ui, sans-serif; max-width: 1400px; margin: 0 auto; padding: 1rem; }
-nav a { margin-right: 1rem; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; white-space: nowrap; }
-th a { color: inherit; text-decoration: none; display: inline-block; }
-th a:hover { color: #2563eb; }
-.flash { background: #d4edda; padding: 0.5rem; margin: 1rem 0; }
-.table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid #eee; border-radius: 4px; }
-.table-wrap::-webkit-scrollbar { height: 10px; }
-.table-wrap::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 5px; }
-.table-wrap::-webkit-scrollbar-thumb { background: #bbb; border-radius: 5px; }
-.table-wrap::-webkit-scrollbar-thumb:hover { background: #888; }
-</style>
-</head>
-<body>
-<h1>{{ title }}</h1>
-{% for msg in get_flashed_messages() %}<div class="flash">{{ msg }}</div>{% endfor %}
-{{ content|safe }}
-<div style="text-align:center;color:#999;font-size:0.8em;margin-top:2rem;padding:1rem 0;border-top:1px solid #eee;">Copyright 2026 IDS</div>
-</body>
-</html>
-'''
 
-LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
-  <a href="{{ new_url }}">+ New</a>
-  {% if modules %}
-  <form method="GET" style="display:inline;">
-    <select name="module_id" onchange="this.form.submit()" style="padding:4px 8px;">
-      <option value="">All Modules</option>
-      {% for m in modules %}
-      <option value="{{ m.id }}" {% if selected_module_id == m.id %}selected{% endif %}>{{ m.name }}</option>
-      {% endfor %}
-    </select>
-    {% if sort_col %}<input name="sort" type="hidden" value="{{ sort_col }}">{% endif %}
-    {% if sort_order %}<input name="order" type="hidden" value="{{ sort_order }}">{% endif %}
-  </form>
-  {% endif %}
-  <a href="?format=csv{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}" style="margin-left:auto;">Export CSV</a>
-</div>
-<div class="table-wrap">
-<table>
-<thead><tr>
-  {% if has_module %}<th><a href="?sort=module_id&order={% if sort_col == 'module_id' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">Module{% if sort_col == 'module_id' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>{% endif %}
-  {% for col in columns %}
-  <th><a href="?sort={{ col }}&order={% if sort_col == col and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">{{ col }}{% if sort_col == col %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
-  {% endfor %}
-  <th>Actions</th>
-</tr></thead>
-<tbody>
-{% for row in rows %}
-<tr>
-  {% if has_module %}<td>{{ row._module_name }}</td>{% endif %}
-  {% for col in columns %}<td>{{ row|attr(col) }}</td>{% endfor %}
-  <td>
-    {% if show_view and row._obj.slug %}<a href="{{ row._obj.slug }}" target="_blank">View</a> | {% endif %}
-    <a href="{{ edit_url }}/{{ row.id }}">Edit</a>
-  </td>
-</tr>
-{% endfor %}
-</tbody></table>
-</div>'''
 
 
 def render_admin(title, content_template, **kwargs):
@@ -179,7 +115,7 @@ def render_admin(title, content_template, **kwargs):
         content = render_template(content_template, **kwargs)
     else:
         content = render_template_string(content_template, **kwargs)
-    return render_template_string(ADMIN_TEMPLATE, title=title, content=content)
+    return render_template('admin/base.html', title=title, content=content)
 
 
 def list_view(model, name_plural, columns, edit_endpoint, new_endpoint, show_view=False, has_module=False):
@@ -205,7 +141,7 @@ def list_view(model, name_plural, columns, edit_endpoint, new_endpoint, show_vie
 
     modules = db.session.query(Module).order_by(Module.name).all() if has_module else []
 
-    content = render_template_string(LIST_TEMPLATE,
+    content = render_template('admin/list.html',
         columns=columns,
         rows=[AttrProxy(r) for r in rows],
         new_url=current_app.url_for(new_endpoint),
@@ -217,7 +153,7 @@ def list_view(model, name_plural, columns, edit_endpoint, new_endpoint, show_vie
         sort_col=sort_col,
         sort_order=sort_order,
     )
-    return render_template_string(ADMIN_TEMPLATE,
+    return render_template('admin/base.html',
         title=name_plural.title(),
         content=content,
     )
