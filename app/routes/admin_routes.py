@@ -1,7 +1,8 @@
 """Admin routes for route management."""
 from flask import Blueprint, request, redirect, url_for, render_template_string, flash
 from app.services.csrf import csrf_protect
-from app.services.admin_utils import developer_or_admin_required, list_view, validate_route_slug, render_admin
+from app.services.admin_utils import developer_or_admin_required, list_view, render_admin
+from app.services.validation import validate_route_slug
 from app import db
 from app.models import Route, Module, Script, Form, Group
 
