@@ -10,8 +10,10 @@ migrate = Migrate()
 
 
 def create_app(config_class=None):
+    import time as _time
     app = Flask(__name__)
     app.config.from_object('app.config.Config')
+    app.config['_start_time'] = _time.time()
 
     if config_class:
         app.config.from_object(config_class)
@@ -41,6 +43,30 @@ def create_app(config_class=None):
     app.register_blueprint(dynamic_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(bpmn_bp)
+
+    from app.services.tenant import init_tenants, get_current_tenant
+    init_tenants(app)
+
+    @app.before_request
+    def select_tenant():
+        """Select tenant based on subdomain or path prefix."""
+        from app.services.tenant import set_current_tenant, get_tenant_by_subdomain, get_tenant_by_path_prefix
+        host = request.host.split(':')[0]  # Remove port
+        subdomain = host.split('.')[0] if '.' in host else ''
+        
+        # Check if this is a subdomain-based tenant
+        if subdomain and subdomain != 'www':
+            tenant = get_tenant_by_subdomain(subdomain)
+            if tenant:
+                set_current_tenant(tenant)
+                return
+        
+        # Check path prefix (e.g., /tenant-slug/...)
+        path_prefix = request.path.split('/')[1] if request.path.count('/') > 1 else ''
+        if path_prefix and path_prefix not in ('__admin', '__api', '__auth', 'static', 'uploads', 'healthz'):
+            tenant = get_tenant_by_path_prefix(path_prefix)
+            if tenant:
+                set_current_tenant(tenant)
 
     from app.services.csrf import generate_csrf_token
 
@@ -80,11 +106,54 @@ def create_app(config_class=None):
     @app.route('/healthz')
     def health_check():
         from flask import jsonify
-        return jsonify({'status': 'ok'}), 200
+        import time as _time
+        checks = {'status': 'ok'}
+        errors = []
+        
+        # Check database connectivity
+        try:
+            from sqlalchemy import text
+            db.session.execute(text('SELECT 1'))
+            checks['database'] = 'connected'
+        except Exception as e:
+            errors.append(f'database: {e}')
+            checks['database'] = 'error'
+        
+        # Check scheduler status
+        try:
+            from app.services.scheduler import _scheduler
+            if _scheduler is not None:
+                checks['scheduler'] = f'running ({len(_scheduler.get_jobs())} jobs)'
+            else:
+                checks['scheduler'] = 'not initialized'
+        except Exception as e:
+            errors.append(f'scheduler: {e}')
+            checks['scheduler'] = 'error'
+        
+        # Check IMAP if enabled
+        try:
+            from app.models import Setting
+            if Setting.get('imap_enabled', 'false') == 'true':
+                checks['imap'] = 'configured'
+            else:
+                checks['imap'] = 'disabled'
+        except Exception:
+            checks['imap'] = 'unknown'
+        
+        checks['uptime_seconds'] = round(_time.time() - _app.config.get('_start_time', _time.time()), 1)
+        
+        if errors:
+            checks['errors'] = errors
+            return jsonify(checks), 503
+        
+        return jsonify(checks), 200
 
     @app.after_request
     def inject_admin_bar(response):
         if response.content_type and 'text/html' in response.content_type:
+            # Skip API responses and non-HTML content types
+            if 'application/json' in response.content_type:
+                return response
             from app.models import Setting
             site_name = Setting.get('site_name', '')
             body = response.get_data(as_text=True)
@@ -167,7 +236,8 @@ def create_app(config_class=None):
 
         # Migrate: add missing columns
         from sqlalchemy import inspect as sa_inspect
-        inspector = sa_inspect(db.engine)
+        engine = db.get_engine(app)
+        inspector = sa_inspect(engine)
         routes_cols = {c['name'] for c in inspector.get_columns('routes')}
         if 'allowed_groups' not in routes_cols:
             from sqlalchemy import text
@@ -223,7 +293,7 @@ def create_app(config_class=None):
         from sqlalchemy import inspect as _sa_inspect
         from app.models import DynamicTableRegistry, Script as _Script
         try:
-            _inspector = _sa_inspect(db.engine)
+            _inspector = _sa_inspect(db.session.get_bind())
             _existing_tables = set(_inspector.get_table_names())
             _registry_names = {r.table_name for r in db.session.query(DynamicTableRegistry.table_name).all()}
 

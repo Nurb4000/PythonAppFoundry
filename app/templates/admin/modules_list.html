@@ -1,0 +1,57 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ new_url }}">+ New</a>
+  <a href="?format=csv{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}" style="margin-left:auto;">Export CSV</a>
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th><a href="?sort=id&order={% if sort_col == 'id' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">id{% if sort_col == 'id' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=name&order={% if sort_col == 'name' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">name{% if sort_col == 'name' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=slug&order={% if sort_col == 'slug' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">slug{% if sort_col == 'slug' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=version&order={% if sort_col == 'version' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">version{% if sort_col == 'version' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=author&order={% if sort_col == 'author' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">author{% if sort_col == 'author' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=enabled&order={% if sort_col == 'enabled' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">enabled{% if sort_col == 'enabled' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Deps</th>
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for m in modules %}
+<tr>
+<td>{{ m.id }}</td>
+<td>{{ m.name }}{% if m.is_system %}&nbsp;<span style="background:#6c757d;color:#fff;font-size:0.75em;padding:1px 6px;border-radius:3px;">system</span>{% endif %}</td>
+<td>{{ m.slug }}</td><td>{{ m.version }}</td><td>{{ m.author }}</td><td>{{ m.enabled }}</td>
+<td>
+  {% if dep_counts[m.id] > 0 %}
+    <a href="{{ url_for('admin.view_dependencies', module_id=m.id) }}" style="color:#d00;font-weight:bold;text-decoration:underline;">{{ dep_counts[m.id] }}</a>
+  {% else %}
+    <span style="color:#999;">—</span>
+  {% endif %}
+</td>
+<td>
+  <a href="{{ edit_url }}/{{ m.id }}">Edit</a>
+  <a href="{{ url_for('admin.list_versions', module_id=m.id) }}">Versions</a>
+  <a href="{{ export_url }}/{{ m.slug }}/export">Export XML</a>
+  <form method="POST" action="{{ url_for('admin.clone_module', id=m.id) }}" style="display:inline">
+    <button type="submit" style="background:none;border:none;color:#06c;cursor:pointer;text-decoration:underline;padding:0;font:inherit" title="Clone module">Clone</button>
+  </form>
+  <a href="{{ chat_url }}/{{ m.id }}">Refine in AI</a>
+  {% if m.bpmn_xml %}<a href="{{ bpmn_url }}{{ m.id }}">BPMN</a>{% endif %}
+  <form method="POST" action="{{ url_for('admin.scan_dependencies', module_id=m.id) }}" style="display:inline">
+    <button type="submit" style="background:none;border:none;color:#06c;cursor:pointer;text-decoration:underline;padding:0;font:inherit" title="Scan for dependencies">Scan</button>
+  </form>
+  {% if m.is_system %}
+  <form method="POST" action="{{ url_for('admin.reset_system_module', id=m.id) }}" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" style="background:none;border:none;color:#856404;cursor:pointer;text-decoration:underline;padding:0;font:inherit" onclick="return confirm('Reset &quot;{{ m.name }}&quot; to default? This will delete all routes, scripts, forms, tasks, triggers, and queries.');">Reset</button>
+  </form>
+  {% else %}
+  <form method="POST" action="{{ url_for('admin.delete_module', id=m.id) }}" style="display:inline" onsubmit="var c=this.querySelector('[name=drop_tables]');return confirm('Delete module &quot;{{ m.name }}&quot;'+(c&&c.checked?' including its database tables?':' and all its routes, scripts, forms?'))">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label style="font-weight:normal;font-size:0.85em;"><input name="drop_tables" type="checkbox"> Drop tables</label>
+    <button type="submit" style="background:none;border:none;color:#d00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
+  </form>
+  {% endif %}
+</td></tr>
+{% endfor %}
+</tbody></table>
+</div>

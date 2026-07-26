@@ -17,13 +17,16 @@ def init_credential_store(app):
     key_path = _get_key_path(app)
     os.makedirs(app.instance_path, exist_ok=True)
     if os.path.exists(key_path):
+        os.chmod(key_path, 0o600)
         with open(key_path, 'rb') as f:
             _key = f.read().strip()
     else:
         _key = Fernet.generate_key()
-        with open(key_path, 'wb') as f:
-            f.write(_key)
-        os.chmod(key_path, 0o600)
+        fd = os.open(key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            os.write(fd, _key)
+        finally:
+            os.close(fd)
         logger.info(f'Created credential encryption key at {key_path}')
 
 

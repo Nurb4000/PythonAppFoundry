@@ -189,8 +189,16 @@ def api_webhook(slug):
     
     Accepts JSON or form data in the request body.
     Optional auth: include ?token=XXX or Authorization: Bearer XXX header.
+    Rate limited to 30 calls/minute and 600 calls/hour per webhook slug.
     """
     from app.services.triggers import fire_webhook
+    from app.services.rate_limiter import _webhook_limiter
+    
+    # Rate limiting per webhook slug
+    client_ip = request.remote_addr or 'unknown'
+    limited, rate_msg = _webhook_limiter.is_rate_limited(f'webhook:{slug}:{client_ip}')
+    if limited:
+        return jsonify({'error': rate_msg}), 429
     
     # Extract payload from request
     if request.is_json:
@@ -207,3 +215,38 @@ def api_webhook(slug):
     fire_webhook(slug, payload, provided_token=provided_token)
     
     return jsonify({'status': 'ok', 'webhook': slug})
+
+
+# ── OpenAPI Spec ──
+
+@api_bp.route('/openapi.json')
+@login_required
+def api_openapi():
+    """Return the OpenAPI specification as JSON."""
+    from app.services.openapi import export_openapi_json
+    spec_json = export_openapi_json(current_app._get_current_object(), db.session)
+    return Response(spec_json, mimetype='application/json')
+
+
+@api_bp.route('/swagger')
+@login_required
+def api_swagger():
+    """Serve Swagger UI for the OpenAPI spec."""
+    swagger_ui = '''<!DOCTYPE html>
+<html>
+<head>
+    <title>Swagger UI - PythonAppFoundry</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+        SwaggerUIBundle({
+            url: "/__api/openapi.json",
+            dom_id: '#swagger-ui',
+        });
+    </script>
+</body>
+</html>'''
+    return swagger_ui

@@ -1,0 +1,50 @@
+version: '3.8'
+
+# Production deployment example
+# Copy this to docker-compose.prod.yml and customize environment variables
+
+services:
+  web:
+    build: .
+    ports:
+      - "80:5000"
+    environment:
+      - APP_PORT=5000
+      - APP_DEBUG=false
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://appfoundry:${DB_PASSWORD}@db:5432/pythonappfoundry
+      - LLAMA_CPP_URL=http://llamacpp:8080
+      - LLAMA_CPP_MODEL=${LLAMA_CPP_MODEL}
+    volumes:
+      - ./instance:/app/instance
+      - ./marketplace:/app/marketplace
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=appfoundry
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=pythonappfoundry
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appfoundry"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

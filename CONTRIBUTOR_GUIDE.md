@@ -27,14 +27,24 @@ This guide is for developers maintaining or extending the platform code itself. 
 
 | File | Lines | What It Does |
 |---|---|---|
-| `app/services/script_runner.py` | ~130 | The sandbox — compiles and `exec`s user scripts with safe builtins, injected globals, stdout capture, timeout via SIGALRM. The `_send_email()` helper lives here. |
-| `app/services/scheduler.py` | ~120 | APScheduler `BackgroundScheduler` — registers `ScheduledTask` rows as cron jobs, wraps execution in threads with timeout, logs to `ExecutionLog`. |
-| `app/services/triggers.py` | ~62 | Queries enabled `Trigger` rows by event_type + target_table and fires scripts synchronously. Called from `dynamic.py` (after_route) and `api.py` (webhook). |
-| `app/services/ai_assistant.py` | ~160 | LLM integration — reads provider settings from `Setting` model, builds system prompt from `AI_GUIDE.md`, dispatches to llama.cpp or OpenAI, extracts XML from response. |
-| `app/services/bundle.py` | ~170 | Module XML serialization/deserialization. `export_module()` walks model relationships and builds XML. `import_module()` parses XML, creates/updates module and all children, bumps version, detects dependencies. |
-| `app/services/dependencies.py` | ~70 | Scans scripts for `url_for('other_slug.')`, `redirect('/other_slug/')`, and cross-module `script_id=` references. |
-| `app/services/file_upload.py` | ~70 | Secure upload — random filename via `secrets.token_hex(12)`, stores in `instance/uploads/`, creates `Upload` record. |
-| `app/services/versioning.py` | ~90 | Module version snapshots — exports module to XML, stores as `ModuleVersion` with auto-incremented patch version. Restore via `bundle.import_module()`. Diff via `difflib.unified_diff`. |
+| `app/services/script_runner.py` | ~250 | The sandbox — compiles and `exec`s user scripts with safe builtins, blocked imports (`os`, `subprocess`, `sys`, `socket`, etc.), injected globals, stdout capture, timeout via SIGALRM (main thread) or threading (tasks). The `_send_email()` helper lives here. |
+| `app/services/scheduler.py` | ~200 | APScheduler `BackgroundScheduler` — registers `ScheduledTask` rows as cron jobs, wraps execution in threads with timeout, logs to `ExecutionLog`. Also handles query report checks and IMAP polling. |
+| `app/services/triggers.py` | ~100 | Queries enabled `Trigger` rows by event_type + target_table and fires scripts synchronously. Webhook triggers include retry logic (3 attempts) and dead letter queue for failures. |
+| `app/services/ai_assistant.py` | ~180 | LLM integration — reads provider settings from `Setting` model, builds system prompt from `AI_GUIDE.md`, dispatches to llama.cpp or OpenAI, extracts XML from response. |
+| `app/services/bundle.py` | ~330 | Module XML serialization/deserialization. `export_module()` walks model relationships and builds XML. `import_module()` parses XML, creates/updates module and all children, bumps version, detects dependencies, installs requirements. |
+| `app/services/dependencies.py` | ~110 | Scans scripts for `url_for('other_slug.')`, `redirect('/other_slug/')`, and cross-module `script_id=` references. Uses proper regex capture groups to avoid catastrophic backtracking. |
+| `app/services/file_upload.py` | ~80 | Secure upload — random filename via `secrets.token_hex(12)`, stores in `instance/uploads/`, creates `Upload` record. |
+| `app/services/versioning.py` | ~120 | Module version snapshots — exports module to XML, stores as `ModuleVersion` with auto-incremented patch version. Restore via `bundle.import_module()`. Diff via `difflib.unified_diff`. |
+| `app/services/credential_store.py` | ~45 | Fernet encryption for API keys/secrets. Key file created atomically with `O_CREAT|O_EXCL|0o600`. Module-scoped access via `get_credential()`. |
+| `app/services/csrf.py` | ~35 | CSRF token generation/validation. Supports form, header (`X-CSRF-Token`), and JSON token extraction. |
+| `app/services/rate_limiter.py` | ~45 | In-memory rate limiting for auth endpoints (5 attempts/5 min) and webhooks (30/min, 600/hr per slug). |
+| `app/services/validation.py` | ~80 | Input validation utilities: `validate_slug()`, `validate_route_slug()`, `validate_cron_expression()`, `validate_email()`, `validate_username()`. |
+| `app/services/admin_utils.py` | ~150 | Shared admin patterns extracted from monolithic `admin.py`: decorators (`admin_required`, `developer_or_admin_required`), `AttrProxy`, `render_admin()`, `list_view()`, `_export_csv()`. |
+| `app/services/backup.py` | ~90 | Database backup/restore — copies SQLite DB to `instance/backups/`, supports listing, downloading, restoring (with emergency backup), and deletion. |
+| `app/services/marketplace.py` | ~60 | Module marketplace — list/publish/remove modules from `marketplace/` directory as JSON entries. |
+| `app/services/openapi.py` | ~100 | OpenAPI 3.0 spec generation from route table. Exports JSON spec and provides Swagger UI endpoint. |
+| `app/services/structured_logging.py` | ~80 | JSON-formatted structured logging with context (script, module, user). Includes execution and webhook loggers. |
+| `app/services/tenant.py` | ~70 | Multi-tenant support — tenant selection via subdomain or path prefix, `tenant_required` decorator, in-memory tenant store. |
 
 ### Models
 

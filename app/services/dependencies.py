@@ -24,35 +24,40 @@ def detect_dependencies(module_id):
 
     dependencies_found = []
 
+    # Build a combined regex pattern for all slugs (safe since slugs are URL-safe)
+    escaped_slugs = [re.escape(slug) for slug in module_slugs.keys()]
+    slug_alt = '|'.join(escaped_slugs) if escaped_slugs else ''
+
     # Scan all scripts in the module
     scripts = Script.query.filter_by(module_id=module_id).all()
     for script in scripts:
         source_code = script.source_code or ''
 
         # Pattern 1: References to other modules by slug (e.g., url_for('module_slug.route'), redirect('/module_slug/...'))
-        slug_patterns = [
-            r"url_for\s*\(\s*['\"]" + r"|'.*".join([re.escape(slug) for slug in module_slugs.keys()]) + r"['\"]",
-            r"redirect\s*\(\s*['\"]/" + r"|'.*".join([re.escape(slug) for slug in module_slugs.keys()]) + r"['\"]",
-            r"request\.url_root.*" + r"|'.*".join([re.escape(slug) for slug in module_slugs.keys()]) + r"['\"]",
-        ]
+        slug_patterns = []
+        if slug_alt:
+            slug_patterns.append(r"url_for\s*\(\s*['\"](" + slug_alt + r")['\"]")
+            slug_patterns.append(r"redirect\s*\(\s*['\"]/" + r"/'.*".join([re.escape(slug) for slug in module_slugs.keys()]) + r"['\"]")
+            slug_patterns.append(r"request\.url_root.*?(" + slug_alt + r")")
 
         for pattern in slug_patterns:
-            matches = re.finditer(pattern, source_code, re.IGNORECASE)
-            for match in matches:
-                # Extract the slug from the match
-                for slug in module_slugs.keys():
-                    if slug in match.group(0):
-                        target_module_id = module_slugs[slug]
+            try:
+                matches = re.finditer(pattern, source_code, re.IGNORECASE)
+                for match in matches:
+                    matched_slug = match.group(1) if match.groups() else None
+                    if matched_slug and matched_slug in module_slugs:
+                        target_module_id = module_slugs[matched_slug]
                         dep = ModuleDependency(
                             source_module_id=module_id,
                             target_module_id=target_module_id,
                             dependency_type='route_reference',
-                            reference_value=slug,
+                            reference_value=matched_slug,
                             detected_at=datetime.now(timezone.utc)
                         )
                         db.session.add(dep)
-                        dependencies_found.append((script.name, slug, 'route_reference'))
-                        break
+                        dependencies_found.append((script.name, matched_slug, 'route_reference'))
+            except re.error:
+                continue
 
         # Pattern 2: References to other modules' scripts by ID
         script_ref_pattern = r'script_id\s*=\s*(\d+)'

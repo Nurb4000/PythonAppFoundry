@@ -32,6 +32,8 @@ The dark bar at the top of every page (when logged in as admin) links to all adm
 | Integrations | `/__admin/integration-health` | Script/task execution health, errors, and latency |
 | Settings | `/__admin/settings` | Registration, LLM, SMTP, IMAP, and script controls |
 | Dashboard | `/__admin/dashboard` | System health overview, execution logs, and scheduler status |
+| Backups | `/__admin/backups` | Database backup/restore management |
+| Marketplace | `/__admin/marketplace` | Browse and install modules from the marketplace |
 
 ## Getting Started
 
@@ -588,3 +590,285 @@ _result = render_chart('bar', labels, datasets, title='Sales Overview')
 Supported chart types: `bar`, `line`, `pie`, `doughnut`, `polarArea`, `radar`.
 
 The helper auto-loads Chart.js from `/static/chart.umd.min.js` if not already present on the page. Charts render inside a responsive container (max 600px width).
+
+## Database Backup & Restore
+
+Database backups are managed from `/__admin/backups` (admin only).
+
+**Creating a backup:**
+1. Go to **Backups** (`/__admin/backups`)
+2. Click **Create New Backup**
+3. The backup is stored in `instance/backups/database_YYYYMMDD_HHMMSS.db`
+
+**Restoring a backup:**
+1. Go to **Backups** and find the backup you want to restore
+2. Click **Restore** next to the backup
+3. The system creates an emergency backup of the current database before restoring
+4. **Restart the application** after restoring to load the new database
+
+**Downloading a backup:**
+- Click **Download** to save the backup file locally
+
+Backups are stored with `0600` permissions (owner read/write only).
+
+## Script Testing
+
+The script editor now includes a **Test Script** button that runs the script in a sandboxed environment and shows the result in a modal popup. This is useful for quick testing without navigating to the actual route.
+
+1. Go to **Scripts** → edit any script
+2. Click **Test Script** (green button)
+3. View the result, output, or error in the modal
+
+## XML Import Preview
+
+Before importing a module XML, you can now preview what will be imported:
+
+1. Go to **Modules** → **+ New**
+2. Click **Import from XML**
+3. Select an XML file and click **Preview Import**
+4. See counts of scripts, routes, forms, tasks, and triggers that will be imported
+5. Confirm the import if everything looks correct
+
+## OpenAPI Specification
+
+The platform auto-generates an OpenAPI 3.0 specification from all registered routes:
+
+- **JSON spec:** `/__api/openapi.json` (requires login)
+- **Swagger UI:** `/__api/swagger` (requires login)
+
+This makes it easy to document your platform's API for external consumers or integrate with API testing tools.
+
+## Module Marketplace
+
+Share and discover modules via the built-in marketplace:
+
+- **Browse:** `/__admin/marketplace`
+- **Publish:** Use `app.services.marketplace.publish_module()` to add a module
+- **Install:** Click **Install** on any marketplace entry
+
+Marketplace entries are stored as JSON files in the `marketplace/` directory.
+
+## Webhook Reliability
+
+Webhooks now include automatic retry logic:
+
+- **Retries:** Up to 3 attempts with exponential backoff
+- **Dead letter queue:** Failed webhooks after all retries are logged to the dead letter queue
+- **Monitoring:** Check `/__admin/integration-health` for webhook status
+
+## Security Features
+
+### Script Sandbox
+
+Scripts run in a hardened sandbox:
+- Cannot import `os`, `subprocess`, `sys`, `socket`, `http`, `urllib`, `requests`, etc.
+- Custom `__import__` function blocks dangerous modules
+- Timeout enforcement via SIGALRM (main thread) or threading (scheduled tasks)
+
+### Webhook Rate Limiting
+
+Webhooks are rate limited to prevent abuse:
+- **30 calls/minute** per webhook slug per IP
+- **600 calls/hour** per webhook slug per IP
+- Exceeding limits returns HTTP 429
+
+### Settings Access Control
+
+Scripts cannot read sensitive settings:
+- `smtp_password`, `llm_api_key`, `imap_password`, `secret_key`, `database_url` are blocked
+- Use `get_setting('safe_key', 'default')` in scripts — sensitive keys return the default
+
+### TLS Verification
+
+`call_api()` now verifies SSL certificates by default:
+- Uses `ssl.create_default_context()` for certificate validation
+- Set `verify_ssl=False` to skip verification (not recommended)
+
+## Structured Logging
+
+Enable JSON-formatted structured logging for better monitoring:
+
+```python
+from app.services.structured_logging import setup_structured_logging
+setup_structured_logging(app, level=logging.INFO)
+```
+
+Logs include: timestamp, level, logger name, message, module, function, line number, and extra context (script name, module ID, user ID, etc.).
+
+## Multi-Tenant Support
+
+Basic multi-tenant isolation is available:
+
+- **Subdomain-based:** Configure tenants by subdomain (e.g., `acme.example.com`)
+- **Path-based:** Configure tenants by path prefix (e.g., `/acme/...`)
+- **Tenant selector:** Added as a before_request hook in `app/__init__.py`
+
+To add a tenant:
+```python
+from app.services.tenant import _tenants, Tenant
+
+_tenants['acme'] = Tenant(
+    id=2,
+    name='Acme Corp',
+    slug='acme',
+    config={'subdomain': 'acme', 'path_prefix': 'acme'}
+)
+```
+
+## Health Check Endpoint
+
+The `/healthz` endpoint now provides detailed health information:
+
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "scheduler": "running (5 jobs)",
+  "imap": "configured",
+  "uptime_seconds": 3600.5
+}
+```
+
+Returns HTTP 503 if any checks fail.
+
+## Docker Deployment
+
+PythonAppFoundry can be deployed using Docker and Docker Compose for easy setup and scaling.
+
+### Quick Start with Docker
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Nurb4000/PythonAppFoundry
+   cd PythonAppFoundry
+   ```
+
+2. **Configure environment:**
+   ```bash
+   cp .env.docker.example .env
+   # Edit .env and set SECRET_KEY to a secure random value!
+   ```
+
+3. **Start the application:**
+   ```bash
+   docker compose up -d
+   ```
+
+4. **Access the application:**
+   - Web UI: `http://localhost:5000/`
+   - Health check: `http://localhost:5000/healthz`
+
+### Using PostgreSQL (Production)
+
+For production deployments, use PostgreSQL instead of SQLite:
+
+1. **Edit `.env`:**
+   ```bash
+   DATABASE_URL=postgresql://appfoundry:your-password@db:5432/pythonappfoundry
+   ```
+
+2. **Start with PostgreSQL:**
+   ```bash
+   docker compose up -d
+   ```
+
+The `docker-compose.yml` includes a PostgreSQL service that will be automatically started.
+
+### Using llama.cpp (Optional)
+
+To enable AI module generation:
+
+1. **Download a GGUF model** and place it in the `models/` directory:
+   ```bash
+   mkdir -p models
+   # Download your model here, e.g., from Hugging Face
+   ```
+
+2. **Start with llama.cpp:**
+   ```bash
+   docker compose up -d llamacpp web
+   ```
+
+3. **Configure in Admin → Settings:**
+   - Provider: `llamacpp`
+   - Endpoint: `http://llamacpp:8080`
+
+### Production Deployment
+
+For production, use the provided `docker-compose.prod.yml.example`:
+
+1. **Copy and customize:**
+   ```bash
+   cp docker-compose.prod.yml.example docker-compose.prod.yml
+   # Edit with your secrets and configuration
+   ```
+
+2. **Set environment variables:**
+   ```bash
+   export SECRET_KEY=$(openssl rand -hex 32)
+   export DB_PASSWORD=$(openssl rand -hex 16)
+   ```
+
+3. **Deploy:**
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+   ```
+
+### Managing Data
+
+**Backup:**
+```bash
+docker compose exec web python -m app.services.backup create_backup
+```
+
+**Restore:**
+```bash
+docker compose exec web python -m app.services.backup restore_backup /app/instance/backups/database_YYYYMMDD_HHMMSS.db
+```
+
+**Access volumes:**
+- Application data: `./instance/`
+- Marketplace: `./marketplace/`
+- PostgreSQL: Named volume `postgres_data`
+
+### Scaling
+
+For high-availability deployments, you can run multiple web containers behind a load balancer:
+
+```bash
+docker compose up -d --scale web=3
+```
+
+Note: With SQLite, only one container should write to the database. Use PostgreSQL for multi-container setups.
+
+### Troubleshooting
+
+**Check logs:**
+```bash
+docker compose logs web
+docker compose logs db
+docker compose logs llamacpp
+```
+
+**Restart a service:**
+```bash
+docker compose restart web
+```
+
+**Stop all services:**
+```bash
+docker compose down
+```
+
+**Remove volumes (destroys data):**
+```bash
+docker compose down -v
+```
+
+### Security Notes
+
+- **Always change `SECRET_KEY`** in production — generate a random 32-byte hex string
+- **Use PostgreSQL** for production instead of SQLite
+- **Enable HTTPS** with a reverse proxy (nginx, Caddy) in production
+- **Regular backups** — use the backup feature or `pg_dump` for PostgreSQL
+- **Keep images updated** — pull latest versions of Python, PostgreSQL, and llama.cpp images

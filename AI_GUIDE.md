@@ -564,6 +564,43 @@ curl -X POST http://localhost:5000/__api/webhook/github-push \
 **Future: Authenticated webhooks:**
 A planned enhancement will add an optional `auth_token` field to trigger configurations. When a token is set, the webhook endpoint will require an `Authorization: Bearer <token>` header. Triggers without a token remain public as today. This enables secure cross-instance integration — one instance can call another's webhook with a shared secret.
 
+## Security Notes for AI-Generated Scripts
+
+### Blocked Imports
+
+Scripts **cannot** import the following modules. Attempting to do so will raise an `ImportError`:
+
+```
+os, subprocess, sys, importlib, pkg_resources, ctypes, socket, http, urllib, 
+requests, shutil, tempfile, pickle, marshal, codecs, threading, multiprocessing, signal
+```
+
+If your script needs file operations, use the platform's built-in helpers (`send_email`, `render_form`, `DynamicModel`, etc.) or store data in DynamicModel tables.
+
+### Sensitive Settings
+
+Scripts cannot read sensitive settings via `get_setting()`:
+- `smtp_password`, `llm_api_key`, `imap_password`
+- `secret_key`, `database_url`
+
+These keys will return the default value (empty string) if accessed. Use `get_credential()` for API keys and secrets instead.
+
+### Webhook Security
+
+Webhooks are rate limited:
+- **30 calls/minute** per webhook slug per IP
+- **600 calls/hour** per webhook slug per IP
+
+Exceeding limits returns HTTP 429. Design your webhook handlers to be idempotent and fast.
+
+### TLS Verification
+
+`call_api()` verifies SSL certificates by default. If you need to connect to a server with a self-signed certificate, set `verify_ssl=False`:
+
+```python
+result = call_api('GET', 'https://internal-api.local/data', verify_ssl=False)
+```
+
 ## Critical: DynamicModel Has NO Relationships
 
 `DynamicModel` tables are flat — columns only. **Do not use `.` dot-access to traverse foreign keys**. The following will **fail**:
@@ -660,3 +697,67 @@ Then in a Jinja template use the dict key, not dot-chaining:
     </requirements>
     ```
     The install runs automatically when the module is imported (AI Designer, BPMN, or XML import). Failed installs are logged but don't block the import. Packages can also be managed manually from the Packages admin page (`/__admin/packages`). No server restart is needed after install.
+
+33. **Use `get_setting()` for non-sensitive configuration** — Scripts can read platform settings via `get_setting('key', 'default')`. However, sensitive keys like `smtp_password`, `llm_api_key`, and `imap_password` are blocked and will return the default value. Use `get_credential()` for secrets.
+
+34. **Webhook scripts receive payload data** — When a webhook trigger fires, your script has access to `webhook_slug` (the slug used in the URL) and `webhook_payload` (the JSON data from the POST body). Design handlers to be idempotent since webhooks may be retried.
+
+35. **Scheduled tasks run in background threads** — Tasks executed by the scheduler run in daemon threads, not the main thread. The SIGALRM timeout does not apply to them; instead, the scheduler uses threading with a timeout join. Scripts running as tasks should be designed to complete within the configured `script_timeout`.
+
+36. **Module marketplace** — You can publish modules to the built-in marketplace for sharing. Use `app.services.marketplace.publish_module()` to add a module entry. Modules in the marketplace can be installed by other users via `/__admin/marketplace`.
+
+37. **Database backups** — The platform supports creating, downloading, and restoring database backups. Backups are stored in `instance/backups/`. Restoring a backup requires restarting the application.
+
+38. **OpenAPI specification** — The platform auto-generates an OpenAPI 3.0 spec from all registered routes. Access it at `/__api/openapi.json` (requires login) or view it in Swagger UI at `/__api/swagger`.
+
+39. **Structured logging** — Enable JSON-formatted logs with `setup_structured_logging(app)` for better monitoring and debugging. Logs include context like script name, module ID, and user ID.
+
+40. **Multi-tenant support** — Basic tenant isolation is available via subdomain or path prefix. Configure tenants in `app/services/tenant.py` and use `get_current_tenant()` in scripts to access the current tenant context.
+
+## Deployment
+
+### Docker
+
+The platform supports Docker deployment for easy setup and scaling:
+
+```bash
+# Quick start with SQLite
+docker compose up -d
+
+# Production with PostgreSQL
+cp docker-compose.prod.yml.example docker-compose.prod.yml
+# Edit with your secrets
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+See `ADMIN_AND_DEVELOPER_GUIDE.md` for full Docker deployment instructions.
+
+### Environment Variables
+
+Key environment variables for Docker deployment:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECRET_KEY` | `change-this-in-production` | **Must change in production!** Random 32-byte hex string |
+| `DATABASE_URL` | `sqlite:///instance/data.db` | Database connection string (SQLite or PostgreSQL) |
+| `APP_DEBUG` | `true` | Enable Flask debug mode (set to `false` in production) |
+| `APP_PORT` | `5000` | Port the application listens on |
+| `LLAMA_CPP_URL` | `http://llamacpp:8080` | llama.cpp server URL (for AI module generation) |
+| `SCRIPT_TIMEOUT` | `30` | Maximum script execution time in seconds |
+
+### Volumes
+
+Important volumes for data persistence:
+
+- `./instance` — Application data (database, uploads, backups, credential key)
+- `./marketplace` — Module marketplace entries
+- `postgres_data` — PostgreSQL database (named volume)
+
+### Health Check
+
+The `/healthz` endpoint is used for Docker health checks:
+
+```bash
+curl http://localhost:5000/healthz
+# Returns: {"status":"ok","database":"connected",...}
+```

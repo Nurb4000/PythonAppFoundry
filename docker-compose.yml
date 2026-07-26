@@ -1,0 +1,73 @@
+# PythonAppFoundry Docker Compose Configuration
+# Services: web (application), db (PostgreSQL), llamacpp (AI server)
+
+services:
+  # Web application
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - APP_PORT=5000
+      - APP_DEBUG=true
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///instance/data.db}
+      # LLM settings (optional)
+      - LLAMA_CPP_URL=${LLAMA_CPP_URL:-http://llamacpp:8080}
+      - LLAMA_CPP_MODEL=${LLAMA_CPP_MODEL:-}
+    volumes:
+      - ./instance:/app/instance
+      - ./marketplace:/app/marketplace
+    depends_on:
+      db:
+        condition: service_healthy
+      llamacpp:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL database (optional, replace SQLite)
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER:-appfoundry}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-changeme}
+      - POSTGRES_DB=${DB_NAME:-pythonappfoundry}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appfoundry"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # llama.cpp server (optional, for AI module generation)
+  llamacpp:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models
+    command: >
+      --model /models/your-model.gguf
+      --host 0.0.0.0
+      --port 8080
+      --n-gpu-layers 0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres_data:

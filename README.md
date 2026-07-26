@@ -6,6 +6,15 @@ This is a restart of a 15-year-old project to create an "embedded database" web 
 
 For the most part the database is fed by XML imports. The original plan was to create graphical designer tools that would export (and import for edits) XML to be sent to the DB to run. But this is 2026 — so instead of GUI design tools, LLMs are used to create and edit the XML for you. More GUI/code builder tools may come later.
 
+## Security Improvements (v2.0)
+
+- **Hardened script sandbox** — Scripts cannot import dangerous modules (`os`, `subprocess`, `sys`, `socket`, etc.)
+- **Webhook rate limiting** — Webhooks are limited to 30 calls/minute and 600 calls/hour per slug
+- **TLS certificate verification** — `call_api()` now verifies SSL certificates by default
+- **Settings access control** — Scripts cannot read sensitive settings (passwords, API keys) via `get_setting()`
+- **Input validation** — Slugs, routes, and cron expressions are validated before acceptance
+- **XSS prevention** — Form preview editor now escapes user-controlled values
+
 ## Features
 
 - **Module system** — Think of modules as applications. Each module is a self-contained bundle of routes, scripts, forms, scheduled tasks, triggers, and optional BPMN workflow data. Multiple modules run side-by-side, each with their own URL endpoints.
@@ -35,9 +44,34 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Cron Validation** — Invalid cron expressions are caught on save, preventing silent task failures.
 - **Log Retention** — Auto-cleanup of old execution logs configurable from Settings.
 - **Email Test Button** — Verify SMTP configuration with a single click from the Settings page.
-- **Demo Modules** — Import `demos/guestbook.xml` for a working example of forms, DynamicModel data collection, and rendered output at the site root. Import `demos/pixel_art_gallery.xml` for a visual showcase of retro pixel art with a styled grid layout. Import `demos/cat_fact_finder.xml` for a demo of scheduled email delivery, webhook triggers, and group-based route access control. Import `demos/incoming_mail_demo.xml` for IMAP email processing with automated claiming and notification. Import `demos/api_integration_demo.xml` for an interactive API test page demonstrating `get_credential()` and `call_api()`.
+- **Database Backup/Restore** — Create, download, and restore database backups from `/__admin/backups`. Emergency backups are created automatically before restores.
+- **Script Execution History** — View recent executions per module at `/__admin/modules/<id>/executions`.
+- **Test Script Button** — Inline script testing with AJAX-powered modal output at the script editor.
+- **XML Import Preview** — Preview what will be imported before committing (counts of scripts, routes, forms, tasks, triggers).
+- **Multi-Tenant Support** — Basic tenant isolation via subdomain or path prefix (extensible).
+- **OpenAPI/Swagger Spec** — Auto-generated OpenAPI 3.0 spec at `/__api/openapi.json` with Swagger UI at `/__api/swagger`.
+- **Module Marketplace** — Share and discover modules via `/__admin/marketplace`. Publish modules with `publish_module()`.
+- **Structured Logging** — JSON-formatted logs with context (module_id, script_id, user_id) via `setup_structured_logging()`.
+- **Webhook Retry/Dead Letter** — Failed webhooks are retried up to 3 times with exponential backoff. Failures go to a dead letter queue.
+- **Python Syntax Highlighting** — Script editor now has basic keyword/string/comment highlighting via `python-highlight.js`.
+- **Health Check Enhancement** — `/healthz` now verifies database connectivity, scheduler status, and IMAP configuration.
+- **Configuration Validation** — Warnings for insecure defaults (SECRET_KEY, DATABASE_URL) at startup.
+
+### Demo Modules
+
+Import demo modules to explore the platform:
+
+- `demos/guestbook.xml` — Forms, DynamicModel data collection, rendered output at site root
+- `demos/pixel_art_gallery.xml` — Visual showcase of retro pixel art with styled grid layout
+- `demos/cat_fact_finder.xml` — Scheduled email delivery, webhook triggers, group-based route access
+- `demos/incoming_mail_demo.xml` — IMAP email processing with automated claiming and notification
+- `demos/api_integration_demo.xml` — Interactive API test page demonstrating `get_credential()` and `call_api()`
+- `demos/admin_tools.xml` — Admin utility demonstrations
+- `demos/sales_demo.xml` — Sales tracking with query reports and charts
 
 ## Quick Start
+
+### Option 1: Direct Installation
 
 ```bash
 git clone https://github.com/Nurb4000/PythonAppFoundry && cd PythonAppFoundry
@@ -48,12 +82,60 @@ python3 run.py
 
 Visit `http://localhost:5000/` — you'll be redirected to the Setup page to create the initial admin account.
 
+### Option 2: Docker Deployment (Recommended for Production)
+
+**Prerequisites:** Docker and Docker Compose installed.
+
+1. **Clone and configure:**
+   ```bash
+   git clone https://github.com/Nurb4000/PythonAppFoundry && cd PythonAppFoundry
+   cp .env.docker.example .env
+   # Edit .env with your settings (especially SECRET_KEY!)
+   ```
+
+2. **Start with SQLite (default):**
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Start with PostgreSQL (production):**
+   ```bash
+   cp docker-compose.prod.yml.example docker-compose.prod.yml
+   # Edit docker-compose.prod.yml with your secrets
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+   ```
+
+4. **View logs:**
+   ```bash
+   docker compose logs -f web
+   ```
+
+5. **Access the application:**
+   - Web UI: `http://localhost:5000/`
+   - Health check: `http://localhost:5000/healthz`
+   - OpenAPI spec: `http://localhost:5000/__api/openapi.json`
+
+**Docker Compose services:**
+- `web` — The PythonAppFoundry application
+- `db` — PostgreSQL database (optional, replaces SQLite)
+- `llamacpp` — llama.cpp server for AI module generation (optional)
+
+**Volumes:**
+- `./instance` — Application data (database, uploads, backups, credentials)
+- `./marketplace` — Module marketplace entries
+- `postgres_data` — PostgreSQL data (named volume)
+
+**Environment variables:** See `.env.docker.example` for all configuration options.
+
 ## Requirements
 
 - Python 3.10+
 - SQLite (default) or PostgreSQL (via SQLAlchemy)
+- Docker and Docker Compose (optional, for containerized deployment)
 
 It starts with SQLite for development, but uses SQLAlchemy so you can expand to larger database engines if needed.
+
+For Docker deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
 
 ## Configuration
 
@@ -81,16 +163,48 @@ run.py → create_app() (Flask factory)
   ├── app/routes/dynamic.py  — Catch-all route handler (serves user modules)
   ├── app/routes/chat.py     — AI Designer chat sessions
   ├── app/routes/bpmn.py     — BPMN visual designer
-  └── app/routes/api.py      — REST API (export, import, list modules, webhooks)
-  ├── app/services/script_runner.py  — Sandboxed Python execution
+  └── app/routes/api.py      — REST API (export, import, list modules, webhooks, OpenAPI spec)
+  ├── app/services/script_runner.py  — Sandboxed Python execution (hardened import blocking)
   ├── app/services/ai_assistant.py   — LLM integration
   ├── app/services/bundle.py         — Module XML import/export
   ├── app/services/scheduler.py      — APScheduler cron task runner
-  ├── app/services/triggers.py       — Event and webhook trigger firing
+  ├── app/services/triggers.py       — Event and webhook trigger firing (with retry/dead-letter)
   ├── app/services/versioning.py     — Module version snapshots, rollback, diff
   ├── app/services/dependencies.py   — Cross-module dependency detection
-  └── app/services/file_upload.py    — Secure file upload handling
+  ├── app/services/file_upload.py    — Secure file upload handling
+  ├── app/services/credential_store.py — Fernet-encrypted credential storage
+  ├── app/services/csrf.py           — CSRF token generation and validation
+  ├── app/services/rate_limiter.py   — In-memory rate limiting (auth + webhooks)
+  ├── app/services/validation.py     — Input validation (slugs, routes, cron, email)
+  ├── app/services/admin_utils.py    — Shared admin patterns (decorators, proxies, exports)
+  ├── app/services/backup.py         — Database backup/restore utilities
+  ├── app/services/marketplace.py    — Module marketplace (publish/discover)
+  ├── app/services/openapi.py        — OpenAPI 3.0 spec generation
+  ├── app/services/structured_logging.py — JSON-formatted structured logging
+  └── app/services/tenant.py         — Multi-tenant isolation support
+
+## Docker Deployment
+
 ```
+┌─────────────────────────────────────────────────────────────┐
+│                        Docker Compose                       │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐    ┌─────────────┐    ┌──────────────┐   │
+│  │   web:5000  │    │    db:5432   │    │ llamacpp:8080│   │
+│  │  (Flask App)│    │ (PostgreSQL) │    │   (LLM Server)│   │
+│  └─────────────┘    └─────────────┘    └──────────────┘   │
+│         │                   │                   │          │
+│         └───────────────────┴───────────────────┘          │
+│                          │                                  │
+│                    ┌─────┴─────┐                           │
+│                    │  Volumes  │                           │
+│                    │  ./instance│                          │
+│                    │ ./marketplace│                         │
+│                    └───────────┘                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+See `ADMIN_AND_DEVELOPER_GUIDE.md#docker-deployment` for full Docker instructions.
 
 ### Key design decisions
 
@@ -99,6 +213,11 @@ run.py → create_app() (Flask factory)
 - **Dynamic tables are flat** — No foreign key relationships. Scripts use explicit queries and joins.
 - **Module → table lifecycle is decoupled** — Deleting a module doesn't automatically drop its DynamicModel tables (opt-in via checkbox).
 - **AI settings in the DB** — All LLM and SMTP configuration is managed through the admin GUI, not environment variables.
+- **Hardened script sandbox** — Scripts cannot import dangerous modules (`os`, `subprocess`, `sys`, `socket`, etc.). A custom `__import__` function blocks access at runtime.
+- **Webhook reliability** — Webhooks retry up to 3 times with exponential backoff. Failed executions go to a dead letter queue for later review.
+- **Rate limiting** — Auth endpoints and webhooks are rate limited to prevent abuse.
+- **Multi-tenant aware** — Basic tenant isolation via subdomain or path prefix, extensible via the tenant service.
+- **Structured logging** — JSON-formatted logs with context (module_id, script_id, user_id) for better monitoring.
 
 ## Models
 
@@ -137,6 +256,13 @@ Builtins available: `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `
 
 - Flask 3.0, Flask-SQLAlchemy, Flask-Login, Flask-Migrate
 - bcrypt, APScheduler, python-slugify, python-dotenv
+- cryptography (for encrypted credential store)
+
+### Optional Dependencies
+
+- **PostgreSQL** — Use `psycopg2-binary` for production deployments (`pip install psycopg2-binary`)
+- **llama.cpp** — For local AI module generation (see Docker deployment)
+- **OpenAI API** — For cloud-based AI module generation (configured in Admin → Settings)
 
 ## License
 

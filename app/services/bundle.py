@@ -98,12 +98,20 @@ def import_module(xml_str, update_existing=False, module_id=None):
 
     if existing:
         if update_existing:
-            existing.routes.delete()
-            existing.scripts.delete()
-            existing.forms.delete()
-            existing.scheduled_tasks.delete()
-            existing.triggers.delete()
-            existing.query_reports.delete()
+            # Explicitly delete related objects to ensure cascade works
+            for route in existing.routes.all():
+                db.session.delete(route)
+            for script in existing.scripts.all():
+                db.session.delete(script)
+            for form in existing.forms.all():
+                db.session.delete(form)
+            for task in existing.scheduled_tasks.all():
+                db.session.delete(task)
+            for trigger in existing.triggers.all():
+                db.session.delete(trigger)
+            for query in existing.query_reports.all():
+                db.session.delete(query)
+            db.session.flush()
             # Update in place to preserve the module ID
             module = existing
             module.name = name

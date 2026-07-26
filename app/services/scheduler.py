@@ -40,7 +40,6 @@ def register_task(task):
         )
         job = _scheduler.get_job(f'task_{task.id}')
         if job and job.next_run_time:
-            from datetime import timezone
             task.next_run = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
     except Exception as e:
         import logging
@@ -72,14 +71,22 @@ def run_task_wrapper(task_id):
         db.session.commit()
         if task.script:
             timeout = int(Setting.get('script_timeout', '30'))
-            t = threading.Thread(
-                target=_run_script_in_app_context,
-                args=(app, task.script, task.name),
-                daemon=True,
-            )
+            result_container = {'result': None, 'error': None, 'finished': False}
+
+            def _run_with_timeout():
+                try:
+                    with app.app_context():
+                        result_container['result'] = execute_script(
+                            task.script, source_type='task', source_name=task.name
+                        )
+                except Exception as e:
+                    result_container['error'] = str(e)
+                result_container['finished'] = True
+
+            t = threading.Thread(target=_run_with_timeout, daemon=True)
             t.start()
             t.join(timeout=timeout)
-            if t.is_alive():
+            if not result_container['finished']:
                 log = ExecutionLog(
                     source_type='task',
                     source_name=task.name,
@@ -90,6 +97,15 @@ def run_task_wrapper(task_id):
                 db.session.add(log)
                 db.session.commit()
                 logging.getLogger(__name__).error(f'Task {task.name} timed out')
+            elif result_container['error']:
+                log = ExecutionLog(
+                    source_type='task',
+                    source_name=task.name,
+                    status='error',
+                    error_message=result_container['error'],
+                )
+                db.session.add(log)
+                db.session.commit()
 
 
 def _run_script_in_app_context(app, script, name):

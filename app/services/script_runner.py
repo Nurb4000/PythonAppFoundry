@@ -68,8 +68,21 @@ class _ModuleDynamicModel:
         return DynamicModel.get_or_create(name, columns, module_id=self._module_id)
 
 
+SENSITIVE_SETTINGS = {
+    'smtp_password', 'llm_api_key', 'imap_password',
+    'secret_key', 'database_url',
+}
+
+
+def _get_setting_safe(key, default=''):
+    """Get a setting value, blocking access to sensitive keys."""
+    if key in SENSITIVE_SETTINGS:
+        return default or ''
+    return Setting.get(key, default)
+
+
 def _call_api(method='GET', url=None, headers=None, json=None, data=None,
-              timeout=30, retries=3, backoff=2):
+              timeout=30, retries=3, backoff=2, verify_ssl=True):
     """Centralized HTTP client with retry and error handling.
 
     Args:
@@ -81,6 +94,7 @@ def _call_api(method='GET', url=None, headers=None, json=None, data=None,
         timeout: request timeout in seconds (default 30)
         retries: number of retries on failure (default 3)
         backoff: exponential backoff multiplier in seconds (default 2)
+        verify_ssl: Verify SSL certificates (default True). Set False to skip verification.
 
     Returns:
         dict with keys: status_code, headers (dict), body (parsed JSON or raw text), elapsed_ms
@@ -89,6 +103,7 @@ def _call_api(method='GET', url=None, headers=None, json=None, data=None,
     import urllib.error
     import json as _json
     import time as _time
+    import ssl as _ssl
 
     if url is None:
         raise ValueError('url is required')
@@ -108,6 +123,14 @@ def _call_api(method='GET', url=None, headers=None, json=None, data=None,
         else:
             body_bytes = data
 
+    # Set up SSL context with verification
+    ssl_ctx = None
+    if verify_ssl:
+        try:
+            ssl_ctx = _ssl.create_default_context()
+        except Exception:
+            pass
+
     last_error = None
     for attempt in range(1 + retries):
         try:
@@ -116,21 +139,38 @@ def _call_api(method='GET', url=None, headers=None, json=None, data=None,
                 for k, v in headers.items():
                     req.add_header(k, v)
 
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read()
-                content_type = resp.headers.get('Content-Type', '')
-                if 'application/json' in content_type:
-                    body = _json.loads(raw.decode('utf-8'))
-                else:
-                    body = raw.decode('utf-8', errors='replace')
+            if ssl_ctx:
+                with urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx) as resp:
+                    raw = resp.read()
+                    content_type = resp.headers.get('Content-Type', '')
+                    if 'application/json' in content_type:
+                        body = _json.loads(raw.decode('utf-8'))
+                    else:
+                        body = raw.decode('utf-8', errors='replace')
 
-                elapsed = int((_time.time() - t0) * 1000)
-                return {
-                    'status_code': resp.status,
-                    'headers': dict(resp.headers),
-                    'body': body,
-                    'elapsed_ms': elapsed,
-                }
+                    elapsed = int((_time.time() - t0) * 1000)
+                    return {
+                        'status_code': resp.status,
+                        'headers': dict(resp.headers),
+                        'body': body,
+                        'elapsed_ms': elapsed,
+                    }
+            else:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    raw = resp.read()
+                    content_type = resp.headers.get('Content-Type', '')
+                    if 'application/json' in content_type:
+                        body = _json.loads(raw.decode('utf-8'))
+                    else:
+                        body = raw.decode('utf-8', errors='replace')
+
+                    elapsed = int((_time.time() - t0) * 1000)
+                    return {
+                        'status_code': resp.status,
+                        'headers': dict(resp.headers),
+                        'body': body,
+                        'elapsed_ms': elapsed,
+                    }
 
         except urllib.error.HTTPError as e:
             last_error = e
@@ -192,6 +232,23 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         source_name=source_name,
     )
 
+    # Blocked modules — scripts cannot import these for security
+    BLOCKED_MODULES = {
+        'os', 'subprocess', 'sys', 'importlib', 'pkg_resources',
+        'ctypes', 'socket', 'http', 'urllib', 'requests',
+        'shutil', 'tempfile', 'pickle', 'marshal', 'codecs',
+        'threading', 'multiprocessing', 'signal',
+    }
+
+    # Custom __import__ that blocks dangerous modules
+    import builtins as _builtins
+    _original_import = _builtins.__import__
+
+    def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name.split('.')[0] in BLOCKED_MODULES:
+            raise ImportError(f'Module "{name}" is blocked for security reasons')
+        return _original_import(name, globals, locals, fromlist, level)
+
     safe_builtins = {
         'True': True,
         'False': False,
@@ -232,6 +289,7 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'IndexError': IndexError,
         'AttributeError': AttributeError,
         'Exception': Exception,
+        '__import__': _safe_import,
     }
 
     safe_globals = {
@@ -259,6 +317,7 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'timezone': timezone,
         'get_credential': _make_get_credential(script.module_id),
         'call_api': _call_api,
+        'get_setting': _get_setting_safe,
     }
 
     if extra_globals:

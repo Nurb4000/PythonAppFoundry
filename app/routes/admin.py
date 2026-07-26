@@ -1,10 +1,22 @@
 from flask import Blueprint, request, redirect, url_for, render_template_string, abort, jsonify, flash, Response
 from app.services.scheduler import refresh_tasks
 from app.services.csrf import csrf_protect, csrf_token
+from app.services.validation import validate_slug, validate_route_slug, validate_cron_expression
+from app.services.admin_utils import (
+    admin_required as _admin_required,
+    developer_or_admin_required as _dev_admin_required,
+    create_auto_version as _create_auto_version,
+    AttrProxy as _AttrProxy,
+    render_admin as _render_admin,
+    list_view as _list_view,
+    _export_csv as _export_csv_util,
+    ADMIN_TEMPLATE,
+    LIST_TEMPLATE,
+)
 from flask_login import login_required, current_user
 from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy import Table, MetaData
-import csv, io, subprocess
+import csv, io, os, subprocess
 from datetime import datetime as _datetime, timezone as _tz
 
 from app import db
@@ -13,220 +25,14 @@ from app.services.script_runner import execute_script
 
 admin_bp = Blueprint('admin', __name__)
 
-ADMIN_TEMPLATE = '''<!DOCTYPE html>
-<html>
-<head><title>Admin - {{ title }}</title>
-<style>
-body { font-family: system-ui, sans-serif; max-width: 1400px; margin: 0 auto; padding: 1rem; }
-nav a { margin-right: 1rem; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; white-space: nowrap; }
-th a { color: inherit; text-decoration: none; display: inline-block; }
-th a:hover { color: #2563eb; }
-.flash { background: #d4edda; padding: 0.5rem; margin: 1rem 0; }
-.table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid #eee; border-radius: 4px; }
-.table-wrap::-webkit-scrollbar { height: 10px; }
-.table-wrap::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 5px; }
-.table-wrap::-webkit-scrollbar-thumb { background: #bbb; border-radius: 5px; }
-.table-wrap::-webkit-scrollbar-thumb:hover { background: #888; }
-</style>
-</head>
-<body>
-<h1>{{ title }}</h1>
-{% for msg in get_flashed_messages() %}<div class="flash">{{ msg }}</div>{% endfor %}
-{{ content|safe }}
-<div style="text-align:center;color:#999;font-size:0.8em;margin-top:2rem;padding:1rem 0;border-top:1px solid #eee;">Copyright 2026 IDS</div>
-</body>
-</html>
-'''
-
-LIST_TEMPLATE = '''<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
-  <a href="{{ new_url }}">+ New</a>
-  {% if modules %}
-  <form method="GET" style="display:inline;">
-    <select name="module_id" onchange="this.form.submit()" style="padding:4px 8px;">
-      <option value="">All Modules</option>
-      {% for m in modules %}
-      <option value="{{ m.id }}" {% if selected_module_id == m.id %}selected{% endif %}>{{ m.name }}</option>
-      {% endfor %}
-    </select>
-    {% if sort_col %}<input name="sort" type="hidden" value="{{ sort_col }}">{% endif %}
-    {% if sort_order %}<input name="order" type="hidden" value="{{ sort_order }}">{% endif %}
-  </form>
-  {% endif %}
-  <a href="?format=csv{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}" style="margin-left:auto;">Export CSV</a>
-</div>
-<div class="table-wrap">
-<table>
-<thead><tr>
-  {% if has_module %}<th><a href="?sort=module_id&order={% if sort_col == 'module_id' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">Module{% if sort_col == 'module_id' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>{% endif %}
-  {% for col in columns %}
-  <th><a href="?sort={{ col }}&order={% if sort_col == col and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">{{ col }}{% if sort_col == col %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
-  {% endfor %}
-  <th>Actions</th>
-</tr></thead>
-<tbody>
-{% for row in rows %}
-<tr>
-  {% if has_module %}<td>{{ row._module_name }}</td>{% endif %}
-  {% for col in columns %}<td>{{ row|attr(col) }}</td>{% endfor %}
-  <td>
-    {% if show_view and row._obj.slug %}<a href="{{ row._obj.slug }}" target="_blank">View</a> | {% endif %}
-    <a href="{{ edit_url }}/{{ row.id }}">Edit</a>
-  </td>
-</tr>
-{% endfor %}
-</tbody></table>
-</div>'''
-
-
-def admin_required(f):
-    from functools import wraps
-    @wraps(f)
-    @login_required
-    def wrapper(*a, **kw):
-        if current_user.role != 'admin':
-            abort(403)
-        return f(*a, **kw)
-    return wrapper
-
-
-def developer_or_admin_required(f):
-    from functools import wraps
-    @wraps(f)
-    @login_required
-    def wrapper(*a, **kw):
-        if current_user.role not in ('admin', 'developer'):
-            abort(403)
-        return f(*a, **kw)
-    return wrapper
-
-
-def create_auto_version(module_id, comment=None):
-    """Create an automatic version snapshot after any module change."""
-    try:
-        from app.services.versioning import create_version as _create_version
-        user_id = current_user.id if current_user.is_authenticated else None
-        if comment is None:
-            comment = 'Auto-saved'
-        _create_version(module_id, comment=comment, user_id=user_id)
-    except Exception:
-        pass  # Silently fail - versioning is not critical
-
-
-def _describe_cron(expr):
-    parts = expr.strip().split()
-    if len(parts) != 5:
-        return ''
-    minute, hour, day, month, day_of_week = parts
-    if minute.startswith('*/') and hour == '*' and day == '*' and month == '*' and day_of_week == '*':
-        n = minute[2:]
-        return f'Every {n} minute{"s" if n != "1" else ""}'
-    if minute == '0' and hour.startswith('*/') and day == '*' and month == '*' and day_of_week == '*':
-        n = hour[2:]
-        return f'Every {n} hour{"s" if n != "1" else ""}'
-    if minute == '0' and hour == '0' and day == '*' and month == '*' and day_of_week == '*':
-        return 'Daily at midnight'
-    if day == '*' and month == '*' and day_of_week == '*':
-        try:
-            h, m = int(hour), int(minute)
-            return f'Daily at {h % 12 or 12}:{m:02d} {"AM" if h < 12 else "PM"}'
-        except ValueError:
-            pass
-    if minute == '0' and hour == '*' and day == '*' and month == '*' and day_of_week == '*':
-        return 'Every hour'
-    if minute == '*' and hour == '*' and day == '*' and month == '*' and day_of_week == '*':
-        return 'Every minute'
-    return ''
-
-
-class AttrProxy:
-    def __init__(self, obj):
-        self._obj = obj
-    def __getattr__(self, name):
-        if name == '_module_name':
-            mod = getattr(self._obj, 'module', None)
-            return getattr(mod, 'name', '') if mod else ''
-        if name == 'cron_expression':
-            expr = str(getattr(self._obj, 'cron_expression', '') or '')
-            desc = _describe_cron(expr)
-            return f'{expr}  ({desc})' if desc else expr
-        val = getattr(self._obj, name, '')
-        if hasattr(val, '__call__'):
-            return ''
-        if isinstance(val, _datetime):
-            if val.tzinfo is not None:
-                val = val.astimezone().replace(tzinfo=None)
-            else:
-                val = val.replace(tzinfo=_tz.utc).astimezone().replace(tzinfo=None)
-        return str(val or '')
-
-
-def render_admin(title, content_template, **kwargs):
-    content = render_template_string(content_template, **kwargs)
-    return render_template_string(ADMIN_TEMPLATE, title=title, content=content)
-
-
-def list_view(model, name_plural, columns, edit_endpoint, new_endpoint, show_view=False, has_module=False):
-    selected_module_id = request.args.get('module_id', type=int)
-    sort_col = request.args.get('sort', 'id')
-    sort_order = request.args.get('order', 'asc')
-
-    q = db.session.query(model)
-    if selected_module_id and has_module:
-        q = q.filter(model.module_id == selected_module_id)
-
-    sort_attr = getattr(model, sort_col, None)
-    if sort_attr is not None:
-        q = q.order_by(sort_attr.desc() if sort_order == 'desc' else sort_attr.asc())
-    else:
-        q = q.order_by(model.id)
-
-    rows = q.all()
-
-    if request.args.get('format') == 'csv':
-        return _export_csv(name_plural, columns, rows, has_module)
-
-    modules = db.session.query(Module).order_by(Module.name).all() if has_module else []
-
-    content = render_template_string(LIST_TEMPLATE,
-        columns=columns,
-        rows=[AttrProxy(r) for r in rows],
-        new_url=url_for(new_endpoint),
-        edit_url=url_for(edit_endpoint, id=0).rsplit('/', 1)[0],
-        show_view=show_view,
-        has_module=has_module,
-        modules=modules,
-        selected_module_id=selected_module_id,
-        sort_col=sort_col,
-        sort_order=sort_order,
-    )
-    return render_template_string(ADMIN_TEMPLATE,
-        title=name_plural.title(),
-        content=content,
-    )
-
-
-def _export_csv(name_plural, columns, rows, has_module):
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    headers = list(columns)
-    if has_module:
-        headers.insert(0, 'module')
-    w.writerow(headers)
-    for r in rows:
-        vals = []
-        if has_module:
-            vals.append(getattr(getattr(r, 'module', None), 'name', ''))
-        for col in columns:
-            vals.append(str(getattr(r, col, '') or ''))
-        w.writerow(vals)
-    return Response(
-        buf.getvalue(),
-        mimetype='text/csv',
-        headers={'Content-Disposition': f'attachment; filename={name_plural.replace(" ", "_")}.csv'},
-    )
-
+# Re-export utilities for use in this file
+admin_required = _admin_required
+developer_or_admin_required = _dev_admin_required
+create_auto_version = _create_auto_version
+AttrProxy = _AttrProxy
+render_admin = _render_admin
+list_view = _list_view
+export_csv = _export_csv_util
 
 # ── Modules ──
 
@@ -341,8 +147,9 @@ def new_module():
                 flash(f'Import failed: {e}', 'error')
                 return redirect(url_for('admin.list_modules'))
         slug = request.form['slug'].strip()
-        if not slugify(slug) == slug:
-            flash(f'Slug "{slug}" contains invalid characters. Use only letters, numbers, hyphens, and underscores.', 'error')
+        valid, err = validate_slug(slug)
+        if not valid:
+            flash(f'Slug validation failed: {err}', 'error')
             return redirect(url_for('admin.new_module'))
         m = Module(
             name=request.form['name'],
@@ -357,13 +164,46 @@ def new_module():
     return render_admin('New Module', '''
 <details style="margin-bottom:1rem;"><summary style="cursor:pointer;color:#06c;">Import from XML</summary>
 <div style="margin:0.5rem 0 0 1rem;">
-<form method="POST" enctype="multipart/form-data">
+<form id="importForm" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>XML file <input name="import_xml" type="file" accept=".xml"></label>
-  <button>Import</button>
+  <label>XML file <input name="import_xml" type="file" accept=".xml" id="xmlFileInput"></label>
+  <button type="button" onclick="previewImport()">Preview Import</button>
 </form>
+<div id="importPreview" style="margin-top:1rem;display:none;">
+  <div style="background:#f4f4f4;border:1px solid #ddd;padding:1rem;border-radius:4px;">
+    <h4 style="margin-top:0;">Import Preview</h4>
+    <div id="previewContent"></div>
+    <form method="POST" enctype="multipart/form-data" id="importSubmitForm" style="margin-top:1rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="import_xml" id="importXmlData">
+      <button type="submit">Confirm Import</button>
+      <button type="button" onclick="document.getElementById('importPreview').style.display='none'" style="margin-left:0.5rem;background:#6c757d;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;">Cancel</button>
+    </form>
+  </div>
+</div>
 </div>
 </details>
+<script>
+function previewImport() {
+  var fileInput = document.getElementById('xmlFileInput');
+  if (!fileInput.files[0]) { alert('Please select a file first'); return; }
+  var formData = new FormData();
+  formData.append('import_xml', fileInput.files[0]);
+  formData.append('csrf_token', document.querySelector('[name=csrf_token]').value);
+  fetch('/__admin/import-preview', { method: 'POST', body: formData })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { alert('Preview failed: ' + data.error); return; }
+      var p = data.preview;
+      var html = '<p><strong>' + p.name + '</strong> (slug: <code>' + p.slug + '</code>)';
+      if (p.existing) html += ' <span style="color:#856404;">[Already exists - will update]</span>';
+      html += '</p><ul><li>Scripts: ' + p.counts.scripts + '</li><li>Routes: ' + p.counts.routes + '</li><li>Forms: ' + p.counts.forms + '</li><li>Tasks: ' + p.counts.tasks + '</li><li>Triggers: ' + p.counts.triggers + '</li></ul>';
+      document.getElementById('previewContent').innerHTML = html;
+      document.getElementById('importPreview').style.display = 'block';
+    })
+    .catch(function(err) { alert('Request failed: ' + err.message); });
+}
+</script>
 <form method="POST">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Name <input name="name" required></label>
@@ -427,7 +267,8 @@ def delete_module(id):
     # Fallback: scan module's scripts for any table name in source
     if not dyn_tables:
         import re as _re
-        _all_db_tables = set(sa_inspect(db.engine).get_table_names())
+        bind = db.session.get_bind()
+        _all_db_tables = set(sa_inspect(bind).get_table_names())
         for _s in m.scripts.all():
             for _match in _re.finditer(r'["\'](\w+)["\']', _s.source_code):
                 _name = _match.group(1).lower()
@@ -437,13 +278,14 @@ def delete_module(id):
     drop_tables = request.form.get('drop_tables') == 'on'
     if drop_tables and dyn_tables:
         from sqlalchemy import inspect as sa_inspect
-        inspector = sa_inspect(db.engine)
+        bind = db.session.get_bind()
+        inspector = sa_inspect(bind)
         existing = set(inspector.get_table_names())
         for tname in dyn_tables:
             if tname in existing:
                 table = db.metadata.tables.get(tname)
                 if table is not None:
-                    table.drop(db.engine, checkfirst=True)
+                    table.drop(bind, checkfirst=True)
                     db.metadata.remove(table)
 
     # Remove registry entries
@@ -612,6 +454,7 @@ def edit_module(id):
     <a href="{{ url_for('admin.list_forms', module_id=m.id) }}" class="btn">Edit Forms</a>
     <a href="{{ url_for('admin.list_triggers', module_id=m.id) }}" class="btn">Edit Triggers</a>
     <a href="{{ url_for('admin.list_tasks', module_id=m.id) }}" class="btn">Edit Tasks</a>
+    <a href="{{ url_for('admin.module_executions', module_id=m.id) }}" class="btn">Execution History</a>
     <a href="{{ url_for('api.api_export', slug=m.slug) }}" class="btn">Export XML</a>
     <a href="{{ url_for('chat.refine_module', id=m.id) }}" class="btn">Refine in AI</a>
     <label style="font-weight:normal;cursor:pointer;" class="btn" onclick="document.getElementById('importFileInput').click()">Import XML
@@ -794,7 +637,12 @@ def new_route():
     forms = db.session.query(Form).all()
     groups = db.session.query(Group).order_by(Group.name).all()
     if request.method == 'POST':
-        slug = '/' + request.form['slug'].lstrip('/')
+        raw_slug = request.form['slug'].strip()
+        valid, result = validate_route_slug(raw_slug)
+        if not valid:
+            flash(f'Route slug validation failed: {result}', 'error')
+            return redirect(url_for('admin.list_routes'))
+        slug = result
         existing = db.session.query(Route).filter_by(slug=slug).first()
         if existing:
             flash(f'Route slug "{slug}" already in use by module "{existing.module.name}"')
@@ -846,7 +694,12 @@ def edit_route(id):
     groups = db.session.query(Group).order_by(Group.name).all()
     if request.method == 'POST':
         r.module_id = int(request.form['module_id'])
-        slug = '/' + request.form['slug'].lstrip('/')
+        raw_slug = request.form['slug'].strip()
+        valid, result = validate_route_slug(raw_slug)
+        if not valid:
+            flash(f'Route slug validation failed: {result}', 'error')
+            return redirect(url_for('admin.list_routes'))
+        slug = result
         existing = db.session.query(Route).filter(Route.slug == slug, Route.id != id).first()
         if existing:
             flash(f'Route slug "{slug}" already in use by module "{existing.module.name}"')
@@ -960,11 +813,52 @@ def edit_script(id):
     <textarea name="description" style="width:100%;min-height:80px;resize:vertical;">{{ s.description }}</textarea>
   </label>
   <label style="display:block;margin-top:12px;">Source Code
-    <textarea name="source_code" rows="15" style="width:100%;font-family:monospace;">{{ s.source_code }}</textarea>
+    <textarea name="source_code" id="source_code" rows="15" style="width:100%;font-family:monospace;z-index:1;background:rgba(255,255,255,0.9);">{{ s.source_code }}</textarea>
   </label>
+  <script src="/static/python-highlight.js"></script>
   <button style="margin-top:12px;padding:6px 16px;">Save</button>
+  <button type="button" onclick="testScript({{ s.id }})" style="margin-left:0.5rem;padding:6px 16px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;">Test Script</button>
   <a href="{{ url_for('admin.debug_script', id=s.id) }}" style="margin-left:0.5rem;padding:6px 16px;background:#f0f0f0;color:#333;text-decoration:none;border:1px solid #ccc;border-radius:4px;display:inline-block;">Run Debug</a>
-</form>''', s=s, modules=modules)
+</form>
+
+<!-- Test Script Modal -->
+<div id="testModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:8px;padding:1.5rem;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;">Test Script: {{ s.name }}</h3>
+      <button onclick="document.getElementById('testModal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
+    </div>
+    <div id="testResult"></div>
+  </div>
+</div>
+
+<script>
+function testScript(scriptId) {
+  var modal = document.getElementById('testModal');
+  var result = document.getElementById('testResult');
+  modal.style.display = 'block';
+  result.innerHTML = '<p style="color:#888;">Running script...</p>';
+  
+  fetch('/__admin/scripts/test/' + scriptId, {
+    method: 'POST',
+    headers: {'X-CSRFToken': document.querySelector('[name=csrf_token]').value},
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      result.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong><pre style="margin:0.5rem 0;font-size:0.85em;overflow:auto;">' + data.error + '</pre></div>' +
+        (data.output ? '<div style="background:#f4f4f4;border:1px solid #ddd;padding:1rem;border-radius:4px;margin-top:0.5rem;"><strong>Output:</strong><pre style="margin:0.5rem 0;font-size:0.85em;overflow:auto;">' + data.output + '</pre></div>' : '');
+    } else {
+      result.innerHTML = '<div style="background:#efe;border:1px solid #cfc;padding:1rem;border-radius:4px;"><strong style="color:#080;">Success</strong> ({{ duration }}ms)</div>' +
+        (data.result ? '<div style="background:#f4f4f4;border:1px solid #ddd;padding:1rem;border-radius:4px;margin-top:0.5rem;"><strong>Result:</strong><pre style="margin:0.5rem 0;font-size:0.85em;overflow:auto;">' + data.result + '</pre></div>' : '') +
+        (data.output ? '<div style="background:#f4f4f4;border:1px solid #ddd;padding:1rem;border-radius:4px;margin-top:0.5rem;"><strong>Output:</strong><pre style="margin:0.5rem 0;font-size:0.85em;overflow:auto;">' + data.output + '</pre></div>' : '');
+    }
+  })
+  .catch(function(err) {
+    result.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Request failed:</strong> ' + err.message + '</div>';
+  });
+}
+</script>''', s=s, modules=modules, duration=0)
 
 
 @admin_bp.route('/scripts/debug/<int:id>')
@@ -990,13 +884,14 @@ def debug_script(id):
     finally:
         sys.stdout = old_stdout
     source_lines = s.source_code.split('\n')
+    numbered_lines = [{'line_num': i + 1, 'line': line} for i, line in enumerate(source_lines)]
     return render_admin('Debug: ' + s.name, '''
 <h2>Debug: {{ s.name }}</h2>
 <p style="color:#888;">Duration: {{ duration }}ms | Module: {{ s.module.name }}</p>
 <h3>Source Code</h3>
 <pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #ddd;border-radius:4px;">
-{% for i, line in source_lines %}
-<span style="color:#999;">{{ '%3d' % (i+1) }}</span>  {{ line }}
+{% for item in source_lines %}
+<span style="color:#999;">{{ '%3d' % item.line_num }}</span>  {{ item.line }}
 {% endfor %}
 </pre>
 {% if error %}
@@ -1009,7 +904,7 @@ def debug_script(id):
 <p>Script completed with no output.</p>
 {% endif %}
 <a href="{{ url_for('admin.edit_script', id=s.id) }}">&larr; Back to Script</a>
-''', s=s, duration=duration, source_lines=enumerate(source_lines), error=error, output=output)
+''', s=s, duration=duration, source_lines=numbered_lines, error=error, output=output)
 
 # ── Forms ──
 
@@ -1099,6 +994,11 @@ def edit_form(id):
     return;
   }
   
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
   function renderPreview() {
     var json = editor.value.trim();
     console.log('Render preview - json length:', json.length, 'first 100:', json.substring(0, 100));
@@ -1116,11 +1016,11 @@ def edit_form(id):
       var html = '<form onsubmit="event.preventDefault(); alert(' + JSON.stringify('Form submitted (preview only)') + ');">';
       for (var i = 0; i < fields.length; i++) {
         var field = fields[i];
-        var name = field.name || '';
-        var label = field.label || name;
-        var type = field.type || 'text';
+        var name = escapeHtml(field.name || '');
+        var label = escapeHtml(field.label || name);
+        var type = escapeHtml(field.type || 'text');
         var required = field.required ? 'required' : '';
-        var placeholder = field.placeholder || '';
+        var placeholder = escapeHtml(field.placeholder || '');
         
         html += '<div style="margin-bottom:12px;">';
         html += '<label for="' + name + '" style="display:block;font-weight:600;margin-bottom:4px;">' + label + '</label>';
@@ -1128,7 +1028,7 @@ def edit_form(id):
         if (type === 'textarea') {
           html += '<textarea id="' + name + '" name="' + name + '" ' + required + ' placeholder="' + placeholder + '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;min-height:80px;"></textarea>';
         } else if (type === 'select') {
-          var opts = (field.options || '').split(',').map(function(o) { return o.trim(); }).filter(Boolean);
+          var opts = (field.options || '').split(',').map(function(o) { return escapeHtml(o.trim()); }).filter(Boolean);
           html += '<select id="' + name + '" name="' + name + '" ' + required + ' style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">';
           for (var j = 0; j < opts.length; j++) {
             html += '<option value="' + opts[j] + '">' + opts[j] + '</option>';
@@ -1149,7 +1049,7 @@ def edit_form(id):
       console.log('Rendered preview with', fields.length, 'fields');
     } catch (e) {
       console.error('JSON parse error:', e);
-      preview.innerHTML = '<div class="preview-error">Invalid JSON: ' + e.message + '</div>';
+      preview.innerHTML = '<div class="preview-error">Invalid JSON: ' + escapeHtml(e.message) + '</div>';
     }
   }
   
@@ -1165,15 +1065,17 @@ def edit_form(id):
 # ── Tasks ──
 
 def _validate_cron(expr):
-    parts = expr.strip().split()
-    if len(parts) != 5:
-        return 'Must have exactly 5 space-separated fields (minute hour day month day_of_week)'
+    valid, err = validate_cron_expression(expr)
+    if not valid:
+        return err
+    # Also validate with APScheduler for complex expressions
     try:
         from apscheduler.triggers.cron import CronTrigger
+        parts = expr.strip().split()
         CronTrigger(minute=parts[0], hour=parts[1], day=parts[2], month=parts[3], day_of_week=parts[4])
-        return None
     except (ValueError, ImportError) as e:
         return str(e)
+    return None
 
 @admin_bp.route('/tasks')
 @admin_required
@@ -1528,7 +1430,8 @@ def list_tables():
     tables = []
     # Collect all table names: from metadata AND from actual DB tables
     seen = set()
-    inspector = sa_inspect(db.engine)
+    bind = db.session.get_bind()
+    inspector = sa_inspect(bind)
     for db_name in inspector.get_table_names():
         if db_name.startswith('sqlite_') or db_name == 'alembic_version':
             continue
@@ -1541,7 +1444,7 @@ def list_tables():
         # Get or reflect the table object
         table = db.metadata.tables.get(name)
         if table is None:
-            table = Table(name, db.metadata, autoload_with=db.engine, extend_existing=True)
+            table = Table(name, db.metadata, autoload_with=bind, extend_existing=True)
         try:
             pk_col = list(table.primary_key)[0] if table.primary_key else table.columns[0]
             count = db.session.execute(func.count(pk_col)).scalar()
@@ -2105,7 +2008,8 @@ def delete_table(table_name):
         flash(f'Table "{table_name}" not found', 'error')
         return redirect(url_for('admin.list_tables'))
     table = db.metadata.tables[table_name]
-    table.drop(db.engine, checkfirst=True)
+    bind = db.session.get_bind()
+    table.drop(bind, checkfirst=True)
     db.metadata.remove(table)
     flash(f'Table "{table_name}" dropped')
     return redirect(url_for('admin.list_tables'))
@@ -2931,7 +2835,8 @@ def dashboard():
                        'execution_logs', 'module_dependencies', 'module_versions',
                        'query_reports', 'incoming_emails', 'credentials'}
     table_stats = []
-    inspector = _sa_inspect(db.engine)
+    bind = db.session.get_bind()
+    inspector = _sa_inspect(bind)
     for db_name in sorted(inspector.get_table_names()):
         if db_name.startswith('sqlite_') or db_name == 'alembic_version':
             continue
@@ -3518,3 +3423,361 @@ document.addEventListener('click', function(e) {
   {% endif %}
 </div>
 '''
+
+
+# ── Backup & Restore ──
+
+@admin_bp.route('/backup')
+@admin_required
+def backup_database():
+    """Create a database backup."""
+    from app.services.backup import create_backup
+    try:
+        backup_path = create_backup()
+        flash(f'Backup created: {os.path.basename(backup_path)}')
+        return redirect(url_for('admin.list_backups'))
+    except Exception as e:
+        flash(f'Backup failed: {e}', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+
+@admin_bp.route('/backups')
+@admin_required
+def list_backups():
+    """List available backups."""
+    from app.services.backup import list_backups as _list_backups
+    backups = _list_backups()
+    return render_admin('Backups', '''
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.backup_database') }}">Create New Backup</a>
+  <a href="?format=csv" style="margin-left:auto;">Export CSV</a>
+</div>
+{% if backups %}
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>Filename</th>
+  <th>Size</th>
+  <th>Created</th>
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for b in backups %}
+<tr>
+  <td><code>{{ b.filename }}</code></td>
+  <td>{{ '%0.1f MB'|format(b.size / 1048576) }}</td>
+  <td>{{ b.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+  <td>
+    <a href="{{ url_for('admin.download_backup', path=b.filename) }}">Download</a>
+    <form method="POST" action="{{ url_for('admin.delete_backup', path=b.filename) }}" style="display:inline" onsubmit="return confirm('Delete backup {{ b.filename }}?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% else %}
+<p style="color:#888;">No backups found. Create one to get started.</p>
+{% endif %}''', backups=backups)
+
+
+@admin_bp.route('/backups/<path:path>/download')
+@admin_required
+def download_backup(path):
+    """Download a backup file."""
+    from app.services.backup import list_backups, download_backup as _download
+    backups = list_backups()
+    for b in backups:
+        if b['filename'] == path:
+            return _download(b['path'])
+    flash('Backup not found', 'error')
+    return redirect(url_for('admin.list_backups'))
+
+
+@admin_bp.route('/backups/<path:path>/delete', methods=['POST'])
+@admin_required
+@csrf_protect
+def delete_backup(path):
+    """Delete a backup file."""
+    from app.services.backup import list_backups, delete_backup as _delete
+    backups = list_backups()
+    for b in backups:
+        if b['filename'] == path:
+            _delete(b['path'])
+            flash(f'Backup {path} deleted')
+            return redirect(url_for('admin.list_backups'))
+    flash('Backup not found', 'error')
+    return redirect(url_for('admin.list_backups'))
+
+
+@admin_bp.route('/backups/restore/<path:path>', methods=['POST'])
+@admin_required
+@csrf_protect
+def restore_backup(path):
+    """Restore database from a backup."""
+    from app.services.backup import list_backups, restore_backup as _restore
+    backups = list_backups()
+    for b in backups:
+        if b['filename'] == path:
+            try:
+                _restore(b['path'])
+                flash(f'Database restored from {path}. Restart the application to apply changes.')
+                return redirect(url_for('admin.list_backups'))
+            except Exception as e:
+                flash(f'Restore failed: {e}', 'error')
+                return redirect(url_for('admin.list_backups'))
+    flash('Backup not found', 'error')
+    return redirect(url_for('admin.list_backups'))
+
+
+# ── Execution History per Module ──
+
+@admin_bp.route('/modules/<int:module_id>/executions')
+@developer_or_admin_required
+def module_executions(module_id):
+    """Show recent execution logs for a specific module."""
+    from app.models import Script, ExecutionLog
+    module = db.session.get(Module, module_id)
+    if not module:
+        flash('Module not found', 'error')
+        return redirect(url_for('admin.list_modules'))
+    
+    # Get scripts in this module
+    scripts = db.session.query(Script).filter_by(module_id=module_id).all()
+    script_names = [s.name for s in scripts]
+    
+    # Get recent executions for these scripts
+    limit = request.args.get('limit', 50, type=int)
+    logs = db.session.query(ExecutionLog).filter(
+        ExecutionLog.source_name.in_(script_names),
+        ExecutionLog.source_type == 'script'
+    ).order_by(ExecutionLog.created_at.desc()).limit(limit).all()
+    
+    return render_admin(f'Executions: {module.name}', '''
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.edit_module', id=m.id) }}">Back to Module</a>
+  <form method="GET" style="display:inline;">
+    <input type="hidden" name="limit" value="{{ limit }}">
+    <select name="status" onchange="this.form.submit()" style="padding:4px 8px;">
+      <option value="">All Statuses</option>
+      <option value="success" {% if status_filter == 'success' %}selected{% endif %}>Success</option>
+      <option value="error" {% if status_filter == 'error' %}selected{% endif %}>Error</option>
+    </select>
+  </form>
+</div>
+{% if logs %}
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>Time</th>
+  <th>Script</th>
+  <th>Status</th>
+  <th>Duration</th>
+  <th>Details</th>
+</tr></thead>
+<tbody>
+{% for log in logs %}
+<tr>
+  <td style="white-space:nowrap;font-size:0.85em;">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+  <td><strong>{{ log.source_name }}</strong></td>
+  <td><span class="{% if log.status == 'success' %}status-ok{% else %}status-err{% endif %}">{{ log.status|upper }}</span></td>
+  <td>{{ log.duration_ms }}ms</td>
+  <td>
+    {% if log.error_message %}
+      <span style="color:#c00;font-size:0.85em;">{{ log.error_message[:100] }}...</span>
+    {% elif log.stdout %}
+      <span style="color:#888;font-size:0.85em;">{{ log.stdout[:100] }}...</span>
+    {% else %}
+      <span style="color:#999;font-size:0.85em;">—</span>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% else %}
+<p style="color:#888;">No executions found for this module.</p>
+{% endif %}''', m=module, logs=logs, limit=limit, status_filter='')
+
+
+# ── Test Script (AJAX endpoint) ──
+
+@admin_bp.route('/scripts/test/<int:id>', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def test_script(id):
+    """Test a script by executing it and returning the result as JSON."""
+    from app.services.script_runner import execute_script
+    s = Script.query.get_or_404(id)
+    
+    import time
+    t0 = time.time()
+    import sys
+    from io import StringIO
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+    
+    error = None
+    output = None
+    result = None
+    try:
+        result = execute_script(s)
+        output = sys.stdout.getvalue()
+        duration = int((time.time() - t0) * 1000)
+    except Exception as e:
+        import traceback
+        error = traceback.format_exc()
+        output = sys.stdout.getvalue()
+        duration = int((time.time() - t0) * 1000)
+    finally:
+        sys.stdout = old_stdout
+    
+    return jsonify({
+        'success': error is None,
+        'result': str(result)[:2000] if result else None,
+        'output': output[:2000] if output else '',
+        'error': error[:2000] if error else None,
+        'duration_ms': duration,
+    })
+
+
+# ── Import Preview ──
+
+@admin_bp.route('/import-preview', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def import_preview():
+    """Preview what will be imported from an XML file without actually importing."""
+    if 'import_xml' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    xml_file = request.files['import_xml']
+    if not xml_file.filename:
+        return jsonify({'error': 'Empty filename'}), 400
+    
+    try:
+        from app.services.bundle import import_module
+        xml_str = xml_file.read().decode('utf-8')
+        
+        # Parse XML to extract preview info without importing
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(xml_str)
+        
+        if root.tag != 'module':
+            return jsonify({'error': 'Root element must be <module>'}), 400
+        
+        name = root.get('name', 'Untitled')
+        slug = root.get('slug', '')
+        
+        # Count items that would be imported
+        scripts = root.find('scripts')
+        script_count = len(scripts.findall('script')) if scripts is not None else 0
+        
+        routes = root.find('routes')
+        route_count = len(routes.findall('route')) if routes is not None else 0
+        
+        forms = root.find('forms')
+        form_count = len(forms.findall('form')) if forms is not None else 0
+        
+        tasks = root.find('scheduled_tasks')
+        task_count = len(tasks.findall('task')) if tasks is not None else 0
+        
+        triggers = root.find('triggers')
+        trigger_count = len(triggers.findall('trigger')) if triggers is not None else 0
+        
+        # Check for existing module with same slug
+        existing = db.session.query(Module).filter_by(slug=slug).first()
+        
+        return jsonify({
+            'success': True,
+            'preview': {
+                'name': name,
+                'slug': slug,
+                'existing': existing is not None,
+                'existing_id': existing.id if existing else None,
+                'counts': {
+                    'scripts': script_count,
+                    'routes': route_count,
+                    'forms': form_count,
+                    'tasks': task_count,
+                    'triggers': trigger_count,
+                }
+            }
+        })
+    except ET.ParseError as e:
+        return jsonify({'error': f'Invalid XML: {e}'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+# ── Module Marketplace ──
+
+@admin_bp.route('/marketplace')
+@developer_or_admin_required
+def module_marketplace():
+    """Browse and install modules from the marketplace."""
+    from app.services.marketplace import list_available_modules
+    available = list_available_modules()
+    
+    # Check which are already installed
+    installed_slugs = {m.slug for m in db.session.query(Module.slug).all()}
+    
+    return render_admin('Module Marketplace', '''
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.list_modules') }}">Back to Modules</a>
+</div>
+{% if available %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(300px, 1fr));gap:1rem;">
+{% for mod in available %}
+<div style="border:1px solid #ddd;border-radius:8px;padding:1rem;">
+  <h3 style="margin-top:0;">{{ mod.name }}</h3>
+  <p style="color:#666;font-size:0.9em;">{{ mod.description[:200] }}...</p>
+  <div style="font-size:0.85em;color:#888;margin-bottom:0.5rem;">
+    Version: {{ mod.version }} | Author: {{ mod.author }}
+    {% if mod.tags %} | Tags: {{ mod.tags|join(', ') }}{% endif %}
+  </div>
+  {% if mod.slug in installed_slugs %}
+    <span style="color:#080;font-weight:bold;">Installed</span>
+  {% else %}
+    <form method="POST" action="{{ url_for('admin.install_marketplace_module', slug=mod.slug) }}" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" style="padding:6px 16px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Install</button>
+    </form>
+  {% endif %}
+</div>
+{% endfor %}
+</div>
+{% else %}
+<p style="color:#888;">No modules available in the marketplace yet.</p>
+{% endif %}''', available=available, installed_slugs=installed_slugs)
+
+
+@admin_bp.route('/marketplace/<slug>/install', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def install_marketplace_module(slug):
+    """Install a module from the marketplace."""
+    from app.services.marketplace import get_module_info
+    from app.services.bundle import import_module
+    
+    info = get_module_info(slug)
+    if not info:
+        flash(f'Module "{slug}" not found in marketplace', 'error')
+        return redirect(url_for('admin.module_marketplace'))
+    
+    xml_path = info.get('xml_source')
+    if not xml_path or not os.path.exists(xml_path):
+        flash(f'Module XML not found for "{slug}"', 'error')
+        return redirect(url_for('admin.module_marketplace'))
+    
+    try:
+        with open(xml_path) as f:
+            xml_str = f.read()
+        module = import_module(xml_str)
+        flash(f'Module "{module.name}" installed from marketplace')
+    except Exception as e:
+        flash(f'Installation failed: {e}', 'error')
+    
+    return redirect(url_for('admin.module_marketplace'))

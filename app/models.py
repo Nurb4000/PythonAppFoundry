@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import logging
 
+from flask import current_app as _current_app
 from flask_login import UserMixin
 from sqlalchemy import Table, Column, Integer, String, Text, Boolean, DateTime, Float, Date, LargeBinary, ForeignKey
 from sqlalchemy.orm import declarative_base
@@ -14,6 +15,11 @@ _dynamic_models = {}
 _dynamic_base = declarative_base()
 
 
+def _get_dynamic_state():
+    """Return per-app dynamic model state. In single-app mode returns globals."""
+    return _dynamic_models, _dynamic_base
+
+
 class _ModelQueryProperty:
     def __get__(self, obj, cls):
         return db.session.query(cls)
@@ -25,11 +31,18 @@ class DynamicModel:
         from sqlalchemy import inspect as _sa_inspect
 
         table_name = name.lower()
+        try:
+            engine = db.session.get_bind()
+        except Exception:
+            engine = db.engine
 
         if name in _dynamic_models:
-            inspector = _sa_inspect(db.engine)
-            if table_name in inspector.get_table_names():
-                return _dynamic_models[name]
+            try:
+                inspector = _sa_inspect(engine)
+                if table_name in inspector.get_table_names():
+                    return _dynamic_models[name]
+            except Exception:
+                pass
             del _dynamic_models[name]
             if table_name in db.metadata.tables:
                 del db.metadata.tables[table_name]
@@ -49,7 +62,10 @@ class DynamicModel:
                 cols.append(Column(col_name, String(200)))
 
         table = Table(table_name, db.metadata, *cols, extend_existing=True)
-        table.create(db.engine, checkfirst=True)
+        try:
+            table.create(engine, checkfirst=True)
+        except Exception:
+            pass
 
         model = type(name, (_dynamic_base,), {
             '__table__': table,

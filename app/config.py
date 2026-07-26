@@ -1,10 +1,30 @@
 import os
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
+
+
+def _validate_config():
+    """Warn about insecure default configuration values."""
+    secret_key = os.environ.get('SECRET_KEY', '')
+    if not secret_key or secret_key == 'change-this-in-production':
+        logger.warning(
+            'SECURITY: SECRET_KEY is using the default value. '
+            'Set a strong random SECRET_KEY in your .env file for production.'
+        )
+    
+    db_url = os.environ.get('DATABASE_URL', '')
+    if not db_url:
+        logger.info('Using default SQLite database at data.db')
+
+
+_validate_config()
 
 
 class Config:

@@ -1,0 +1,38 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+  <a href="{{ new_url }}">+ New</a>
+  {% if modules %}
+  <form method="GET" style="display:inline;">
+    <select name="module_id" onchange="this.form.submit()" style="padding:4px 8px;">
+      <option value="">All Modules</option>
+      {% for m in modules %}
+      <option value="{{ m.id }}" {% if selected_module_id == m.id %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+    {% if sort_col %}<input name="sort" type="hidden" value="{{ sort_col }}">{% endif %}
+    {% if sort_order %}<input name="order" type="hidden" value="{{ sort_order }}">{% endif %}
+  </form>
+  {% endif %}
+  <a href="?format=csv{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}" style="margin-left:auto;">Export CSV</a>
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  {% if has_module %}<th><a href="?sort=module_id&order={% if sort_col == 'module_id' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">Module{% if sort_col == 'module_id' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>{% endif %}
+  {% for col in columns %}
+  <th><a href="?sort={{ col }}&order={% if sort_col == col and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if selected_module_id %}&module_id={{ selected_module_id }}{% endif %}">{{ col }}{% if sort_col == col %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  {% endfor %}
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for row in rows %}
+<tr>
+  {% if has_module %}<td>{{ row._module_name }}</td>{% endif %}
+  {% for col in columns %}<td>{{ row|attr(col) }}</td>{% endfor %}
+  <td>
+    {% if show_view and row._obj.slug %}<a href="{{ row._obj.slug }}" target="_blank">View</a> | {% endif %}
+    <a href="{{ edit_url }}/{{ row.id }}">Edit</a>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
