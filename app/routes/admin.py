@@ -3781,3 +3781,11 @@ def install_marketplace_module(slug):
         flash(f'Installation failed: {e}', 'error')
     
     return redirect(url_for('admin.module_marketplace'))
+
+
+# ── Blueprint Registration ──
+# Import and register all admin blueprints
+from app.routes.admin_blueprints import register_admin_blueprints
+
+# Register all blueprints with the admin blueprint
+register_admin_blueprints(admin_bp)
