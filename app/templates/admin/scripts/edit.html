@@ -6,7 +6,10 @@
     <label style="flex:2;min-width:140px;">Module <select name="module_id" style="width:100%;">{% for m in modules %}<option value="{{ m.id }}" {% if m.id == s.module_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
   </div>
   <label style="display:block;margin-top:12px;">Description<textarea name="description" style="width:100%;min-height:80px;resize:vertical;">{{ s.description }}</textarea></label>
-  <label style="display:block;margin-top:12px;">Source Code<textarea name="source_code" id="source_code" rows="15" style="width:100%;font-family:monospace;z-index:1;background:rgba(255,255,255,0.9);">{{ s.source_code }}</textarea></label>
+  <div style="display:block;margin-top:12px;">
+    <label>Source Code</label>
+    <textarea name="source_code" id="source_code" rows="15" style="width:100%;font-family:monospace;z-index:1;background:rgba(255,255,255,0.9);">{{ s.source_code }}</textarea>
+  </div>
   <button style="margin-top:12px;padding:6px 16px;">Save</button>
   <button type="button" onclick="testScript({{ s.id }})" style="margin-left:0.5rem;padding:6px 16px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;">Test Script</button>
   <a href="{{ url_for('admin.scripts.debug_script', id=s.id) }}" style="margin-left:0.5rem;padding:6px 16px;background:#f0f0f0;color:#333;text-decoration:none;border:1px solid #ccc;border-radius:4px;display:inline-block;">Run Debug</a>

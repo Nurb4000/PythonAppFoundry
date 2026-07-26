@@ -83,28 +83,39 @@
     return result.join('\n');
   }
   
-  // Auto-highlight on input
+  // Auto-highlight on input (skip for large scripts to avoid freezing)
+  var MAX_HIGHLIGHT_LINES = 200;
+  var debounceTimer = null;
+
   function initHighlighter(textareaId) {
     var textarea = document.getElementById(textareaId);
     if (!textarea) return;
-    
+
+    var lineCount = textarea.value.split('\n').length;
+    if (lineCount > MAX_HIGHLIGHT_LINES) return;
+
     var preview = document.createElement('div');
     preview.id = textareaId + '-preview';
     preview.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;padding:8px;overflow:auto;font-family:monospace;font-size:13px;line-height:1.5;pointer-events:none;white-space:pre-wrap;word-wrap:break-word;color:transparent;';
     textarea.style.position = 'relative';
     textarea.parentNode.style.position = 'relative';
     textarea.parentNode.insertBefore(preview, textarea);
-    
+
     function update() {
       preview.innerHTML = highlightPython(textarea.value) + '\n';
     }
-    
-    textarea.addEventListener('input', update);
+
+    function debouncedUpdate() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(update, 150);
+    }
+
+    textarea.addEventListener('input', debouncedUpdate);
     textarea.addEventListener('scroll', function() {
       preview.scrollTop = textarea.scrollTop;
       preview.scrollLeft = textarea.scrollLeft;
     });
-    
+
     update();
   }
   
