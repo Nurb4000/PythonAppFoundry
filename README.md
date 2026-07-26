@@ -1,7 +1,5 @@
 # PythonAppFoundry
 
-> **Warning:** This is a work in progress. Core functionality is up and working but we are still working out bugs and the LLM documentation.
-
 This is a restart of a 15-year-old project to create an "embedded database" web app platform for Python and HTML. The intent is that all scripts, HTML, scheduled tasks, processes — everything — goes into a database, and the platform reads out what it needs on demand to run the application. Not a unique concept now, but 15+ years ago it was rather rare.
 
 For the most part the database is fed by XML imports. The original plan was to create graphical designer tools that would export (and import for edits) XML to be sent to the DB to run. But this is 2026 — so instead of GUI design tools, LLMs are used to create and edit the XML for you. More GUI/code builder tools may come later.
@@ -248,6 +246,17 @@ Builtins available: `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `
 MIT — see [LICENSE](LICENSE).
 
 Copyright 2026 IDS
+
+
+## Screenshots
+
+![Module Admin](Screenshots/Module%20Admin.png)
+![Script Editing](Screenshots/Script%20Edting.png)
+![Data Browse](Screenshots/Data%20Browse.png)
+![Queries](Screenshots/Queries.png)
+![AI Designer](Screenshots/AI%20Designer.png)
+![BPMN Designer](Screenshots/BPMN%20Designer.png)
+![Package Admin](Screenshots/Package%20Admin.png)
 
 
 
