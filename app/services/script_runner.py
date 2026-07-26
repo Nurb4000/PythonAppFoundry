@@ -8,7 +8,7 @@ import smtplib
 from email.mime.text import MIMEText
 from io import StringIO
 
-from flask import request, redirect, url_for, flash, render_template_string, jsonify as flask_jsonify
+from flask import request, redirect, url_for, flash, get_flashed_messages, render_template_string, jsonify as flask_jsonify
 from flask_login import current_user
 from datetime import datetime, timezone
 from sqlalchemy import Integer, String, DateTime, Text, Boolean, Float, Column
@@ -301,6 +301,7 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'redirect': redirect,
         'url_for': url_for,
         'flash': flash,
+        'get_flashed_messages': get_flashed_messages,
         'render': render_template_string,
         'jsonify': flask_jsonify,
         'send_email': _send_email,
