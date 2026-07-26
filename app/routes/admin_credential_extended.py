@@ -7,7 +7,7 @@ credential_extended_bp = Blueprint('credential_extended', __name__)
 @credential_extended_bp.route('/credentials/<int:id>/test')
 @admin_required
 def test_credential(id):
-    """Test a credential by retrieving it."""
+    """Test a credential by retrieving and masking it."""
     from app.models import Credential
     from app.services.credential_store import decrypt_value
     
@@ -47,4 +47,26 @@ def bulk_delete_credentials():
     
     db.session.commit()
     flash(f'Deleted {deleted} credential(s)')
+    return redirect(url_for('admin.list_credentials'))
+
+
+@credential_extended_bp.route('/credentials/<int:id>/rotate', methods=['POST'])
+@admin_required
+@csrf_protect
+def rotate_credential(id):
+    """Rotate a credential (generate new random value)."""
+    from app.models import Credential
+    from app.services.credential_store import encrypt_value
+    import secrets
+    
+    credential = db.session.get(Credential, id)
+    if not credential:
+        flash('Credential not found', 'error')
+        return redirect(url_for('admin.list_credentials'))
+    
+    # Generate a new random value
+    new_value = secrets.token_urlsafe(32)
+    credential.value_encrypted = encrypt_value(new_value)
+    db.session.commit()
+    flash(f'Credential "{credential.name}" rotated successfully')
     return redirect(url_for('admin.list_credentials'))
