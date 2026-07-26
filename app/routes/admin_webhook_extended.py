@@ -81,3 +81,70 @@ def webhook_logs(id):
 {% else %}
 <p style="color:#888;">No execution logs for this webhook.</p>
 {% endif %}''', trigger=trigger, logs=logs)
+
+
+@webhook_extended_bp.route('/webhooks/stats')
+@admin_required
+def webhook_stats():
+    """View webhook statistics."""
+    from app.models import Trigger, ExecutionLog
+    
+    total_webhooks = db.session.query(Trigger).filter_by(event_type='webhook').count()
+    active_webhooks = db.session.query(Trigger).filter_by(event_type='webhook', enabled=True).count()
+    
+    # Get recent webhook executions
+    recent_logs = db.session.query(ExecutionLog).filter(
+        ExecutionLog.source_type == 'webhook'
+    ).order_by(ExecutionLog.created_at.desc()).limit(10).all()
+    
+    success_count = db.session.query(ExecutionLog).filter(
+        ExecutionLog.source_type == 'webhook',
+        ExecutionLog.status == 'success'
+    ).count()
+    
+    error_count = db.session.query(ExecutionLog).filter(
+        ExecutionLog.source_type == 'webhook',
+        ExecutionLog.status == 'error'
+    ).count()
+    
+    return render_admin('Webhook Statistics', '''
+<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1rem;margin-bottom:1.5rem;">
+  <div class="dash-card">
+    <h3>Total Webhooks</h3>
+    <div class="value">{{ total_webhooks }}</div>
+  </div>
+  <div class="dash-card">
+    <h3>Active Webhooks</h3>
+    <div class="value" style="color:{% if active_webhooks > 0 %}#080{% else %}#c00{% endif %};">{{ active_webhooks }}</div>
+  </div>
+  <div class="dash-card">
+    <h3>Success Rate</h3>
+    <div class="value">{{ '%.1f'|format(success_count / (success_count + error_count) * 100) if (success_count + error_count) > 0 else 'N/A' }}%</div>
+  </div>
+</div>
+
+<h3>Recent Executions</h3>
+{% if recent_logs %}
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>Time</th>
+  <th>Webhook</th>
+  <th>Status</th>
+  <th>Duration</th>
+</tr></thead>
+<tbody>
+{% for log in recent_logs %}
+<tr>
+  <td style="white-space:nowrap;font-size:0.85em;">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+  <td>{{ log.source_name }}</td>
+  <td><span class="{% if log.status == 'success' %}status-ok{% else %}status-err{% endif %}">{{ log.status|upper }}</span></td>
+  <td>{{ log.duration_ms }}ms</td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% else %}
+<p style="color:#888;">No recent webhook executions.</p>
+{% endif %}
+''', total_webhooks=total_webhooks, active_webhooks=active_webhooks, success_count=success_count, error_count=error_count, recent_logs=recent_logs)
