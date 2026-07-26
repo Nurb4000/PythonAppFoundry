@@ -158,6 +158,76 @@ def _validate_xml(xml_str):
         return False, f'XML parse error: {e}'
 
 
+DEBUG_SYSTEM_PROMPT = """You are a debugging assistant for a Flask-based web application platform called PythonAppFoundry.
+
+Scripts run in a sandboxed environment with these constraints:
+- BLOCKED imports (cannot be used): os, subprocess, sys, importlib, urllib, requests, http, socket, shutil, tempfile, pickle, marshal, codecs, threading, multiprocessing, signal, ctypes, pkg_resources
+- Available globals in every script: db, request, session, current_user, redirect, url_for, flash, get_flashed_messages, render (render_template_string), jsonify, datetime, timezone, Integer, String, DateTime, Text, Boolean, Float, Column
+- Platform helpers: DynamicModel.get_or_create(name, columns), call_api(method, url, headers, json, data, timeout, retries), get_credential(name), get_setting(key, default), send_email(to, subject, body, html), render_chart(chart_type, labels, datasets, title), render_form(action, method, submit_label, fields), form_fields
+- Scripts use 'return' to send data to the caller (automatically wrapped in a function). Alternatively set _result = value.
+- Scripts can access route.form fields via form_fields and render_form().
+- Scripts can access DynamicModel to create/query dynamic database tables.
+- Scripts should NOT import any modules — all needed functions are pre-injected as globals.
+
+Analyze the error and provide a response in this exact format:
+
+**Root Cause:**
+[One paragraph explaining what went wrong and why]
+
+**Corrected Script:**
+```python
+[The full corrected script code]
+```
+
+**Explanation:**
+[One paragraph explaining the fix and any sandbox-aware advice]
+
+Rules:
+1. Always provide the FULL corrected script, never a partial snippet or diff.
+2. If the error is due to a blocked import, suggest an alternative using the available globals (e.g., call_api() instead of requests, DynamicModel instead of direct SQL).
+3. If the script uses 'return' outside a function, explain that the platform auto-wraps scripts.
+4. Keep explanations concise and actionable.
+"""
+
+
+def debug_script_error(error_message, script_source, script_name=''):
+    prompt = f"""A script named "{script_name}" failed with the following error:
+
+--- ERROR ---
+{error_message}
+--- END ERROR ---
+
+Here is the script source code:
+
+--- SCRIPT ---
+{script_source}
+--- END SCRIPT ---
+
+Analyze the error, explain the root cause, and provide the corrected script."""
+
+    messages = [
+        {'role': 'system', 'content': DEBUG_SYSTEM_PROMPT},
+        {'role': 'user', 'content': prompt},
+    ]
+
+    temperature = float(_get_setting('llm_temperature', '0.3'))
+    max_tokens = int(_get_setting('llm_max_tokens', '4096'))
+
+    response = _call_llm(messages, temperature, max_tokens)
+    if response.startswith('Error:'):
+        return {'reply': response, 'fix_code': None, 'error': response}
+
+    fix_code = _extract_code_block(response)
+    return {'reply': response, 'fix_code': fix_code, 'error': None}
+
+
+def _extract_code_block(text):
+    match = re.search(r'```(?:python)?\s*\n(.*?)\n```', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
 def chat_completion(messages, temperature=None, max_tokens=None):
     system_text = _build_system_prompt()
     llm_messages = [{'role': 'system', 'content': system_text}]

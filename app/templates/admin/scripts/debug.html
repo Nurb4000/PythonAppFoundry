@@ -2,5 +2,92 @@
 <p style="color:#888;">Duration: {{ duration }}ms | Module: {{ s.module.name }}</p>
 <h3>Source Code</h3>
 <pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #ddd;border-radius:4px;">{% for item in source_lines %}<span style="color:#999;">{{ '%3d' % item.line_num }}</span>  {{ item.line }}{% endfor %}</pre>
-{% if error %}<h3 style="color:#c00;">Error</h3><pre style="background:#fff5f5;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #fcc;border-radius:4px;">{{ error }}</pre>{% elif output %}<h3>Output</h3><pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #ddd;border-radius:4px;">{{ output }}</pre>{% else %}<p>Script completed with no output.</p>{% endif %}
+{% if error %}
+<h3 style="color:#c00;">Error</h3>
+<pre style="background:#fff5f5;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #fcc;border-radius:4px;">{{ error }}</pre>
+<div style="margin:0.75rem 0;">
+  <button onclick="askAIDebug()" id="askAiBtn" style="padding:6px 14px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.85em;">Ask AI about this error</button>
+</div>
+<div id="aiDebugResult" style="display:none;margin:1rem 0;padding:1rem;border:1px solid #6366f1;border-radius:6px;background:#f8f7ff;"></div>
+{% elif output %}
+<h3>Output</h3>
+<pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;border:1px solid #ddd;border-radius:4px;">{{ output }}</pre>
+{% else %}
+<p>Script completed with no output.</p>
+{% endif %}
 <a href="{{ url_for('admin.scripts.edit_script', id=s.id) }}">&larr; Back to Script</a>
+
+{% if error %}
+<script>
+var csrfToken = '{{ csrf_token() }}';
+var scriptSource = {{ s.source_code|tojson }};
+var scriptName = {{ s.name|tojson }};
+
+function askAIDebug() {
+  var btn = document.getElementById('askAiBtn');
+  var result = document.getElementById('aiDebugResult');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing...';
+  result.style.display = 'block';
+  result.innerHTML = '<p style="color:#888;">Analyzing error...</p>';
+
+  fetch('/__admin/scripts/ask-ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    body: JSON.stringify({ error: {{ error|tojson }}, script_source: scriptSource, script_name: scriptName })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.textContent = 'Ask AI about this error';
+      if (!data.success) {
+        result.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> ' + escapeHtml(data.error) + '</div>';
+        return;
+      }
+      var html = '<div style="line-height:1.6;">' + formatAIResponse(data.reply) + '</div>';
+      if (data.fix_code) {
+        html += '<div style="margin-top:1rem;display:flex;gap:8px;">';
+        html += '<button onclick="copyFix()" style="padding:6px 14px;background:#f0f0f0;color:#333;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">Copy Fix to Clipboard</button>';
+        html += '<a href="{{ url_for("admin.scripts.edit_script", id=s.id) }}" style="padding:6px 14px;background:#28a745;color:#fff;border:none;border-radius:4px;text-decoration:none;font-size:0.85em;display:inline-block;">Go to Editor</a>';
+        html += '</div>';
+      }
+      result.innerHTML = html;
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = 'Ask AI about this error';
+      result.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Request failed:</strong> ' + err.message + '</div>';
+    });
+}
+
+function copyFix() {
+  var code = document.querySelector('#aiDebugResult pre');
+  if (code) {
+    navigator.clipboard.writeText(code.textContent).then(function() {
+      var btns = document.querySelectorAll('#aiDebugResult button');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.indexOf('Copy') === 0) {
+          btns[i].textContent = 'Copied!';
+          setTimeout(function() { btns[i].textContent = 'Copy Fix to Clipboard'; }, 2000);
+        }
+      }
+    });
+  }
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function formatAIResponse(text) {
+  var html = escapeHtml(text);
+  html = html.replace(/```python\s*\n([\s\S]*?)\n```/g, '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85em;border:1px solid #ddd;margin:0.5rem 0;">$1</pre>');
+  html = html.replace(/```\s*\n([\s\S]*?)\n```/g, '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85em;border:1px solid #ddd;margin:0.5rem 0;">$1</pre>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+</script>
+{% endif %}

@@ -17,6 +17,7 @@ This guide is for developers maintaining or extending the platform code itself. 
 | File | Lines | Blueprint | Prefix | What It Does |
 |---|---|---|---|---|
 | `app/routes/admin.py` | ~2430 | `admin_bp` | `/__admin` | Full admin CRUD — dashboard, modules, routes, scripts, forms, tasks, triggers, users, groups, data browser, uploads, settings. Also defines `ADMIN_TEMPLATE`, `LIST_TEMPLATE`, `AttrProxy`, `render_admin()`, `list_view()`. |
+| `app/routes/admin_scripts.py` | ~120 | `scripts` | `/__admin/scripts` | Script CRUD (list, new, edit) + debug execution + `POST /ask-ai` endpoint for AI-powered script debugging. |
 | `app/routes/dynamic.py` | ~55 | `dynamic_bp` | (none) | Catch-all `/<path:slug>` — looks up slug in `Route` table, checks perms, executes script, fires after_route triggers. |
 | `app/routes/auth.py` | ~110 | `auth_bp` | `/__auth` | Setup wizard, login/logout, registration, profile page. |
 | `app/routes/api.py` | ~155 | `api_bp` | `/__api` | REST: module list/export/import, file upload, webhook receiver. |
@@ -30,7 +31,7 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/script_runner.py` | ~250 | The sandbox — compiles and `exec`s user scripts with safe builtins, blocked imports (`os`, `subprocess`, `sys`, `socket`, etc.), injected globals, stdout capture, timeout via SIGALRM (main thread) or threading (tasks). The `_send_email()` helper lives here. |
 | `app/services/scheduler.py` | ~200 | APScheduler `BackgroundScheduler` — registers `ScheduledTask` rows as cron jobs, wraps execution in threads with timeout, logs to `ExecutionLog`. Also handles query report checks and IMAP polling. |
 | `app/services/triggers.py` | ~100 | Queries enabled `Trigger` rows by event_type + target_table and fires scripts synchronously. Webhook triggers include retry logic (3 attempts) and dead letter queue for failures. |
-| `app/services/ai_assistant.py` | ~180 | LLM integration — reads provider settings from `Setting` model, builds system prompt from `AI_GUIDE.md`, dispatches to llama.cpp or OpenAI, extracts XML from response. |
+| `app/services/ai_assistant.py` | ~260 | LLM integration — reads provider settings from `Setting` model, builds system prompt from `AI_GUIDE.md`, dispatches to llama.cpp or OpenAI, extracts XML from response. Also provides `debug_script_error()` for AI-powered script debugging with a sandbox-aware system prompt. |
 | `app/services/bundle.py` | ~330 | Module XML serialization/deserialization. `export_module()` walks model relationships and builds XML. `import_module()` parses XML, creates/updates module and all children, bumps version, detects dependencies, installs requirements. |
 | `app/services/dependencies.py` | ~110 | Scans scripts for `url_for('other_slug.')`, `redirect('/other_slug/')`, and cross-module `script_id=` references. Uses proper regex capture groups to avoid catastrophic backtracking. |
 | `app/services/file_upload.py` | ~80 | Secure upload — random filename via `secrets.token_hex(12)`, stores in `instance/uploads/`, creates `Upload` record. |

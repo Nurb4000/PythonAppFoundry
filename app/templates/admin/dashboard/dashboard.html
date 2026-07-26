@@ -17,25 +17,88 @@
 .log-modal-content pre { background:#f8f9fa; padding:1rem; border-radius:4px; overflow-x:auto; font-size:0.85em; max-height:400px; overflow-y:auto; white-space:pre-wrap; word-wrap:break-word; }
 .log-modal-close { float:right; font-size:1.5em; cursor:pointer; color:#999; }
 .log-modal-close:hover { color:#333; }
+.ai-debug-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10001; }
+.ai-debug-content { position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border-radius:8px; padding:1.5rem; max-width:700px; width:90%; max-height:80vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
 </style>
 <script>
-function showLogDetail(id, msgEl) {
+var csrfToken = '{{ csrf_token() }}';
+var _currentLogSourceName = '';
+var _currentLogSourceType = '';
+
+function showLogDetail(id, msgEl, sourceName, sourceType) {
   var modal = document.getElementById('logModal');
   var content = document.getElementById('logContent');
   var message = msgEl ? msgEl.textContent || msgEl.innerText : 'No details available.';
+  _currentLogSourceName = sourceName || '';
+  _currentLogSourceType = sourceType || '';
   content.innerHTML = '<h3>Execution Log #' + id + '</h3>';
   var pre = document.createElement('pre');
   pre.textContent = message;
   content.appendChild(pre);
+  if (sourceType === 'error' && _currentLogSourceName) {
+    var btn = document.createElement('button');
+    btn.textContent = 'Ask AI about this error';
+    btn.style.cssText = 'margin-top:0.75rem;padding:6px 14px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.85em;';
+    btn.onclick = function() { askAILog(message, _currentLogSourceName); };
+    content.appendChild(btn);
+  }
   modal.style.display = 'block';
 }
+
+function askAILog(errorText, scriptName) {
+  var modal = document.getElementById('aiDebugModal');
+  var result = document.getElementById('aiDebugResult');
+  modal.style.display = 'block';
+  result.innerHTML = '<p style="color:#888;">Analyzing error...</p>';
+
+  fetch('/__admin/scripts/ask-ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    body: JSON.stringify({ error: errorText, script_source: '', script_name: scriptName })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.success) {
+        result.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> ' + escapeHtml(data.error) + '</div>';
+        return;
+      }
+      var html = '<div style="line-height:1.6;">' + formatAIResponse(data.reply) + '</div>';
+      if (data.fix_code) {
+        html += '<div style="margin-top:1rem;"><button onclick="navigator.clipboard.writeText(decodeURIComponent(escape(atob(\'' + btoa(unescape(encodeURIComponent(data.fix_code))) + '\')))).then(function(){var b=event.target;b.textContent=\'Copied!\';setTimeout(function(){b.textContent=\'Copy Fix to Clipboard\';},2000);})" style="padding:6px 14px;background:#f0f0f0;color:#333;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">Copy Fix to Clipboard</button></div>';
+      }
+      result.innerHTML = html;
+    })
+    .catch(function(err) {
+      result.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Request failed:</strong> ' + err.message + '</div>';
+    });
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function formatAIResponse(text) {
+  var html = escapeHtml(text);
+  html = html.replace(/```python\s*\n([\s\S]*?)\n```/g, '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85em;border:1px solid #ddd;margin:0.5rem 0;">$1</pre>');
+  html = html.replace(/```\s*\n([\s\S]*?)\n```/g, '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85em;border:1px solid #ddd;margin:0.5rem 0;">$1</pre>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
 document.addEventListener('click', function(e) {
   if (e.target.id === 'logModal' || e.target.className === 'log-modal-close') {
     document.getElementById('logModal').style.display = 'none';
   }
+  if (e.target.id === 'aiDebugModal') {
+    document.getElementById('aiDebugModal').style.display = 'none';
+  }
 });
 </script>
 <div id="logModal" class="log-modal"><div class="log-modal-content"><span class="log-modal-close">&times;</span><div id="logContent"></div></div></div>
+<div id="aiDebugModal" class="ai-debug-modal"><div class="ai-debug-content"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;"><h3 style="margin:0;">AI Debugging Assistant</h3><button onclick="document.getElementById('aiDebugModal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button></div><div id="aiDebugResult"></div></div></div>
 
 <div class="dash-grid">
   <div class="dash-card"><h3>Modules</h3><div class="value">{{ total_modules }}</div><div class="sub">{{ enabled_modules }} enabled</div></div>
@@ -92,10 +155,10 @@ document.addEventListener('click', function(e) {
       <td>{{ log.duration_ms }}ms</td>
       <td>
         {% if log.error_message %}
-        <button onclick="showLogDetail({{ log.id }}, this.nextElementSibling)" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#fee;border:1px solid #c00;color:#c00;border-radius:3px;">View Error</button>
+        <button onclick="showLogDetail({{ log.id }}, this.nextElementSibling, '{{ log.source_name|e }}', 'error')" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#fee;border:1px solid #c00;color:#c00;border-radius:3px;">View Error</button>
         <span style="display:none;">{{ log.error_message[:2000] }}</span>
         {% elif log.stdout %}
-        <button onclick="showLogDetail({{ log.id }}, this.nextElementSibling)" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#efe;border:1px solid #080;color:#080;border-radius:3px;">View Output</button>
+        <button onclick="showLogDetail({{ log.id }}, this.nextElementSibling, '{{ log.source_name|e }}', 'output')" style="font-size:0.8em;padding:2px 8px;cursor:pointer;background:#efe;border:1px solid #080;color:#080;border-radius:3px;">View Output</button>
         <span style="display:none;">{{ log.stdout[:2000] }}</span>
         {% else %}
         <span style="color:#888;font-size:0.85em;">—</span>

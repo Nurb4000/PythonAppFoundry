@@ -1,5 +1,5 @@
 """Admin routes for script management."""
-from flask import Blueprint, request, redirect, url_for, flash
+from flask import Blueprint, request, redirect, url_for, flash, jsonify
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import developer_or_admin_required, list_view, render_admin
 from app.services.script_runner import execute_script
@@ -86,3 +86,40 @@ def debug_script(id):
         sys.stdout = old_stdout
     source_lines = [{'line_num': i + 1, 'line': line} for i, line in enumerate(s.source_code.split('\n'))]
     return render_admin('Debug: ' + s.name, 'admin/scripts/debug.html', s=s, duration=duration, source_lines=source_lines, error=error, output=output)
+
+
+@scripts_bp.route('/ask-ai', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def ask_ai_debug():
+    """Send an error + script context to the LLM for debugging help."""
+    from app.services.ai_assistant import debug_script_error
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+    error_text = (data.get('error') or '').strip()
+    script_source = (data.get('script_source') or '').strip()
+    script_name = (data.get('script_name') or '').strip()
+
+    if not error_text:
+        return jsonify({'success': False, 'error': 'No error message provided'}), 400
+
+    if not script_source and script_name:
+        s = Script.query.filter_by(name=script_name).first()
+        if s:
+            script_source = s.source_code
+
+    if not script_source:
+        return jsonify({'success': False, 'error': 'Script source not found'}), 400
+
+    result = debug_script_error(error_text, script_source, script_name)
+
+    if result.get('error'):
+        return jsonify({'success': False, 'error': result['error']})
+
+    return jsonify({
+        'success': True,
+        'reply': result['reply'],
+        'fix_code': result.get('fix_code'),
+    })

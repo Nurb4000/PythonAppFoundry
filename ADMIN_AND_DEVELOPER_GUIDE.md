@@ -619,6 +619,48 @@ The script editor now includes a **Test Script** button that runs the script in 
 2. Click **Test Script** (green button)
 3. View the result, output, or error in the modal
 
+## AI-Powered Script Debugging
+
+When a script fails, you can click **"Ask AI about this error"** to get the configured LLM to analyze the error and suggest a fix. This works across the platform wherever errors are displayed.
+
+### Where It's Available
+
+| Location | How It Works |
+|----------|-------------|
+| **Script Editor → Test Modal** | Click "Test Script" → if error, click "Ask AI about this error" → AI analyzes the error + your source code → "Apply Fix" populates the textarea with the corrected script |
+| **Script Debug Page** | Click "Run Debug" → if error, click "Ask AI about this error" → AI analyzes the error + source code → "Copy Fix to Clipboard" button + link to editor |
+| **Dashboard → Recent Logs** | Click "View Error" → if error, "Ask AI about this error" button appears → AI looks up the script source by name and analyzes it |
+| **Integration Health** | Click "View Error" → same flow as dashboard |
+
+### How It Works
+
+1. Click "Ask AI about this error" — the button shows "Analyzing..." while the LLM processes
+2. The LLM receives the error message, the full script source code, and a system prompt explaining the platform's sandbox constraints
+3. The response includes:
+   - **Root Cause** — what went wrong and why
+   - **Corrected Script** — the full fixed script
+   - **Explanation** — what the fix does and any sandbox-aware advice
+4. If the LLM provides a corrected script:
+   - **Apply Fix** (script editor only) — copies the fixed code into the source code textarea
+   - **Copy Fix to Clipboard** — copies the fixed code to your clipboard
+
+### Configuration
+
+This feature uses the same LLM settings configured in **Admin → Settings** (Provider, Endpoint, API Key, Model, Temperature, Max Tokens). No additional setup is needed.
+
+The LLM is given a system prompt that explains the platform's sandbox:
+- Blocked imports (`os`, `subprocess`, `sys`, `socket`, etc.)
+- Available globals (`db`, `request`, `DynamicModel`, `call_api`, `get_credential`, etc.)
+- Script conventions (`return`/`_result` patterns, auto-wrapping)
+
+This means the AI can suggest fixes that work within the sandbox rather than suggesting imports that would be blocked.
+
+### Requirements
+
+- LLM must be configured in Admin → Settings (Provider + Endpoint at minimum)
+- User must have Developer or Admin role
+- CSRF token is included automatically
+
 ## XML Import Preview
 
 Before importing a module XML, you can now preview what will be imported:
