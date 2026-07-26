@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head><title>AI Module Designer</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 960px; }
+.chat-layout { display: flex; height: calc(100vh - 37px - 32px); }
+nav { background: #f5f5f5; width: 240px; padding: 1rem; border-right: 1px solid #ddd; overflow-y: auto; }
+nav h3 { margin: 0 0 0.5rem 0; }
+nav a { display: block; padding: 0.4rem; color: #333; text-decoration: none; border-radius: 4px; }
+nav a:hover { background: #e0e0e0; }
+.main { flex: 1; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+<div class="chat-layout">
+<nav>
+<a href="{{ url_for('chat.new_session') }}" style="background:#28a745;color:#fff;text-align:center;padding:0.5rem;border-radius:4px;margin-bottom:1rem">+ New Module</a>
+<h3>Sessions</h3>
+{% for s in sessions %}
+<a href="{{ url_for('chat.view_session', id=s.id) }}">{{ s.title }}</a>
+{% endfor %}
+</nav>
+<div class="main"><p>Select a session or create a new one.</p></div>
+</div>
+<div style="text-align:center;color:#999;font-size:0.8em;padding:0.5rem 0;border-top:1px solid #eee;">Copyright 2026 IDS</div>
+</body>
+</html>
