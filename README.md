@@ -183,27 +183,6 @@ run.py → create_app() (Flask factory)
   ├── app/services/structured_logging.py — JSON-formatted structured logging
   └── app/services/tenant.py         — Multi-tenant isolation support
 
-## Docker Deployment
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Docker Compose                       │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────┐    ┌──────────────┐   │
-│  │   web:5000  │    │    db:5432   │    │ llamacpp:8080│   │
-│  │  (Flask App)│    │ (PostgreSQL) │    │   (LLM Server)│   │
-│  └─────────────┘    └─────────────┘    └──────────────┘   │
-│         │                   │                   │          │
-│         └───────────────────┴───────────────────┘          │
-│                          │                                  │
-│                    ┌─────┴─────┐                           │
-│                    │  Volumes  │                           │
-│                    │  ./instance│                          │
-│                    │ ./marketplace│                         │
-│                    └───────────┘                           │
-└─────────────────────────────────────────────────────────────┘
-```
-
 See `ADMIN_AND_DEVELOPER_GUIDE.md#docker-deployment` for full Docker instructions.
 
 ### Key design decisions
@@ -271,12 +250,11 @@ MIT — see [LICENSE](LICENSE).
 Copyright 2026 IDS
 
 
-## Some screenhots to give you an idea of its layout
 
-<img width="1011" height="694" alt="Build" src="https://github.com/user-attachments/assets/58934cf2-30c5-40f4-8d84-41939f957294" />
-<img width="1387" height="532" alt="Edit Module" src="https://github.com/user-attachments/assets/970d5ff1-648b-4a38-8c32-e1e2d77f95c8" />
-<img width="1379" height="365" alt="Route List" src="https://github.com/user-attachments/assets/24153de4-3f21-4271-adf1-8565636efded" />
-<img width="1399" height="564" alt="Database Tables" src="https://github.com/user-attachments/assets/034b3fef-7f77-49dd-840d-9e49120a82dc" />
-<img width="1392" height="581" alt="Table Edit" src="https://github.com/user-attachments/assets/08b1091b-1849-4416-82c7-11dcd93d662f" />
-<img width="1386" height="676" alt="Manual Script Edit" src="https://github.com/user-attachments/assets/d55cf9d3-edde-4a23-a84b-6b37892c0775" />
-<img width="1392" height="692" alt="BPMN" src="https://github.com/user-attachments/assets/3642e844-a4aa-4aa8-a985-52954e670cfc" />
+
+
+
+
+
+
+
