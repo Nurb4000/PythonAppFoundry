@@ -63,3 +63,32 @@ def publish_module():
         flash(f'Failed to publish module: {e}', 'error')
     
     return redirect(url_for('admin.module_marketplace'))
+
+
+@marketplace_extended_bp.route('/marketplace/<slug>/info')
+@developer_or_admin_required
+def marketplace_module_info(slug):
+    """View detailed information about a marketplace module."""
+    from app.services.marketplace import get_module_info
+    
+    info = get_module_info(slug)
+    if not info:
+        flash('Module not found in marketplace', 'error')
+        return redirect(url_for('admin.module_marketplace'))
+    
+    return render_admin(f'Module Info: {info["name"]}', '''
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.module_marketplace') }}">Back to Marketplace</a>
+</div>
+<div class="dash-card">
+  <h3>{{ info.name }}</h3>
+  <p><strong>Slug:</strong> {{ info.slug }}</p>
+  <p><strong>Version:</strong> {{ info.version }}</p>
+  <p><strong>Author:</strong> {{ info.author }}</p>
+  <p><strong>Description:</strong> {{ info.description }}</p>
+  {% if info.tags %}
+  <p><strong>Tags:</strong> {{ info.tags|join(', ') }}</p>
+  {% endif %}
+  <p><strong>Published:</strong> {{ info.published_at }}</p>
+</div>
+''', info=info)
