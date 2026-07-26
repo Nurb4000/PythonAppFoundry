@@ -1,0 +1,33 @@
+<div style="margin-bottom:1rem;">
+  <a href="{{ url_for('admin.data.list_tables') }}">&larr; All Tables</a>
+  | <a href="{{ url_for('admin.data.new_row', table_name=table_name) }}">+ New Row</a>
+  | <a href="?format=csv">Export CSV</a>
+  <span style="float:right;">Page {{ page }} / {{ total_pages }} ({{ total }} rows)</span>
+</div>
+<table>
+<thead><tr>{% for c in columns %}<th>{{ c.name }}<br><span style="font-weight:normal;font-size:0.75em;color:#888;">{{ c.type }}</span></th>{% endfor %}<th></th></tr></thead>
+<tbody>
+{% for row in rows %}
+<tr>
+  {% for c in columns %}
+  <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.9em;">
+    {{ row[c.name] if row[c.name] is not none else '<span style="color:#ccc;">NULL</span>' }}
+  </td>
+  {% endfor %}
+  <td style="white-space:nowrap;">
+    <a href="{{ url_for('admin.data.edit_row', table_name=table_name, id=row['id']) }}">Edit</a>
+    <form method="POST" action="{{ url_for('admin.data.delete_row', table_name=table_name, id=row['id']) }}" style="display:inline" onsubmit="return confirm('Delete row {{ row['id'] }}?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Delete</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+{% if total_pages > 1 %}
+<div style="margin-top:1rem;">
+{% for p in range(1, total_pages + 1) %}
+  <a href="?page={{ p }}" style="padding:0.25rem 0.5rem;{% if p == page %}background:#2563eb;color:#fff;{% endif %}">{{ p }}</a>
+{% endfor %}
+</div>
+{% endif %}

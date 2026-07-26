@@ -1,0 +1,9 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Username <input name="username" required></label>
+<label>Password <input name="password" type="password" required></label>
+<label>Role <select name="role"><option>admin</option><option>developer</option><option>user</option></select></label>
+<label><input name="is_approved" type="checkbox" checked> Approved</label>
+<label><input name="is_active" type="checkbox" checked> Active</label>
+<button>Save</button>
+</form>

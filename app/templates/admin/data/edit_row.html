@@ -1,0 +1,22 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% for info in columns %}
+<label style="display:block;margin-bottom:8px;">
+  <strong>{{ info.name }}</strong>
+  {% if info.kind == 'textarea' %}
+    <textarea name="{{ info.name }}" style="width:100%;padding:6px;font-family:monospace;" {% if not info.nullable %}required{% endif %}>{{ info.val }}</textarea>
+  {% elif info.kind == 'bool' %}
+    <select name="{{ info.name }}"><option value="">--</option><option value="1" {% if info.val == '1' %}selected{% endif %}>True</option><option value="0" {% if info.val == '0' %}selected{% endif %}>False</option></select>
+  {% elif info.kind == 'datetime' %}
+    <input name="{{ info.name }}" type="datetime-local" value="{{ info.val }}" style="width:100%;padding:6px;">
+  {% elif info.kind == 'number' %}
+    <input name="{{ info.name }}" type="number" step="any" value="{{ info.val }}" style="width:100%;padding:6px;" {% if not info.nullable %}required{% endif %}>
+  {% else %}
+    <input name="{{ info.name }}" value="{{ info.val }}" style="width:100%;padding:6px;" {% if not info.nullable %}required{% endif %}>
+  {% endif %}
+  {% if info.nullable %}<span style="color:#888;font-size:0.85em;">optional</span>{% endif %}
+</label>
+{% endfor %}
+<button style="padding:8px 20px;">Save</button>
+<a href="{{ url_for('admin.data.browse_table', table_name=table_name) }}" style="margin-left:1rem;">Cancel</a>
+</form>

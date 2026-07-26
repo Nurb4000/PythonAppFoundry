@@ -1,0 +1,27 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.modules.list_modules') }}">Back to Modules</a>
+</div>
+{% if available %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(300px, 1fr));gap:1rem;">
+{% for mod in available %}
+<div style="border:1px solid #ddd;border-radius:8px;padding:1rem;">
+  <h3 style="margin-top:0;">{{ mod.name }}</h3>
+  <p style="color:#666;font-size:0.9em;">{{ mod.description[:200] }}...</p>
+  <div style="font-size:0.85em;color:#888;margin-bottom:0.5rem;">
+    Version: {{ mod.version }} | Author: {{ mod.author }}
+    {% if mod.tags %} | Tags: {{ mod.tags|join(', ') }}{% endif %}
+  </div>
+  {% if mod.slug in installed_slugs %}
+    <span style="color:#080;font-weight:bold;">Installed</span>
+  {% else %}
+    <form method="POST" action="{{ url_for('admin.marketplace.install_marketplace_module', slug=mod.slug) }}" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" style="padding:6px 16px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Install</button>
+    </form>
+  {% endif %}
+</div>
+{% endfor %}
+</div>
+{% else %}
+<p style="color:#888;">No modules available in the marketplace yet.</p>
+{% endif %}

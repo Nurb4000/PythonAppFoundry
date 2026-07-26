@@ -1,0 +1,23 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% for c in columns %}
+<label style="display:block;margin-bottom:8px;">
+  <strong>{{ c.name }}</strong>
+  {% set t = c.type|string|lower %}
+  {% if 'text' in t and 'char' not in t %}
+    <textarea name="{{ c.name }}" style="width:100%;padding:6px;font-family:monospace;" {% if not c.nullable %}required{% endif %}></textarea>
+  {% elif 'bool' in t %}
+    <select name="{{ c.name }}"><option value="">--</option><option value="1">True</option><option value="0">False</option></select>
+  {% elif 'datetime' in t or 'timestamp' in t %}
+    <input name="{{ c.name }}" type="datetime-local" style="width:100%;padding:6px;">
+  {% elif 'int' in t or 'float' in t or 'double' in t or 'numeric' in t or 'decimal' in t %}
+    <input name="{{ c.name }}" type="number" step="any" style="width:100%;padding:6px;" {% if not c.nullable %}required{% endif %}>
+  {% else %}
+    <input name="{{ c.name }}" style="width:100%;padding:6px;" {% if not c.nullable %}required{% endif %}>
+  {% endif %}
+  {% if c.nullable %}<span style="color:#888;font-size:0.85em;">optional</span>{% endif %}
+</label>
+{% endfor %}
+<button style="padding:8px 20px;">Save</button>
+<a href="{{ url_for('admin.data.browse_table', table_name=table_name) }}" style="margin-left:1rem;">Cancel</a>
+</form>

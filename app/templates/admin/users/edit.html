@@ -1,0 +1,9 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Username <input name="username" value="{{ u.username }}" required></label>
+<label>Password <input name="password" type="password" placeholder="Leave blank to keep"></label>
+<label>Role <select name="role"><option {% if u.role=='admin' %}selected{% endif %}>admin</option><option {% if u.role=='developer' %}selected{% endif %}>developer</option><option {% if u.role=='user' %}selected{% endif %}>user</option></select></label>
+<label><input name="is_approved" type="checkbox" {% if u.is_approved %}checked{% endif %}> Approved</label>
+<label><input name="is_active" type="checkbox" {% if u.is_active %}checked{% endif %}> Active</label>
+<button>Save</button>
+</form>

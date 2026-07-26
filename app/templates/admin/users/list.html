@@ -1,0 +1,55 @@
+{% if pending %}
+<div style="background:#fff3cd;padding:0.5rem;margin-bottom:1rem;">
+  <strong>{{ pending }} pending approval</strong>
+</div>
+{% endif %}
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.users.new_user') }}">+ New User</a>
+  <a href="?format=csv{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}" style="margin-left:auto;">Export CSV</a>
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th><a href="?sort=id&order={% if sort_col == 'id' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">ID{% if sort_col == 'id' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=username&order={% if sort_col == 'username' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Username{% if sort_col == 'username' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=role&order={% if sort_col == 'role' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Role{% if sort_col == 'role' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Status</th>
+  <th><a href="?sort=created_at&order={% if sort_col == 'created_at' and sort_order == 'asc' %}desc{% else %}asc{% endif %}">Created{% if sort_col == 'created_at' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th></th>
+</tr></thead>
+<tbody>
+{% for u in users %}
+<tr>
+  <td>{{ u.id }}</td>
+  <td>{{ u.username }}</td>
+  <td>{{ u.role }}</td>
+  <td>
+    {% if not u.is_approved %}<span style="color:#856404;">Pending</span>
+    {% elif not u.is_active %}<span style="color:#c00;">Disabled</span>
+    {% else %}<span style="color:#080;">Active</span>{% endif %}
+  </td>
+  <td>{{ u.created_at|localtime }}</td>
+  <td>
+    <a href="{{ url_for('admin.users.edit_user', id=u.id) }}">Edit</a>
+    {% if not u.is_approved %}
+      <form method="POST" action="{{ url_for('admin.users.approve_user', id=u.id) }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button style="background:none;border:none;color:#080;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Approve</button>
+      </form>
+    {% endif %}
+    {% if u.is_active and u.is_approved %}
+      <form method="POST" action="{{ url_for('admin.users.disable_user', id=u.id) }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button style="background:none;border:none;color:#c00;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Disable</button>
+      </form>
+    {% elif not u.is_active %}
+      <form method="POST" action="{{ url_for('admin.users.enable_user', id=u.id) }}" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button style="background:none;border:none;color:#080;cursor:pointer;text-decoration:underline;padding:0;font:inherit;font-size:0.9em;">Enable</button>
+      </form>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>

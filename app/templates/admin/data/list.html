@@ -1,0 +1,44 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+  <form method="GET" style="display:inline;">
+    <select name="module" onchange="this.form.submit()" style="padding:4px 8px;">
+      <option value="">All Modules</option>
+      {% for m in module_names %}
+      <option value="{{ m }}" {% if filter_module == m %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+    {% if sort_col %}<input name="sort" type="hidden" value="{{ sort_col }}">{% endif %}
+    {% if sort_order %}<input name="order" type="hidden" value="{{ sort_order }}">{% endif %}
+  </form>
+  <a href="?format=csv{% if filter_module %}&module={{ filter_module }}{% endif %}" style="margin-left:auto;">Export CSV</a>
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th><a href="?sort=module&order={% if sort_col == 'module' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if filter_module %}&module={{ filter_module }}{% endif %}">Module{% if sort_col == 'module' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=name&order={% if sort_col == 'name' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if filter_module %}&module={{ filter_module }}{% endif %}">Table{% if sort_col == 'name' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th><a href="?sort=rows&order={% if sort_col == 'rows' and sort_order == 'asc' %}desc{% else %}asc{% endif %}{% if filter_module %}&module={{ filter_module }}{% endif %}">Rows{% if sort_col == 'rows' %}<span style="font-size:0.7em;margin-left:2px;">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+  <th>Columns</th>
+  <th></th>
+</tr></thead>
+<tbody>
+{% for t in tables %}
+<tr>
+  <td>{% if t.module %}{{ t.module }}{% else %}<span style="color:#c00;">Orphaned</span>{% endif %}</td>
+  <td><strong>{{ t.name }}</strong></td>
+  <td>{{ t.count }}</td>
+  <td style="font-size:0.85em;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+    {% for c in t.columns %}{{ c.name }} <span style="color:#888;">{{ c.type }}</span>{% if c.pk %} <span style="color:#c00;">PK</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+  </td>
+  <td>
+    <a href="{{ url_for('admin.data.browse_table', table_name=t.name) }}">Browse</a>
+    {% if not t.is_platform %}
+    <form method="POST" action="{{ url_for('admin.data.delete_table', table_name=t.name) }}" style="display:inline" onsubmit="return confirm('Drop table &quot;{{ t.name }}&quot; and all its data?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" style="background:none;border:none;color:#d00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button>
+    </form>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
