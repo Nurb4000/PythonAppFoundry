@@ -897,11 +897,19 @@ def list_scripts():
 def new_script():
     modules = db.session.query(Module).all()
     if request.method == 'POST':
+        source = request.form.get('source_code', '')
+        language = request.form.get('language', 'python')
+        if language == 'python' and source.strip():
+            try:
+                compile(source, f'<{request.form["name"]}>', 'exec')
+            except SyntaxError as e:
+                flash(f'Syntax error in script "{request.form["name"]}": {e.msg} (line {e.lineno})', 'error')
+                return redirect(url_for('admin.new_script'))
         s = Script(
             module_id=int(request.form['module_id']),
             name=request.form['name'],
-            language=request.form.get('language', 'python'),
-            source_code=request.form.get('source_code', ''),
+            language=language,
+            source_code=source,
             description=request.form.get('description', ''),
         )
         db.session.add(s)
@@ -925,10 +933,18 @@ def edit_script(id):
     s = Script.query.get_or_404(id)
     modules = db.session.query(Module).all()
     if request.method == 'POST':
+        source = request.form.get('source_code', '')
+        language = request.form.get('language', 'python')
+        if language == 'python' and source.strip():
+            try:
+                compile(source, f'<{request.form["name"]}>', 'exec')
+            except SyntaxError as e:
+                flash(f'Syntax error in script "{request.form["name"]}": {e.msg} (line {e.lineno})', 'error')
+                return redirect(url_for('admin.edit_script', id=s.id))
         s.module_id = int(request.form['module_id'])
         s.name = request.form['name']
-        s.language = request.form.get('language', 'python')
-        s.source_code = request.form.get('source_code', '')
+        s.language = language
+        s.source_code = source
         s.description = request.form.get('description', '')
         db.session.commit()
         return redirect(url_for('admin.list_scripts'))
