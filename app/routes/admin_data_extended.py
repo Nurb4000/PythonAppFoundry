@@ -115,3 +115,66 @@ def truncate_table(table_name):
     db.session.commit()
     flash(f'Table {table_name} truncated')
     return redirect(url_for('admin.list_tables'))
+
+
+@data_extended_bp.route('/data/<table_name>/stats')
+@admin_required
+def table_stats(table_name):
+    """View statistics for a table."""
+    from app.models import db
+    from sqlalchemy import func
+    
+    if table_name not in db.metadata.tables:
+        flash('Table not found', 'error')
+        return redirect(url_for('admin.list_tables'))
+    
+    table = db.metadata.tables[table_name]
+    count = db.session.execute(func.count()).scalar()
+    
+    # Get column statistics
+    columns_info = []
+    for col in table.columns:
+        if col.name == 'id':
+            continue
+        stats = db.session.execute(db.text(f'SELECT MIN({col.name}), MAX({col.name}), AVG({col.name}) FROM {table_name}')).fetchone()
+        columns_info.append({
+            'name': col.name,
+            'type': str(col.type),
+            'min': stats[0],
+            'max': stats[1],
+            'avg': stats[2],
+        })
+    
+    return render_admin(f'Table Stats: {table_name}', '''
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.list_tables') }}">Back to Tables</a>
+</div>
+<div class="dash-card">
+  <h3>{{ table_name }}</h3>
+  <p>Total rows: {{ count }}</p>
+</div>
+
+{% if columns_info %}
+<h3 style="margin-top:1.5rem;">Column Statistics</h3>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>Column</th>
+  <th>Type</th>
+  <th>Min</th>
+  <th>Max</th>
+  <th>Avg</th>
+</tr></thead>
+<tbody>
+{% for col in columns_info %}
+<tr>
+  <td>{{ col.name }}</td>
+  <td><code>{{ col.type }}</code></td>
+  <td>{{ col.min }}</td>
+  <td>{{ col.max }}</td>
+  <td>{{ '%.2f'|format(col.avg) if col.avg else 'N/A' }}</td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% endif %}''', table_name=table_name, count=count, columns_info=columns_info)
