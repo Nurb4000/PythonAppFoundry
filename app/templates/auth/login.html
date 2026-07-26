@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>Log In</title><style>body { font-family: system-ui, sans-serif; max-width: 400px; margin: 3rem auto; padding: 0 1rem; }
+input, select { display: block; width: 100%; margin-bottom: 1rem; padding: 0.5rem; box-sizing: border-box; }
+button { padding: 0.5rem 2rem; cursor: pointer; }
+.error { color: #c00; }
+.success { color: #080; }
+.card { background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; }
+h2 { margin-top: 0; }</style></head>
+<body>
+<div class="card">
+<h2>Log In</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="POST">
+<label>Username <input name="username" required autofocus></label>
+<label>Password <input name="password" type="password" required></label>
+<button>Log In</button>
+</form>
+{% if not registration_disabled %}<p style="margin-top:1rem;font-size:0.9em;">No account? <a href="{{ url_for('auth.register') }}">Register</a></p>{% endif %}
+</div>
+</body>
+</html>

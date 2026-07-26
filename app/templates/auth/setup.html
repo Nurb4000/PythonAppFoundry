@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><title>Initial Setup</title><style>body { font-family: system-ui, sans-serif; max-width: 400px; margin: 3rem auto; padding: 0 1rem; }
+input, select { display: block; width: 100%; margin-bottom: 1rem; padding: 0.5rem; box-sizing: border-box; }
+button { padding: 0.5rem 2rem; cursor: pointer; }
+.error { color: #c00; }
+.success { color: #080; }
+.card { background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; }
+h2 { margin-top: 0; }</style></head>
+<body>
+<div class="card">
+<h2>Create Admin User</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if success %}<p class="success">{{ success }}</p>
+<a href="{{ url_for('auth.login') }}">Proceed to Login</a>
+{% else %}
+<form method="POST">
+<label>Username <input name="username" value="{{ username }}" required></label>
+<label>Password <input name="password" type="password" required minlength="4"></label>
+<label>Confirm <input name="confirm" type="password" required></label>
+<button>Create Admin User</button>
+</form>
+{% endif %}
+</div>
+</body>
+</html>

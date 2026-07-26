@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head><title>My Profile</title><style>body { font-family: system-ui, sans-serif; max-width: 400px; margin: 3rem auto; padding: 0 1rem; }
+input, select { display: block; width: 100%; margin-bottom: 1rem; padding: 0.5rem; box-sizing: border-box; }
+button { padding: 0.5rem 2rem; cursor: pointer; }
+.error { color: #c00; }
+.success { color: #080; }
+.card { background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; }
+h2 { margin-top: 0; }
+.label { font-weight:600;color:#555;font-size:0.85em;text-transform:uppercase; }</style></head>
+<body>
+<div class="card">
+<h2>My Profile</h2>
+<p><span class="label">Username</span><br>{{ current_user.username }}</p>
+<p><span class="label">Role</span><br>{{ current_user.role }}</p>
+<p><a href="{{ url_for('auth.logout') }}">Log Out</a></p>
+</div>
+</body>
+</html>
