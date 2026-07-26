@@ -90,3 +90,27 @@ def tenant_users(id):
 {% else %}
 <p style="color:#888;">No users found.</p>
 {% endif %}''', tenant=tenant, users=users)
+
+
+@tenant_extended_bp.route('/tenants/stats')
+@admin_required
+def tenant_stats():
+    """View tenant statistics."""
+    from app.services.tenant import _tenants
+    
+    tenants = list(_tenants.values())
+    
+    return render_admin('Tenant Statistics', '''
+<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:1rem;">
+  {% for tenant in tenants %}
+  <div class="dash-card">
+    <h3>{{ tenant.name }}</h3>
+    <ul style="margin:0;padding-left:1.5rem;line-height:1.8;">
+      <li><strong>Slug:</strong> {{ tenant.slug }}</li>
+      <li><strong>Subdomain:</strong> {{ tenant.config.get('subdomain', '—') or '—' }}</li>
+      <li><strong>Path Prefix:</strong> {{ tenant.config.get('path_prefix', '—') or '—' }}</li>
+    </ul>
+  </div>
+  {% endfor %}
+</div>
+''', tenants=tenants)
