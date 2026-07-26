@@ -75,3 +75,48 @@ def bulk_delete_emails():
     db.session.commit()
     flash(f'Deleted {deleted} email(s)')
     return redirect(url_for('admin.list_incoming_emails'))
+
+
+@incoming_email_extended_bp.route('/incoming-emails/stats')
+@admin_required
+def email_stats():
+    """View incoming email statistics."""
+    from app.models import IncomingEmail
+    
+    total = db.session.query(IncomingEmail).count()
+    processed = db.session.query(IncomingEmail).filter_by(processed=True).count()
+    pending = total - processed
+    
+    # Group by module
+    module_stats = db.session.query(IncomingEmail.module_slug, db.func.count(IncomingEmail.id)).group_by(IncomingEmail.module_slug).all()
+    
+    return render_admin('Incoming Email Statistics', '''
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+  <div class="dash-card">
+    <h3>Overview</h3>
+    <ul style="margin:0;padding-left:1.5rem;line-height:1.8;">
+      <li><strong>Total Emails:</strong> {{ total }}</li>
+      <li><strong>Processed:</strong> {{ processed }}</li>
+      <li><strong>Pending:</strong> {{ pending }}</li>
+    </ul>
+  </div>
+  
+  <div class="dash-card">
+    <h3>By Module</h3>
+    {% if module_stats %}
+    <table style="width:100%;">
+    <thead><tr><th>Module</th><th>Count</th></tr></thead>
+    <tbody>
+    {% for module_slug, count in module_stats %}
+    <tr>
+      <td>{{ module_slug or 'Unclaimed' }}</td>
+      <td>{{ count }}</td>
+    </tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}
+    <p style="color:#888;">No emails received yet.</p>
+    {% endif %}
+  </div>
+</div>
+''', total=total, processed=processed, pending=pending, module_stats=module_stats)
