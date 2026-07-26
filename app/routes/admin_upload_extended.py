@@ -81,3 +81,47 @@ def cleanup_uploads():
     
     flash(f'Cleaned up {deleted} unreferenced upload(s)')
     return redirect(url_for('admin.list_uploads'))
+
+
+@upload_extended_bp.route('/uploads/stats')
+@admin_required
+def upload_stats():
+    """View upload statistics."""
+    from app.models import Upload
+    
+    total_uploads = db.session.query(Upload).count()
+    total_size = db.session.execute(db.select(db.func.sum(Upload.size))).scalar() or 0
+    
+    # Group by MIME type
+    mime_stats = db.session.query(Upload.mime_type, db.func.count(Upload.id), db.func.sum(Upload.size)).group_by(Upload.mime_type).all()
+    
+    return render_admin('Upload Statistics', '''
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+  <div class="dash-card">
+    <h3>Overview</h3>
+    <ul style="margin:0;padding-left:1.5rem;line-height:1.8;">
+      <li><strong>Total Uploads:</strong> {{ total_uploads }}</li>
+      <li><strong>Total Size:</strong> {{ '%.2f MB'|format(total_size / 1048576) }}</li>
+    </ul>
+  </div>
+  
+  <div class="dash-card">
+    <h3>By Type</h3>
+    {% if mime_stats %}
+    <table style="width:100%;">
+    <thead><tr><th>Type</th><th>Count</th><th>Size</th></tr></thead>
+    <tbody>
+    {% for mime, count, size in mime_stats %}
+    <tr>
+      <td>{{ mime }}</td>
+      <td>{{ count }}</td>
+      <td>{{ '%.2f KB'|format(size / 1024) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}
+    <p style="color:#888;">No uploads yet.</p>
+    {% endif %}
+  </div>
+</div>
+''', total_uploads=total_uploads, total_size=total_size, mime_stats=mime_stats)
