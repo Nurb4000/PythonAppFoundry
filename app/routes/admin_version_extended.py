@@ -83,3 +83,37 @@ def export_versions(module_id):
         mimetype='application/zip',
         headers={'Content-Disposition': f'attachment; filename="{module.slug}_versions.zip"'}
     )
+
+
+@version_extended_bp.route('/modules/<int:module_id>/versions/stats')
+@admin_required
+def version_stats(module_id):
+    """View version statistics for a module."""
+    from app.models import Module, ModuleVersion
+    
+    module = db.session.get(Module, module_id)
+    if not module:
+        flash('Module not found', 'error')
+        return redirect(url_for('admin.list_modules'))
+    
+    versions = module.versions.all()
+    total_versions = len(versions)
+    current_version = next((v for v in versions if v.is_current), None)
+    
+    return render_admin(f'Version Stats: {module.name}', '''
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.list_versions', module_id=m.id) }}">Back to Versions</a>
+</div>
+<div class="dash-card">
+  <h3>{{ m.name }}</h3>
+  <ul style="margin:0;padding-left:1.5rem;line-height:1.8;">
+    <li><strong>Total Versions:</strong> {{ total_versions }}</li>
+    {% if current_version %}
+    <li><strong>Current Version:</strong> {{ current_version.version_number }}</li>
+    <li><strong>Last Updated:</strong> {{ current_version.created_at.strftime('%Y-%m-%d %H:%M') }}</li>
+    {% else %}
+    <li><strong>No versions created yet.</strong></li>
+    {% endif %}
+  </ul>
+</div>
+''', m=module, total_versions=total_versions, current_version=current_version)
