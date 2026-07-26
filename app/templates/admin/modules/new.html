@@ -1,0 +1,50 @@
+<details style="margin-bottom:1rem;"><summary style="cursor:pointer;color:#06c;">Import from XML</summary>
+<div style="margin:0.5rem 0 0 1rem;">
+<form id="importForm" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>XML file <input name="import_xml" type="file" accept=".xml" id="xmlFileInput"></label>
+  <button type="button" onclick="previewImport()">Preview Import</button>
+</form>
+<div id="importPreview" style="margin-top:1rem;display:none;">
+  <div style="background:#f4f4f4;border:1px solid #ddd;padding:1rem;border-radius:4px;">
+    <h4 style="margin-top:0;">Import Preview</h4>
+    <div id="previewContent"></div>
+    <form method="POST" enctype="multipart/form-data" id="importSubmitForm" style="margin-top:1rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Confirm Import</button>
+      <button type="button" onclick="document.getElementById('importPreview').style.display='none'" style="margin-left:0.5rem;background:#6c757d;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;">Cancel</button>
+    </form>
+  </div>
+</div>
+</div>
+</details>
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Name <input name="name" required></label>
+<label>Slug <input name="slug" required></label>
+<label>Description <textarea name="description"></textarea></label>
+<label>Version <input name="version" value="1.0.0"></label>
+<label>Author <input name="author"></label>
+<button>Save</button>
+</form>
+<script>
+function previewImport() {
+  var fileInput = document.getElementById('xmlFileInput');
+  if (!fileInput.files[0]) { alert('Please select a file first'); return; }
+  var formData = new FormData();
+  formData.append('import_xml', fileInput.files[0]);
+  formData.append('csrf_token', document.querySelector('[name=csrf_token]').value);
+  fetch('/__admin/import-preview', { method: 'POST', body: formData })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { alert('Preview failed: ' + data.error); return; }
+      var p = data.preview;
+      var html = '<p><strong>' + p.name + '</strong> (slug: <code>' + p.slug + '</code>)';
+      if (p.existing) html += ' <span style="color:#856404;">[Already exists - will update]</span>';
+      html += '</p><ul><li>Scripts: ' + p.counts.scripts + '</li><li>Routes: ' + p.counts.routes + '</li><li>Forms: ' + p.counts.forms + '</li><li>Tasks: ' + p.counts.tasks + '</li><li>Triggers: ' + p.counts.triggers + '</li></ul>';
+      document.getElementById('previewContent').innerHTML = html;
+      document.getElementById('importPreview').style.display = 'block';
+    })
+    .catch(function(err) { alert('Request failed: ' + err.message); });
+}
+</script>

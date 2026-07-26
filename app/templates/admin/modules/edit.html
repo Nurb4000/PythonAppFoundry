@@ -1,0 +1,25 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div style="display:flex;gap:12px;flex-wrap:wrap;">
+  <label style="flex:2;min-width:140px;">Name <input name="name" value="{{ m.name }}" required style="width:100%;"></label>
+  <label style="flex:2;min-width:140px;">Slug <input name="slug" value="{{ m.slug }}" required style="width:100%;"></label>
+  <label style="flex:1;min-width:80px;">Version <input name="version" value="{{ m.version }}" style="width:100%;"></label>
+  <label style="flex:1;min-width:80px;">Author <input name="author" value="{{ m.author }}" style="width:100%;"></label>
+</div>
+<label style="display:block;margin-top:12px;">Description<textarea name="description" style="width:100%;min-height:100px;resize:vertical;">{{ m.description }}</textarea></label>
+<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid #ddd;">
+  <label style="font-weight:normal;display:flex;align-items:center;gap:4px;font-size:13px;"><input name="enabled" type="checkbox" {% if m.enabled %}checked{% endif %}> Enabled</label>
+  <button style="padding:6px 16px;">Save</button>
+  <a href="{{ url_for('admin.routes.list_routes', module_id=m.id) }}" class="btn">Edit Routes</a>
+  <a href="{{ url_for('admin.scripts.list_scripts', module_id=m.id) }}" class="btn">Edit Scripts</a>
+  <a href="{{ url_for('admin.forms.list_forms', module_id=m.id) }}" class="btn">Edit Forms</a>
+  <a href="{{ url_for('admin.triggers.list_triggers', module_id=m.id) }}" class="btn">Edit Triggers</a>
+  <a href="{{ url_for('admin.tasks.list_tasks', module_id=m.id) }}" class="btn">Edit Tasks</a>
+  <a href="{{ url_for('admin.modules.module_executions', module_id=m.id) }}" class="btn">Execution History</a>
+  <a href="{{ url_for('api.api_export', slug=m.slug) }}" class="btn">Export XML</a>
+  <a href="{{ url_for('chat.refine_module', id=m.id) }}" class="btn">Refine in AI</a>
+  <label style="font-weight:normal;cursor:pointer;" class="btn" onclick="document.getElementById('importFileInput').click()">Import XML<form method="POST" action="{{ url_for('admin.modules.import_module_xml', id=m.id) }}" enctype="multipart/form-data" style="display:none;"><input type="file" name="file" accept=".xml" id="importFileInput" onchange="this.form.submit()"></form></label>
+  <form method="POST" action="{{ url_for('admin.modules.delete_module', id=m.id) }}" style="display:inline" onsubmit="var c=this.querySelector('[name=drop_tables]');return confirm('Delete module &quot;{{ m.name }}&quot;'+(c&&c.checked?' including its database tables?':' and all its routes, scripts, forms?'))"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label style="font-weight:normal;font-size:0.85em;cursor:pointer;"><input name="drop_tables" type="checkbox"> Drop tables</label><button type="submit" style="background:none;border:none;color:#d00;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Delete</button></form>
+</div>
+</form>
+<details style="margin-top:1rem;"><summary>XML Preview</summary><pre style="background:#f4f4f4;padding:0.5rem;overflow:auto;font-size:0.85rem;max-height:400px;white-space:pre;word-wrap:normal;">{{ full_xml }}</pre></details>

@@ -1,0 +1,14 @@
+<h2>Module: {{ m.name }} <span style="font-weight:normal;font-size:0.9em;color:#888;">v{{ m.version }}</span></h2>
+<p style="margin-top:-0.5rem;color:#666;">Slug: <code>{{ m.slug }}</code></p>
+{% if deps %}
+<div style="background:#fff3cd;border:1px solid #ffc107;padding:1rem;border-radius:6px;margin:1rem 0;">
+<h3 style="margin-top:0;color:#856404;">Referenced by {{ deps|length }} module(s):</h3>
+<p style="margin:0.5rem 0 1rem;color:#666;">These modules reference this module. Deleting it may break them.</p>
+<table style="width:100%;border-collapse:collapse;">
+<thead><tr><th style="text-align:left;padding:0.5rem;border-bottom:2px solid #e0c060;">Module</th><th style="text-align:left;padding:0.5rem;border-bottom:2px solid #e0c060;">Type</th><th style="text-align:left;padding:0.5rem;border-bottom:2px solid #e0c060;">Reference</th><th style="text-align:left;padding:0.5rem;border-bottom:2px solid #e0c060;">Detected</th></tr></thead>
+<tbody>{% for dep in deps %}<tr><td style="padding:0.5rem;border-bottom:1px solid #f0d080;"><strong>{{ dep.source_module.name }}</strong></td><td style="padding:0.5rem;border-bottom:1px solid #f0d080;"><code>{{ dep.dependency_type }}</code></td><td style="padding:0.5rem;border-bottom:1px solid #f0d080;"><code>{{ dep.reference_value }}</code></td><td style="padding:0.5rem;border-bottom:1px solid #f0d080;">{{ dep.detected_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>{% endfor %}</tbody></table>
+</div>
+{% else %}
+<div style="background:#d4edda;border:1px solid #c3e6cb;padding:1rem;border-radius:6px;margin:1rem 0;"><p style="margin:0;color:#155724;">No modules currently depend on this module.</p></div>
+{% endif %}
+<p><a href="{{ url_for('admin.modules.list_modules') }}">&larr; Back to modules</a></p>

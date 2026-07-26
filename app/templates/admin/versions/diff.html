@@ -1,0 +1,13 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.versions.list_versions', module_id=m.id) }}">Back to Versions</a>
+</div>
+<h2>Diff: Version {{ v.version_number }}</h2>
+{% if prev_version %}
+<p style="color:#888;margin-bottom:1rem;">Comparing against version {{ prev_version.version_number }} ({{ prev_version.created_at|localtime }})</p>
+{% endif %}
+<div class="table-wrap">
+<pre style="background:#f4f4f4;padding:1rem;overflow:auto;font-size:0.85rem;max-height:600px;white-space:pre-wrap;word-wrap:break-word;">{{ diff_text or 'No changes to display.' }}</pre>
+</div>
+{% if not diff_text %}
+<p style="color:#888;">This is the first version, or unable to generate diff.</p>
+{% endif %}

@@ -1,0 +1,30 @@
+<h2>{{ e.subject or '(no subject)' }}</h2>
+<table>
+<tr><th>ID</th><td>{{ e.id }}</td></tr>
+<tr><th>From</th><td>{{ e.from_address }}</td></tr>
+<tr><th>To</th><td>{{ e.to_address }}</td></tr>
+<tr><th>Message-ID</th><td><code>{{ e.message_id }}</code></td></tr>
+<tr><th>Received</th><td>{{ e.created_at|localtime }}</td></tr>
+<tr><th>Status</th><td>{% if e.processed %}Processed{% else %}Pending{% endif %}</td></tr>
+{% if e.module_slug %}<tr><th>Claimed By</th><td>{{ e.module_slug }}</td></tr>{% endif %}
+{% if e.attachments %}<tr><th>Attachments</th><td>{{ e.attachments }}</td></tr>{% endif %}
+</table>
+{% if e.body_html %}
+<h3>HTML Body</h3>
+<div style="border:1px solid #ddd;border-radius:4px;padding:1rem;margin-bottom:1rem;max-height:500px;overflow-y:auto;background:#fff;">
+  {{ e.body_html|safe }}
+</div>
+{% endif %}
+{% if e.body_text %}
+<h3>Plain Text Body</h3>
+<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow:auto;white-space:pre-wrap;word-wrap:break-word;">{{ e.body_text }}</pre>
+{% endif %}
+<div style="margin-top:1rem;">
+  <a href="{{ url_for('admin.incoming_email.list_incoming_emails') }}">&larr; Back</a>
+  {% if not e.processed %}
+  <form method="POST" action="{{ url_for('admin.incoming_email.mark_incoming_processed', id=e.id) }}" style="display:inline;margin-left:0.5rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" style="background:#080;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;">Mark as Processed</button>
+  </form>
+  {% endif %}
+</div>
