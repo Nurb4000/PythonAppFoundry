@@ -6,6 +6,7 @@ import bcrypt
 
 from app import db
 from app.models import User, Route, Setting
+from app.services.rate_limiter import _rate_limiter
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/__auth')
 
@@ -106,6 +107,14 @@ def register():
             error='Registration is currently disabled.', success=None)
 
     if request.method == 'POST':
+        # Rate limiting on registration attempts
+        client_ip = request.remote_addr
+        limited, remaining = _rate_limiter.is_rate_limited(f'register:{client_ip}')
+        if limited:
+            return render_template_string(REGISTER_TEMPLATE,
+                error=f'Too many registration attempts. Please try again in {int(remaining)} seconds.', 
+                success=None)
+        
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         confirm = request.form.get('confirm', '')
@@ -152,6 +161,14 @@ def _is_safe_url(target):
 def login():
     registration_disabled = Setting.get('registration_disabled', 'false') == 'true'
     if request.method == 'POST':
+        # Rate limiting on login attempts
+        client_ip = request.remote_addr
+        limited, remaining = _rate_limiter.is_rate_limited(f'login:{client_ip}')
+        if limited:
+            return render_template_string(LOGIN_TEMPLATE, 
+                error=f'Too many login attempts. Please try again in {int(remaining)} seconds.', 
+                registration_disabled=registration_disabled)
+        
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         user = db.session.query(User).filter_by(username=username).first()
