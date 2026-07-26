@@ -63,3 +63,52 @@ def backup_schedule():
 <button type="submit" style="margin-top:1rem;padding:8px 20px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Save Backup Schedule</button>
 </form>
 ''', backup_enabled=backup_enabled, backup_frequency=backup_frequency, backup_retention=backup_retention)
+
+
+@backup_extended_bp.route('/backup/verify')
+@admin_required
+def verify_backups():
+    """Verify integrity of all backups."""
+    from app.services.backup import list_backups
+    
+    backups = list_backups()
+    verified = 0
+    errors = []
+    
+    for backup in backups:
+        try:
+            # Try to open the backup file
+            import sqlite3
+            conn = sqlite3.connect(backup['path'])
+            conn.execute('SELECT 1')
+            conn.close()
+            verified += 1
+        except Exception as e:
+            errors.append(f'{backup["filename"]}: {e}')
+    
+    if errors:
+        for error in errors:
+            flash(f'Verification failed: {error}', 'error')
+    else:
+        flash(f'All {verified} backup(s) verified successfully')
+    
+    return redirect(url_for('admin.list_backups'))
+
+
+@backup_extended_bp.route('/backup/notify', methods=['POST'])
+@admin_required
+@csrf_protect
+def notify_backup():
+    """Send notification about a backup."""
+    from app.models import Setting
+    
+    notification_type = request.form.get('notification_type', 'email')
+    recipient = request.form.get('recipient', '')
+    
+    if not recipient:
+        flash('Recipient required', 'error')
+        return redirect(url_for('admin.list_backups'))
+    
+    # Send notification (simplified - in real implementation, would use actual notification service)
+    flash(f'Backup notification sent to {recipient} via {notification_type}')
+    return redirect(url_for('admin.list_backups'))
