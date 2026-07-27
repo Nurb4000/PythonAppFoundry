@@ -58,6 +58,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Python Syntax Highlighting** — Script editor now has basic keyword/string/comment highlighting via `python-highlight.js`.
 - **Health Check Enhancement** — `/healthz` now verifies database connectivity, scheduler status, and IMAP configuration.
 - **Configuration Validation** — Warnings for insecure defaults (SECRET_KEY, DATABASE_URL) at startup.
+- **Database Migration** — Migrate between SQLite and PostgreSQL directly from the admin UI at `/__admin/db-migration`. Includes automatic backup, data verification, and audit logging. Requires `psycopg2-binary` for PostgreSQL targets.
 
 ### Demo Modules
 

@@ -20,7 +20,7 @@ with app.app_context():
         'users', 'groups', 'data', 'uploads', 'packages', 'settings',
         'queries', 'credentials', 'incoming_email', 'dashboard',
         'backup', 'marketplace', 'versions', 'test_script', 'import_preview',
-        'openapi', 'dead_letter'
+        'openapi', 'dead_letter', 'db_migration'
     }
     
     print("Blueprint Registration Test")

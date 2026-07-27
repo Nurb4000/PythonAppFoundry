@@ -1,0 +1,84 @@
+<div style="max-width: 800px; margin: 0 auto;">
+    <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+        <h3 style="margin-top: 0; color: #333;">Current Database</h3>
+        <div style="background: white; border: 1px solid #e9ecef; border-radius: 4px; padding: 16px; font-family: monospace; font-size: 14px;">
+            <strong>Type:</strong> {{ db_info.type }}<br>
+            <strong>URL:</strong> {{ db_info.url }}
+        </div>
+    </div>
+
+    {% if pending_target %}
+    <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+        <h3 style="margin-top: 0; color: #856404;">Migration Pending</h3>
+        <p style="color: #856404;">Target database: <code>{{ pending_target }}</code></p>
+        <form method="POST" style="display: inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" formaction="{{ url_for('admin.db_migration.cancel_migration') }}" 
+                    style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 8px;">
+                Cancel Migration
+            </button>
+        </form>
+        <form method="POST" style="display: inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" formaction="{{ url_for('admin.db_migration.execute_migration') }}" 
+                    style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Execute Migration Now
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+        <h3 style="margin-top: 0; color: #004085;">Migrate Database</h3>
+        <p style="color: #004085; margin-bottom: 16px;">
+            Enter the connection string for your new database. This will export all data from the current database 
+            and import it into the new one. A backup will be created automatically before migration begins.
+        </p>
+        
+        <form method="POST" action="{{ url_for('admin.db_migration.start_migration') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">
+                New Database URL:
+            </label>
+            <input type="text" name="new_db_url" 
+                   placeholder="postgresql://user:password@localhost:5432/dbname"
+                   style="padding: 10px; width: 100%; max-width: 600px; border: 1px solid #ced4da; border-radius: 4px; font-family: monospace; font-size: 14px; margin-bottom: 12px;"
+                   required>
+            
+            <div style="background: white; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; margin-bottom: 16px;">
+                <strong style="color: #333;">Example PostgreSQL URL:</strong><br>
+                <code style="color: #666; font-size: 12px;">postgresql://username:password@hostname:5432/databasename</code>
+            </div>
+            
+            {% if db_info.type == 'SQLite' %}
+            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 12px; margin-bottom: 16px;">
+                <strong style="color: #856404;">Note for PostgreSQL migration:</strong><br>
+                <span style="color: #856404; font-size: 14px;">
+                    If you're migrating to PostgreSQL, you'll need to install the psycopg2 driver:<br>
+                    <code style="background: #f8f9fa; padding: 2px 6px; border-radius: 3px;">pip install psycopg2-binary</code>
+                </span>
+            </div>
+            {% endif %}
+            
+            <button type="submit" 
+                    style="padding: 10px 24px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+                Save Migration Target
+            </button>
+        </form>
+    </div>
+
+    <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 24px;">
+        <h3 style="margin-top: 0; color: #333;">Migration Process</h3>
+        <ol style="color: #555; line-height: 1.8;">
+            <li><strong>Create backup</strong> - A backup of your current database is saved automatically</li>
+            <li><strong>Export data</strong> - All tables and data are exported from the source database</li>
+            <li><strong>Import data</strong> - Data is imported into the new database with compatible schema</li>
+            <li><strong>Verify migration</strong> - Row counts are compared to ensure data integrity</li>
+        </ol>
+        <p style="color: #666; font-size: 14px; margin-top: 16px;">
+            <strong>Note:</strong> After successful migration, update your <code>.env</code> file with the new 
+            <code>DATABASE_URL</code> and restart the application.
+        </p>
+    </div>
+</div>

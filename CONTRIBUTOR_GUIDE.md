@@ -51,6 +51,7 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/audit.py` | ~30 | Audit logging helper — `log_audit()` captures current user, IP, timestamp and writes `AuditLog` entries. Used across all admin CRUD routes. |
 | `app/services/template_renderer.py` | ~25 | Sandboxed Jinja2 renderer — `render_db_template(body, **ctx)` uses `ImmutableSandboxedEnvironment` with autoescape and StrictUndefined. Blocks unsafe attribute access and mutating operations on passed objects. |
 | `app/services/async_executor.py` | ~100 | Background script execution via `ThreadPoolExecutor`. `submit_script()` queues scripts, tracks status via `ScriptExecution` model. `get_status()` returns execution result for polling. |
+| `app/services/db_migration.py` | ~260 | Database migration service — exports data from current DB, imports to new DB (SQLite ↔ PostgreSQL), verifies row counts. Requires `psycopg2-binary` for PostgreSQL targets. Used by `/__admin/db-migration`. |
 
 ### Models
 
@@ -144,6 +145,42 @@ When a module is updated (via XML import) and its scripts declare new columns fo
 
 For complex schema changes (type modifications, renames), use the admin Data Browser's raw SQL editor or write a migration script.
 
+### Database Migration Service
+
+The `db_migration.py` service enables admins to migrate data between SQLite and PostgreSQL databases directly from the admin UI at `/__admin/db-migration`.
+
+**Key components:**
+- `DatabaseExporter` — Uses SQLAlchemy's `inspect()` to list all tables, then exports data row-by-row via `session.execute(text('SELECT * FROM table'))`
+- `DatabaseImporter` — Creates a new engine with `create_engine(db_url)`, recreates schema with PostgreSQL-compatible types, and inserts data using parameterized queries
+- `MigrationVerifier` — Compares row counts between source and target databases to ensure integrity
+
+**Requirements:**
+- For PostgreSQL targets: `psycopg2-binary` must be installed (optional dependency in `requirements.txt`)
+- The service checks for psycopg2 availability before starting migration and shows a clear error if missing
+
+**Security:**
+- Admin-only access via `@admin_required` decorator
+- CSRF protection on all POST endpoints
+- Pre-migration backup automatically created
+- Source and target cannot be the same database
+- All migrations logged to audit trail
+
+**Usage in routes:**
+```python
+from app.services.db_migration import export_database, import_to_new_database, verify_migration
+
+# Export
+exported = export_database(db.session)
+
+# Import to new database
+results = import_to_new_database(exported, 'postgresql://user:pass@host/db')
+
+# Verify
+from sqlalchemy import create_engine
+engine = create_engine('postgresql://user:pass@host/db')
+verification = verify_migration(exported, engine)
+```
+
 ## admin.py Navigation
 
 At ~2430 lines, `admin.py` is the largest file. It's organized as a flat list of route functions, grouped by entity. Key landmarks:
@@ -169,6 +206,41 @@ At ~2430 lines, `admin.py` is the largest file. It's organized as a flat list of
 | ~1865-~2100 | Settings (registration, LLM, SMTP, test email, script timeout, log retention) |
 | ~2100-~2370 | Dashboard (system info, scheduler status, execution logs, module summary) |
 
+### Admin Sub-Blueprints
+
+Several admin features have been extracted into separate blueprints for modularity:
+
+| File | Blueprint | Prefix | Purpose |
+|---|---|---|---|
+| `app/routes/admin_db_migration.py` | `db_migration_bp` | `/__admin/db-migration` | Database migration between SQLite and PostgreSQL |
+| `app/routes/admin_backup.py` | `backup_bp` | `/__admin/backup` | Database backup/restore |
+| `app/routes/admin_audit.py` | `audit_bp` | `/__admin/audit` | Audit log viewer |
+| `app/routes/admin_dashboard.py` | `dashboard_bp` | `/__admin/dashboard` | System dashboard and health checks |
+| `app/routes/admin_data.py` | `data_bp` | `/__admin/data` | Dynamic table browser |
+| `app/routes/admin_forms.py` | `forms_bp` | `/__admin/forms` | Form CRUD |
+| `app/routes/admin_groups.py` | `groups_bp` | `/__admin/groups` | User group management |
+| `app/routes/admin_import_preview.py` | `import_preview_bp` | `/__admin/import-preview` | XML import preview |
+| `app/routes/admin_incoming_email.py` | `incoming_email_bp` | `/__admin/incoming-emails` | IMAP email viewer |
+| `app/routes/admin_marketplace.py` | `marketplace_bp` | `/__admin/marketplace` | Module marketplace |
+| `app/routes/admin_modules.py` | `modules_bp` | `/__admin/modules` | Module CRUD |
+| `app/routes/admin_openapi.py` | `openapi_bp` | `/__admin/__api` | OpenAPI spec viewer |
+| `app/routes/admin_packages.py` | `packages_bp` | `/__admin/packages` | Python package manager |
+| `app/routes/admin_queries.py` | `queries_bp` | `/__admin/queries` | Query report editor |
+| `app/routes/admin_routes.py` | `routes_bp` | `/__admin/routes` | Route CRUD |
+| `app/routes/admin_scripts.py` | `scripts_bp` | `/__admin/scripts` | Script CRUD |
+| `app/routes/admin_settings.py` | `settings_bp` | `/__admin/settings` | Platform settings |
+| `app/routes/admin_tasks.py` | `tasks_bp` | `/__admin/tasks` | Scheduled task CRUD |
+| `app/routes/admin_templates.py` | `templates_bp` | `/__admin/templates` | Database template editor |
+| `app/routes/admin_test_script.py` | `test_script_bp` | `/__admin/scripts/test` | Inline script testing |
+| `app/routes/admin_triggers.py` | `triggers_bp` | `/__admin/triggers` | Trigger CRUD |
+| `app/routes/admin_uploads.py` | `uploads_bp` | `/__admin/uploads` | File upload management |
+| `app/routes/admin_users.py` | `users_bp` | `/__admin/users` | User CRUD |
+| `app/routes/admin_versions.py` | `versions_bp` | `/__admin/modules/<id>/versions` | Module version history |
+| `app/routes/admin_credentials.py` | `credentials_bp` | `/__admin/credentials` | Encrypted credential store |
+| `app/routes/admin_dead_letter.py` | `dead_letter_bp` | `/__admin/dead-letter` | Webhook dead letter queue |
+
+All sub-blueprints are registered in `app/routes/admin_blueprints.py`.
+
 **Gotcha:** The `edit_settings()` route at ~1920 does both display (GET) and save (POST). The SMTP settings are mixed into the same form as LLM settings, site name, registration settings, etc. All are saved in one POST handler. The test email button uses `formaction` to submit to a different endpoint while staying inside the same `<form>` element.
 
 ## Request Flow
@@ -177,7 +249,7 @@ At ~2430 lines, `admin.py` is the largest file. It's organized as a flat list of
 Browser → HTTP request
   │
   ├─ /__auth/*       → auth.py
-  ├─ /__admin/*      → admin.py / chat.py / bpmn.py
+  ├─ /__admin/*      → admin.py / chat.py / bpmn.py / admin_db_migration.py
   ├─ /__api/*        → api.py
   ├─ /uploads/*      → app/__init__.py serve_upload()
   └─ /* (catch-all)  → dynamic.py

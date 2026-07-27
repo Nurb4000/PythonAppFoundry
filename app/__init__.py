@@ -192,6 +192,7 @@ def create_app(config_class=None):
                 <a href="/__admin/dashboard/integration-health" style="color:#eee;text-decoration:none">Integrations</a>
                 <a href="/__admin/settings" style="color:#eee;text-decoration:none">Settings</a>
                 <a href="/__admin/audit" style="color:#eee;text-decoration:none">Audit</a>
+                <a href="/__admin/db-migration" style="color:#eee;text-decoration:none">DB Migration</a>
                 <span style="flex:1"></span>
                 <span>{current_user.username}</span>
                 <a href="/" style="color:#eee;text-decoration:none">View Site</a>
@@ -239,12 +240,11 @@ def create_app(config_class=None):
         db.create_all()
 
         # Migrate: add missing columns
-        from sqlalchemy import inspect as sa_inspect
+        from sqlalchemy import inspect as sa_inspect, text
         engine = db.get_engine()
         inspector = sa_inspect(engine)
         routes_cols = {c['name'] for c in inspector.get_columns('routes')}
         if 'allowed_groups' not in routes_cols:
-            from sqlalchemy import text
             db.session.execute(text('ALTER TABLE routes ADD COLUMN allowed_groups TEXT DEFAULT \'\''))
             db.session.commit()
 
