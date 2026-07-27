@@ -60,6 +60,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Configuration Validation** — Warnings for insecure defaults (SECRET_KEY, DATABASE_URL) at startup.
 - **Database Migration** — Migrate between SQLite and PostgreSQL directly from the admin UI at `/__admin/db-migration`. Includes automatic backup, data verification, and audit logging. Requires `psycopg2-binary` for PostgreSQL targets.
 - **Global Search** — Instantly find any entity across the platform at `/__admin/search`. Search modules, routes, scripts, forms, users, groups, tasks, triggers, and settings by name, slug, or description.
+- **Dynamic Table Indexing** — Improve query performance for dynamic tables at `/__admin/indexes`. Add indexes to frequently filtered columns via admin UI or `DynamicModel.get_or_create()` with `indexes` parameter.
 
 ### Demo Modules
 

@@ -1,0 +1,105 @@
+<div style="max-width: 1200px; margin: 0 auto;">
+    <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+        <h3 style="margin-top: 0; color: #333;">Dynamic Table Index Management</h3>
+        <p style="color: #666; margin-bottom: 16px;">
+            Manage indexes on dynamic tables created by modules. Indexes improve query performance 
+            for columns that are frequently filtered or sorted.
+        </p>
+        
+        <div style="background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px; padding: 12px; margin-bottom: 16px;">
+            <strong style="color: #004085;">Best Practices:</strong>
+            <ul style="margin: 8px 0 0 20px; color: #004085; font-size: 14px;">
+                <li>Index columns used in WHERE clauses, JOIN conditions, or ORDER BY</li>
+                <li>Avoid indexing low-cardinality columns (e.g., boolean flags)</li>
+                <li>Each index adds overhead to INSERT/UPDATE operations</li>
+                <li>Monitor index usage to identify unused indexes</li>
+            </ul>
+        </div>
+    </div>
+
+    {% if tables %}
+    <div style="display: grid; gap: 20px;">
+        {% for table in tables %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #f0f0f0;">
+                <div>
+                    <h4 style="margin: 0; color: #333;">{{ table.table_name }}</h4>
+                    <div style="color: #666; font-size: 13px; margin-top: 4px;">
+                        Module: {{ table.module_name }} &nbsp;|&nbsp; 
+                        Rows: {{ table.row_count or 'N/A' }}
+                    </div>
+                </div>
+            </div>
+
+            {% if table.error %}
+            <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 12px; color: #721c24;">
+                Error: {{ table.error }}
+            </div>
+            {% else %}
+            <!-- Existing Indexes -->
+            {% if table.indexes %}
+            <div style="margin-bottom: 16px;">
+                <h5 style="color: #333; margin-bottom: 8px;">Existing Indexes:</h5>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 8px; text-align: left; border-bottom: 2px solid #dee2e6;">Index Name</th>
+                            <th style="padding: 8px; text-align: left; border-bottom: 2px solid #dee2e6;">Columns</th>
+                            <th style="padding: 8px; text-align: center; border-bottom: 2px solid #dee2e6;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for idx in table.indexes %}
+                        <tr style="border-bottom: 1px solid #f0f0f0;">
+                            <td style="padding: 8px; font-family: monospace; font-size: 13px;">{{ idx.name }}</td>
+                            <td style="padding: 8px; font-size: 13px;">{{ idx.columns|join(', ') }}</td>
+                            <td style="padding: 8px; text-align: center;">
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" 
+                                            formaction="{{ url_for('admin.index.drop_index', table_name=table.table_name, index_name=idx.name) }}"
+                                            style="padding: 4px 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                                        Drop
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div style="color: #666; font-size: 13px; margin-bottom: 16px; font-style: italic;">
+                No indexes configured
+            </div>
+            {% endif %}
+
+            <!-- Add Index Form -->
+            <div style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 16px;">
+                <h5 style="color: #333; margin-top: 0; margin-bottom: 12px;">Add New Index:</h5>
+                <form method="POST" action="{{ url_for('admin.index.add_index', table_name=table.table_name) }}" style="display: flex; gap: 12px; align-items: center;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="column" required style="padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; min-width: 200px;">
+                        <option value="">Select column...</option>
+                        {% for col in table.columns|default([]) %}
+                        <option value="{{ col }}">{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" 
+                            style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Create Index
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 24px; text-align: center;">
+        <p style="color: #856404; margin: 0; font-size: 16px;">
+            No dynamic tables found. Create a module with DynamicModel to see tables here.
+        </p>
+    </div>
+    {% endif %}
+</div>

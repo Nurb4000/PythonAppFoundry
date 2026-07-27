@@ -53,6 +53,7 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/async_executor.py` | ~100 | Background script execution via `ThreadPoolExecutor`. `submit_script()` queues scripts, tracks status via `ScriptExecution` model. `get_status()` returns execution result for polling. |
 | `app/services/db_migration.py` | ~260 | Database migration service — exports data from current DB, imports to new DB (SQLite ↔ PostgreSQL), verifies row counts. Requires `psycopg2-binary` for PostgreSQL targets. Used by `/__admin/db-migration`. |
 | `app/services/search.py` | ~180 | Global search service — searches across modules, routes, scripts, forms, users, groups, tasks, triggers, and settings. Used by `/__admin/search`. |
+| `app/routes/admin_index.py` | ~100 | Index management admin routes — list, add, and drop indexes on dynamic tables. Used by `/__admin/indexes`. |
 
 ### Models
 
@@ -223,6 +224,47 @@ results = search_all('user', limit=50)
 - No full-text search index — uses SQL `ILIKE` which works well for small-medium datasets
 - For large deployments (>10k entities), consider adding database-level full-text search
 
+### Dynamic Table Indexing
+
+Dynamic tables created via `DynamicModel.get_or_create()` can have indexes for improved query performance. Indexes are managed through the admin UI at `/__admin/indexes` or specified programmatically.
+
+**Creating indexed dynamic tables:**
+
+```python
+# In a module script
+MyTable = DynamicModel.get_or_create('my_table', {
+    'status': String(50),
+    'user_id': Integer,
+    'created_at': DateTime,
+}, indexes=['status', 'user_id'])
+```
+
+This creates:
+- `idx_my_table_status` on the `status` column
+- `idx_my_table_user_id` on the `user_id` column
+
+**Index management via admin UI:**
+
+The Index Management page (`/__admin/indexes`) provides:
+- List all dynamic tables with their current indexes
+- View row counts per table
+- Add new indexes to existing tables
+- Drop unused indexes
+- Best practices guidance
+
+**Performance impact:**
+- **Read queries:** 10-100x faster for filtered queries on indexed columns
+- **Write operations:** 5-15% slower per index (INSERT/UPDATE/DELETE)
+- **Storage:** ~10-30% overhead per index
+
+**When to index:**
+- ✓ Columns frequently used in WHERE clauses
+- ✓ Columns used in JOIN conditions
+- ✓ Columns used in ORDER BY with high cardinality
+- ✗ Boolean columns with only 2 values
+- ✗ Columns with <5 distinct values
+- ✗ Columns rarely queried
+
 ## admin.py Navigation
 
 At ~2430 lines, `admin.py` is the largest file. It's organized as a flat list of route functions, grouped by entity. Key landmarks:
@@ -281,6 +323,7 @@ Several admin features have been extracted into separate blueprints for modulari
 | `app/routes/admin_credentials.py` | `credentials_bp` | `/__admin/credentials` | Encrypted credential store |
 | `app/routes/admin_dead_letter.py` | `dead_letter_bp` | `/__admin/dead-letter` | Webhook dead letter queue |
 | `app/routes/admin_search.py` | `search_bp` | `/__admin/search` | Global search across all entities |
+| `app/routes/admin_index.py` | `index_bp` | `/__admin/indexes` | Dynamic table index management |
 
 All sub-blueprints are registered in `app/routes/admin_blueprints.py`.
 

@@ -27,7 +27,15 @@ class _ModelQueryProperty:
 
 class DynamicModel:
     @staticmethod
-    def get_or_create(name, columns=None, module_id=None):
+    def get_or_create(name, columns=None, module_id=None, indexes=None):
+        """Create or get a dynamic model with optional indexes.
+        
+        Args:
+            name: Model/table name
+            columns: Dictionary of column definitions
+            module_id: Optional module ID for ownership tracking
+            indexes: List of column names to index (e.g., ['status', 'user_id'])
+        """
         from sqlalchemy import inspect as _sa_inspect, text
 
         table_name = name.lower()
@@ -40,6 +48,12 @@ class DynamicModel:
         if columns is None:
             columns = {}
         declared_col_names = set(columns.keys())
+        
+        # Normalize indexes to a list
+        if indexes is None:
+            indexes = []
+        elif isinstance(indexes, str):
+            indexes = [indexes]
 
         # Check if we can return cached model without schema changes
         if name in _dynamic_models and declared_col_names:
@@ -49,6 +63,9 @@ class DynamicModel:
                     actual_cols = {c['name'] for c in inspector.get_columns(table_name)}
                     # If all declared columns exist in the table, return cached
                     if declared_col_names.issubset(actual_cols):
+                        # Check if indexes need updating
+                        if indexes:
+                            _ensure_indexes(engine, table_name, indexes)
                         return _dynamic_models[name]
             except Exception:
                 pass
@@ -137,8 +154,55 @@ class DynamicModel:
                 except Exception:
                     db.session.rollback()
 
+        # Create indexes if specified
+        if indexes:
+            _ensure_indexes(engine, table_name, indexes)
+
         logger.info(f'Created dynamic model: {name} (table: {table_name})')
         return model
+
+
+def _ensure_indexes(engine, table_name, index_columns):
+    """Ensure indexes exist for the specified columns.
+    
+    Args:
+        engine: Database engine
+        table_name: Name of the table
+        index_columns: List of column names to index
+    """
+    from sqlalchemy import text, inspect as sa_inspect
+    
+    try:
+        inspector = sa_inspect(engine)
+        existing_indexes = {idx['name'] for idx in inspector.get_indexes(table_name)}
+        
+        for col_name in index_columns:
+            # Skip if column doesn't exist
+            actual_cols = {c['name'] for c in inspector.get_columns(table_name)}
+            if col_name not in actual_cols:
+                logger.warning(f'Cannot create index on {table_name}.{col_name}: column does not exist')
+                continue
+            
+            # Generate index name (max 63 chars for PostgreSQL)
+            index_name = f"idx_{table_name}_{col_name}"[:63]
+            
+            # Skip if index already exists
+            if index_name in existing_indexes:
+                continue
+            
+            # Create index
+            create_sql = f'CREATE INDEX "{index_name}" ON "{table_name}" ("{col_name}")'
+            logger.info(f'Creating index: {create_sql}')
+            with engine.connect() as conn:
+                conn.execute(text(create_sql))
+                conn.commit()
+            
+    except Exception as e:
+        logger.warning(f'Failed to create indexes for {table_name}: {e}')
+        try:
+            db.session.rollback()
+        except:
+            pass
 
 
 class User(UserMixin, db.Model):
