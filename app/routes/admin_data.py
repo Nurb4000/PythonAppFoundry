@@ -21,10 +21,11 @@ def list_tables():
     # Build table→modules mapping
     table_modules = {}
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
-                       'scripts', 'forms', 'scheduled_tasks', 'triggers',
+                       'scripts', 'forms', 'templates', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports', 'incoming_emails', 'dynamic_table_registry', 'credentials'}
+                       'query_reports', 'incoming_emails', 'dynamic_table_registry',
+                       'credentials', 'audit_logs'}
     for t in platform_tables:
         table_modules[t] = 'Platform'
 
@@ -271,10 +272,10 @@ def delete_row(table_name, id):
 @csrf_protect
 def delete_table(table_name):
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
-                       'scripts', 'forms', 'scheduled_tasks', 'triggers',
+                       'scripts', 'forms', 'templates', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports', 'incoming_emails', 'credentials'}
+                       'query_reports', 'incoming_emails', 'credentials', 'audit_logs'}
     if table_name in platform_tables:
         flash(f'Cannot drop platform table "{table_name}"', 'error')
         return redirect(url_for('admin.data.list_tables'))
