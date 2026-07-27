@@ -107,44 +107,111 @@ def create_app(config_class=None):
     def health_check():
         from flask import jsonify
         import time as _time
-        checks = {'status': 'ok'}
+        checks = {'status': 'ok', 'components': {}}
         errors = []
         
         # Check database connectivity
         try:
             from sqlalchemy import text
             db.session.execute(text('SELECT 1'))
-            checks['database'] = 'connected'
+            checks['components']['database'] = {'status': 'ok'}
         except Exception as e:
             errors.append(f'database: {e}')
-            checks['database'] = 'error'
+            checks['components']['database'] = {'status': 'error', 'message': str(e)}
         
         # Check scheduler status
         try:
             from app.services.scheduler import _scheduler
             if _scheduler is not None:
-                checks['scheduler'] = f'running ({len(_scheduler.get_jobs())} jobs)'
+                job_count = len(_scheduler.get_jobs())
+                checks['components']['scheduler'] = {
+                    'status': 'ok',
+                    'jobs': job_count
+                }
             else:
-                checks['scheduler'] = 'not initialized'
+                checks['components']['scheduler'] = {'status': 'warning', 'message': 'not initialized'}
         except Exception as e:
             errors.append(f'scheduler: {e}')
-            checks['scheduler'] = 'error'
+            checks['components']['scheduler'] = {'status': 'error', 'message': str(e)}
         
         # Check IMAP if enabled
         try:
             from app.models import Setting
             if Setting.get('imap_enabled', 'false') == 'true':
-                checks['imap'] = 'configured'
+                checks['components']['imap'] = {'status': 'ok', 'configured': True}
             else:
-                checks['imap'] = 'disabled'
+                checks['components']['imap'] = {'status': 'ok', 'configured': False}
         except Exception:
-            checks['imap'] = 'unknown'
+            checks['components']['imap'] = {'status': 'unknown'}
         
-        checks['uptime_seconds'] = round(_time.time() - _app.config.get('_start_time', _time.time()), 1)
+        # Check async executor
+        try:
+            from app.services.async_executor import _pool, _max_workers
+            if _pool is not None:
+                pending = _pool._work_queue.qsize() if hasattr(_pool._work_queue, 'qsize') else 0
+                checks['components']['async_executor'] = {
+                    'status': 'ok' if pending < _max_workers * 2 else 'degraded',
+                    'pending_tasks': pending,
+                    'max_workers': _max_workers
+                }
+            else:
+                checks['components']['async_executor'] = {'status': 'warning', 'message': 'not initialized'}
+        except Exception as e:
+            checks['components']['async_executor'] = {'status': 'error', 'message': str(e)}
         
-        if errors:
-            checks['errors'] = errors
+        # Check dead letter queue
+        try:
+            from app.services.triggers import get_dead_letter_queue
+            dlq = get_dead_letter_queue()
+            checks['components']['dead_letter_queue'] = {
+                'status': 'ok' if len(dlq) == 0 else 'warning',
+                'count': len(dlq)
+            }
+        except Exception as e:
+            checks['components']['dead_letter_queue'] = {'status': 'error', 'message': str(e)}
+        
+        # Check credential store
+        try:
+            from app.services.credential_store import _get_key_path
+            import os as _os
+            key_path = _get_key_path(app)
+            if _os.path.exists(key_path):
+                checks['components']['credential_store'] = {'status': 'ok'}
+            else:
+                checks['components']['credential_store'] = {'status': 'error', 'message': 'key file missing'}
+        except Exception as e:
+            checks['components']['credential_store'] = {'status': 'error', 'message': str(e)}
+        
+        # Check filesystem
+        try:
+            import shutil
+            import os as _os
+            upload_dir = _os.path.join(app.instance_path, 'uploads')
+            backup_dir = _os.path.join(app.instance_path, 'backups')
+            
+            disk_usage = shutil.disk_usage('/')
+            checks['components']['filesystem'] = {
+                'status': 'ok',
+                'uploads_writable': _os.access(upload_dir, _os.W_OK),
+                'backups_writable': _os.access(backup_dir, _os.W_OK),
+                'disk_usage_percent': round(disk_usage.used / disk_usage.total * 100, 1)
+            }
+        except Exception as e:
+            checks['components']['filesystem'] = {'status': 'error', 'message': str(e)}
+        
+        checks['uptime_seconds'] = round(_time.time() - app.config.get('_start_time', _time.time()), 1)
+        
+        # Determine overall status
+        error_components = [k for k, v in checks['components'].items() if v.get('status') == 'error']
+        warning_components = [k for k, v in checks['components'].items() if v.get('status') == 'warning']
+        
+        if error_components:
+            checks['status'] = 'unhealthy'
+            checks['errors'] = error_components
             return jsonify(checks), 503
+        elif warning_components:
+            checks['status'] = 'degraded'
+            checks['warnings'] = warning_components
         
         return jsonify(checks), 200
 
@@ -195,6 +262,7 @@ def create_app(config_class=None):
                 <a href="/__admin/db-migration" style="color:#eee;text-decoration:none">DB Migration</a>
                 <a href="/__admin/search" style="color:#eee;text-decoration:none">Search</a>
                 <a href="/__admin/indexes" style="color:#eee;text-decoration:none">Indexes</a>
+                <a href="/__admin/health" style="color:#eee;text-decoration:none">Health</a>
                 <span style="flex:1"></span>
                 <span>{current_user.username}</span>
                 <a href="/" style="color:#eee;text-decoration:none">View Site</a>

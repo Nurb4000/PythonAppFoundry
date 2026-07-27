@@ -28,6 +28,7 @@ from app.routes.admin_templates import templates_bp
 from app.routes.admin_db_migration import db_migration_bp
 from app.routes.admin_search import search_bp
 from app.routes.admin_index import index_bp
+from app.routes.admin_health import health_bp
 
 def register_admin_blueprints(admin_bp: Blueprint):
     """Register all admin sub-blueprints with the main admin blueprint."""
@@ -59,3 +60,4 @@ def register_admin_blueprints(admin_bp: Blueprint):
     admin_bp.register_blueprint(db_migration_bp, url_prefix='/db-migration')
     admin_bp.register_blueprint(search_bp, url_prefix='/search')
     admin_bp.register_blueprint(index_bp, url_prefix='/indexes')
+    admin_bp.register_blueprint(health_bp, url_prefix='/health')
