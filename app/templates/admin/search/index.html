@@ -1,0 +1,213 @@
+<div style="max-width: 1000px; margin: 0 auto;">
+    <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
+        <h3 style="margin-top: 0; color: #333;">Global Search</h3>
+        <form method="GET" action="{{ url_for('admin.search.search_page') }}" style="display: flex; gap: 12px; margin-bottom: 16px;">
+            <input type="text" 
+                   name="q" 
+                   value="{{ query }}" 
+                   placeholder="Search modules, routes, scripts, forms, users..." 
+                   style="flex: 1; padding: 10px 16px; border: 1px solid #ced4da; border-radius: 4px; font-size: 16px;"
+                   autofocus>
+            <button type="submit" 
+                    style="padding: 10px 24px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+                Search
+            </button>
+        </form>
+        
+        {% if query %}
+        <p style="color: #666; margin: 0;">
+            Found <strong>{{ total_results }}</strong> result{{ 's' if total_results != 1 else '' }} for "<em>{{ query }}</em>"
+        </p>
+        {% endif %}
+    </div>
+
+    {% if query and results %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+        
+        {% if results.modules %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 8px;">
+                Modules ({{ results.modules|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for module in results.modules %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ module.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ module.name }}
+                    </a>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        {{ module.slug }}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if results.routes %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #28a745; border-bottom: 2px solid #28a745; padding-bottom: 8px;">
+                Routes ({{ results.routes|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for route in results.routes %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ route.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ route.name }}
+                    </a>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        Module: {{ route.module }}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if results.scripts %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #ffc107; border-bottom: 2px solid #ffc107; padding-bottom: 8px;">
+                Scripts ({{ results.scripts|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for script in results.scripts %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ script.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ script.name }}
+                    </a>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        Module: {{ script.module }}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if results.forms %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #17a2b8; border-bottom: 2px solid #17a2b8; padding-bottom: 8px;">
+                Forms ({{ results.forms|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for form in results.forms %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ form.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ form.name }}
+                    </a>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        Module: {{ form.module }}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if results.users %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #dc3545; border-bottom: 2px solid #dc3545; padding-bottom: 8px;">
+                Users ({{ results.users|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for user in results.users %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ user.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ user.name }}
+                    </a>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        Role: {{ user.role }}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if results.groups %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #6f42c1; border-bottom: 2px solid #6f42c1; padding-bottom: 8px;">
+                Groups ({{ results.groups|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for group in results.groups %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ group.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ group.name }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if results.tasks %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #fd7e14; border-bottom: 2px solid #fd7e14; padding-bottom: 8px;">
+                Tasks ({{ results.tasks|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for task in results.tasks %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ task.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ task.name }}
+                    </a>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        Module: {{ task.module }}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if results.triggers %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #20c997; border-bottom: 2px solid #20c997; padding-bottom: 8px;">
+                Triggers ({{ results.triggers|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for trigger in results.triggers %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ trigger.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ trigger.name }}
+                    </a>
+                    <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                        Module: {{ trigger.module }}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if results.settings %}
+        <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;">
+            <h4 style="margin-top: 0; color: #6c757d; border-bottom: 2px solid #6c757d; padding-bottom: 8px;">
+                Settings ({{ results.settings|length }})
+            </h4>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                {% for setting in results.settings %}
+                <li style="padding: 8px 0; border-bottom: 1px solid #f0f0f0;">
+                    <a href="{{ setting.url }}" style="color: #333; text-decoration: none; font-weight: 500;">
+                        {{ setting.name }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+    </div>
+
+    {% elif query %}
+    <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 24px; text-align: center;">
+        <p style="color: #856404; margin: 0; font-size: 16px;">
+            No results found for "<strong>{{ query }}</strong>"
+        </p>
+        <p style="color: #856404; margin-top: 8px; font-size: 14px;">
+            Try a different search term or check your spelling.
+        </p>
+    </div>
+    {% endif %}
+</div>

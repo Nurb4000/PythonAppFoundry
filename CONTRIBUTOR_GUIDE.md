@@ -52,6 +52,7 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/template_renderer.py` | ~25 | Sandboxed Jinja2 renderer — `render_db_template(body, **ctx)` uses `ImmutableSandboxedEnvironment` with autoescape and StrictUndefined. Blocks unsafe attribute access and mutating operations on passed objects. |
 | `app/services/async_executor.py` | ~100 | Background script execution via `ThreadPoolExecutor`. `submit_script()` queues scripts, tracks status via `ScriptExecution` model. `get_status()` returns execution result for polling. |
 | `app/services/db_migration.py` | ~260 | Database migration service — exports data from current DB, imports to new DB (SQLite ↔ PostgreSQL), verifies row counts. Requires `psycopg2-binary` for PostgreSQL targets. Used by `/__admin/db-migration`. |
+| `app/services/search.py` | ~180 | Global search service — searches across modules, routes, scripts, forms, users, groups, tasks, triggers, and settings. Used by `/__admin/search`. |
 
 ### Models
 
@@ -181,6 +182,47 @@ engine = create_engine('postgresql://user:pass@host/db')
 verification = verify_migration(exported, engine)
 ```
 
+### Global Search Service
+
+The `search.py` service provides instant lookup across all platform entities. Admins can search by name, slug, or description using the UI at `/__admin/search`.
+
+**Key components:**
+- `search_all(query, limit=50)` — Main entry point, searches all entity types and returns structured results
+- Individual search functions for each entity type (modules, routes, scripts, forms, users, groups, tasks, triggers, settings)
+- Uses SQLAlchemy's `ilike()` for case-insensitive partial matching
+
+**Searchable entities:**
+- Modules (name, slug, description)
+- Routes (slug, title)
+- Scripts (name, description)
+- Forms (name)
+- Users (username)
+- Groups (name)
+- Scheduled Tasks (name)
+- Triggers (name)
+- Settings (key)
+
+**Usage in routes:**
+```python
+from app.services.search import search_all
+
+# Search across all entities
+results = search_all('user', limit=50)
+
+# Results structure:
+# {
+#     'modules': [{'id': 1, 'type': 'module', 'name': '...', ...}],
+#     'users': [{'id': 1, 'type': 'user', 'name': 'admin', ...}],
+#     ...
+# }
+```
+
+**Performance considerations:**
+- Each entity type is searched independently with try/except to isolate failures
+- Results are limited per entity type (default 50) and overall (50 total in API)
+- No full-text search index — uses SQL `ILIKE` which works well for small-medium datasets
+- For large deployments (>10k entities), consider adding database-level full-text search
+
 ## admin.py Navigation
 
 At ~2430 lines, `admin.py` is the largest file. It's organized as a flat list of route functions, grouped by entity. Key landmarks:
@@ -238,6 +280,7 @@ Several admin features have been extracted into separate blueprints for modulari
 | `app/routes/admin_versions.py` | `versions_bp` | `/__admin/modules/<id>/versions` | Module version history |
 | `app/routes/admin_credentials.py` | `credentials_bp` | `/__admin/credentials` | Encrypted credential store |
 | `app/routes/admin_dead_letter.py` | `dead_letter_bp` | `/__admin/dead-letter` | Webhook dead letter queue |
+| `app/routes/admin_search.py` | `search_bp` | `/__admin/search` | Global search across all entities |
 
 All sub-blueprints are registered in `app/routes/admin_blueprints.py`.
 
@@ -249,7 +292,7 @@ All sub-blueprints are registered in `app/routes/admin_blueprints.py`.
 Browser → HTTP request
   │
   ├─ /__auth/*       → auth.py
-  ├─ /__admin/*      → admin.py / chat.py / bpmn.py / admin_db_migration.py
+  ├─ /__admin/*      → admin.py / chat.py / bpmn.py / admin_db_migration.py / admin_search.py
   ├─ /__api/*        → api.py
   ├─ /uploads/*      → app/__init__.py serve_upload()
   └─ /* (catch-all)  → dynamic.py

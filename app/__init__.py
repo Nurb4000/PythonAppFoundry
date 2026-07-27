@@ -193,6 +193,7 @@ def create_app(config_class=None):
                 <a href="/__admin/settings" style="color:#eee;text-decoration:none">Settings</a>
                 <a href="/__admin/audit" style="color:#eee;text-decoration:none">Audit</a>
                 <a href="/__admin/db-migration" style="color:#eee;text-decoration:none">DB Migration</a>
+                <a href="/__admin/search" style="color:#eee;text-decoration:none">Search</a>
                 <span style="flex:1"></span>
                 <span>{current_user.username}</span>
                 <a href="/" style="color:#eee;text-decoration:none">View Site</a>

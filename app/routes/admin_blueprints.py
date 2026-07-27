@@ -26,6 +26,7 @@ from app.routes.admin_dead_letter import dead_letter_bp
 from app.routes.admin_audit import audit_bp
 from app.routes.admin_templates import templates_bp
 from app.routes.admin_db_migration import db_migration_bp
+from app.routes.admin_search import search_bp
 
 def register_admin_blueprints(admin_bp: Blueprint):
     """Register all admin sub-blueprints with the main admin blueprint."""
@@ -55,3 +56,4 @@ def register_admin_blueprints(admin_bp: Blueprint):
     admin_bp.register_blueprint(audit_bp, url_prefix='/audit')
     admin_bp.register_blueprint(templates_bp, url_prefix='/templates')
     admin_bp.register_blueprint(db_migration_bp, url_prefix='/db-migration')
+    admin_bp.register_blueprint(search_bp, url_prefix='/search')
