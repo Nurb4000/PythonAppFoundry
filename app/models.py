@@ -28,7 +28,7 @@ class _ModelQueryProperty:
 class DynamicModel:
     @staticmethod
     def get_or_create(name, columns=None, module_id=None):
-        from sqlalchemy import inspect as _sa_inspect
+        from sqlalchemy import inspect as _sa_inspect, text
 
         table_name = name.lower()
         try:
@@ -36,16 +36,32 @@ class DynamicModel:
         except Exception:
             engine = db.engine
 
-        if name in _dynamic_models:
+        # Build the declared column set (excluding auto-added 'id')
+        if columns is None:
+            columns = {}
+        declared_col_names = set(columns.keys())
+
+        # Check if we can return cached model without schema changes
+        if name in _dynamic_models and declared_col_names:
             try:
                 inspector = _sa_inspect(engine)
                 if table_name in inspector.get_table_names():
-                    return _dynamic_models[name]
+                    actual_cols = {c['name'] for c in inspector.get_columns(table_name)}
+                    # If all declared columns exist in the table, return cached
+                    if declared_col_names.issubset(actual_cols):
+                        return _dynamic_models[name]
             except Exception:
                 pass
-            del _dynamic_models[name]
-            if table_name in db.metadata.tables:
-                del db.metadata.tables[table_name]
+            try:
+                del _dynamic_models[name]
+            except KeyError:
+                pass
+            try:
+                if table_name in db.metadata.tables:
+                    # SQLAlchemy 2.0+ uses immutable dicts; clear and re-add if needed
+                    pass
+            except Exception:
+                pass
 
         if columns is None:
             columns = {}
@@ -66,6 +82,36 @@ class DynamicModel:
             table.create(engine, checkfirst=True)
         except Exception:
             pass
+
+        # Evolve schema: add any missing columns via ALTER TABLE
+        try:
+            inspector = _sa_inspect(engine)
+            actual_cols = {c['name'] for c in inspector.get_columns(table_name)}
+            missing_cols = declared_col_names - actual_cols
+            if missing_cols:
+                alter_parts = []
+                for col_name in sorted(missing_cols):
+                    col_type = columns[col_name]
+                    # Normalize type for DDL
+                    if isinstance(col_type, type) and issubclass(col_type, TypeEngine):
+                        col_inst = col_type()
+                    elif isinstance(col_type, TypeEngine):
+                        col_inst = col_type
+                    else:
+                        col_inst = String(200)
+                    col_sql = str(col_inst.compile(dialect=engine.dialect))
+                    alter_parts.append(f'ADD COLUMN "{col_name}" {col_sql}')
+
+                alter_sql = f'ALTER TABLE "{table_name}" ' + ', '.join(alter_parts)
+                logger.info(f'Evolving dynamic table {table_name}: {alter_sql}')
+                db.session.execute(text(alter_sql))
+                db.session.commit()
+                # Re-inspect after commit to ensure we see the changes
+                inspector = _sa_inspect(engine)
+                actual_cols = {c['name'] for c in inspector.get_columns(table_name)}
+        except Exception as e:
+            logger.warning(f'Failed to evolve dynamic table {table_name}: {e}')
+            db.session.rollback()
 
         model = type(name, (_dynamic_base,), {
             '__table__': table,
