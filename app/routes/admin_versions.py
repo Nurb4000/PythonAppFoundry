@@ -4,6 +4,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import developer_or_admin_required, render_admin
 from app import db
 from app.models import Module, ModuleVersion
+from app.services.audit import log_audit
 
 versions_bp = Blueprint('versions', __name__)
 
@@ -25,6 +26,7 @@ def create_version(module_id):
     try:
         from app.services.versioning import create_version as _create_version
         _create_version(module_id, comment=comment, user_id=current_user.id if current_user.is_authenticated else None)
+        log_audit('create', 'version', module_id, m.name)
         flash(f'Version created for "{m.name}"')
     except Exception as e:
         flash(f'Failed to create version: {e}', 'error')
@@ -39,6 +41,7 @@ def restore_version(module_id, version_id):
     try:
         from app.services.versioning import restore_version as _restore_version
         _restore_version(version_id)
+        log_audit('restore', 'version', version_id, v.module.name)
         flash(f'Restored "{v.module.name}" to version {v.version_number}')
     except Exception as e:
         flash(f'Failed to restore version: {e}', 'error')

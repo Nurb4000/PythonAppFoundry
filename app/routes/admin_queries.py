@@ -3,6 +3,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import developer_or_admin_required, render_admin
 from app import db
 from app.models import Module, QueryReport
+from app.services.audit import log_audit
 
 queries_bp = Blueprint('queries', __name__)
 
@@ -57,6 +58,7 @@ def new_query():
         )
         db.session.add(q)
         db.session.commit()
+        log_audit('create', 'query', q.id, q.name)
         flash(f'Query "{q.name}" created')
         return redirect(url_for('admin.queries.edit_query', id=q.id))
     q = QueryReport(module_id=modules[0].id if modules else 0, name='', description='', sql='SELECT * FROM modules LIMIT 10', chart_type='none',
@@ -84,6 +86,7 @@ def edit_query(id):
         q.email_to = request.form.get('email_to', q.email_to)
         q.email_subject = request.form.get('email_subject', q.email_subject)
         db.session.commit()
+        log_audit('edit', 'query', q.id, q.name)
         flash('Query updated')
         return redirect(url_for('admin.queries.edit_query', id=q.id))
     return render_admin('Edit: ' + q.name, 'admin/queries/form.html', q=q, modules=modules, action=url_for('admin.queries.edit_query', id=q.id))
@@ -94,8 +97,10 @@ def edit_query(id):
 @csrf_protect
 def delete_query(id):
     q = QueryReport.query.get_or_404(id)
+    name = q.name
     db.session.delete(q)
     db.session.commit()
+    log_audit('delete', 'query', q.id, name)
     flash('Query deleted')
     return redirect(url_for('admin.queries.list_queries'))
 

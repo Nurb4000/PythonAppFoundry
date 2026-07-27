@@ -3,6 +3,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import developer_or_admin_required, list_view, render_admin
 from app import db
 from app.models import Form, Module
+from app.services.audit import log_audit
 
 forms_bp = Blueprint('forms', __name__)
 
@@ -25,6 +26,7 @@ def new_form():
         )
         db.session.add(f)
         db.session.commit()
+        log_audit('create', 'form', f.id, f.name)
         return redirect(url_for('admin.forms.list_forms'))
     return render_admin('New Form', 'admin/forms/new.html', modules=modules)
 
@@ -39,5 +41,6 @@ def edit_form(id):
         f.name = request.form['name']
         f.schema_json = request.form.get('schema_json', '[]')
         db.session.commit()
+        log_audit('edit', 'form', f.id, f.name)
         return redirect(url_for('admin.forms.list_forms'))
     return render_admin('Edit Form', 'admin/forms/edit.html', f=f, modules=modules)

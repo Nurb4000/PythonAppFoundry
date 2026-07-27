@@ -3,6 +3,7 @@ from flask import Blueprint, request, redirect, url_for, flash
 import subprocess
 import json as _json
 from app.services.admin_utils import admin_required, render_admin
+from app.services.audit import log_audit
 
 packages_bp = Blueprint('packages', __name__)
 
@@ -31,6 +32,8 @@ def admin_packages():
                     output_lines = (r.stdout or '').splitlines() + (r.stderr or '').splitlines()
                     if r.returncode != 0:
                         install_error = f'Exit code {r.returncode}'
+                    else:
+                        log_audit('install', 'package', details=pkg)
                 except subprocess.TimeoutExpired:
                     install_error = 'Install timed out after 120s'
                 except FileNotFoundError:
@@ -48,6 +51,8 @@ def admin_packages():
                         output_lines = (r.stdout or '').splitlines() + (r.stderr or '').splitlines()
                         if r.returncode != 0:
                             install_error = f'Exit code {r.returncode}'
+                        else:
+                            log_audit('uninstall', 'package', details=pkg)
                     except subprocess.TimeoutExpired:
                         install_error = 'Uninstall timed out after 60s'
                     except FileNotFoundError:

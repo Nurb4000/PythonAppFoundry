@@ -661,6 +661,55 @@ This means the AI can suggest fixes that work within the sandbox rather than sug
 - User must have Developer or Admin role
 - CSRF token is included automatically
 
+## Audit Log
+
+All administrative actions are automatically logged to the `audit_logs` table. This provides a traceable history of who changed what, when, and from where.
+
+### What Gets Logged
+
+| Action | Entity | Example |
+|--------|--------|---------|
+| `create` | module, script, form, route, task, trigger, group, credential, query, version, user | Module "my_app" created |
+| `edit` | module, script, form, route, task, trigger, group, credential, query, user, settings | Module "my_app" updated |
+| `delete` | module, group, credential, query, backup | Module "my_app" deleted |
+| `import` | module | Module imported from AI chat or BPMN |
+| `clone` | module | Module "my_app" cloned as "my_app_copy" |
+| `reset` | module | System module "core" reset to defaults |
+| `install` | package | Package "requests" installed |
+| `uninstall` | package | Package "requests" uninstalled |
+| `restore` | version, backup | Version 3 restored for module "my_app" |
+| `create` | backup | Database backup created |
+| `update` | settings | Settings changed: site_name, smtp_host |
+
+### Log Entry Fields
+
+Each audit log entry includes:
+
+- **User** — who performed the action (name + ID)
+- **Action** — what was done (create, edit, delete, import, etc.)
+- **Entity Type** — what was affected (module, script, settings, etc.)
+- **Entity ID** — database ID of the affected record
+- **Entity Name** — human-readable name of the affected record
+- **Details** — optional extra info (e.g., settings diff, import source)
+- **IP Address** — client IP of the requester
+- **Timestamp** — when the action occurred
+
+### Viewing the Audit Log
+
+Navigate to **Admin → Audit** (linked in the top admin bar). The list view supports:
+
+- **Entity Type Filter** — show only modules, scripts, settings, etc.
+- **User Filter** — show only actions by a specific user
+- **Action Filter** — show only creates, deletes, edits, etc.
+
+### Technical Details
+
+- Model: `AuditLog` in `app/models.py`
+- Helper: `log_audit(action, entity_type, entity_id, entity_name, details)` in `app/services/audit.py`
+- Blueprint: `app/routes/admin_audit.py` registered at `/__admin/audit`
+- Current user and IP are captured automatically from the Flask request context
+- All admin CRUD routes across 17 blueprints are wired with `log_audit()` calls
+
 ## XML Import Preview
 
 Before importing a module XML, you can now preview what will be imported:

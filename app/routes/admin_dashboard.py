@@ -91,7 +91,8 @@ def dashboard():
                        'scripts', 'forms', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports', 'incoming_emails', 'credentials'}
+                       'query_reports', 'incoming_emails', 'credentials',
+                       'audit_logs'}
     table_stats = []
     bind = db.session.get_bind()
     inspector = _sa_inspect(bind)

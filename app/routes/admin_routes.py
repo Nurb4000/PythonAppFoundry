@@ -5,6 +5,7 @@ from app.services.admin_utils import developer_or_admin_required, list_view, ren
 from app.services.validation import validate_route_slug
 from app import db
 from app.models import Route, Module, Script, Form, Group
+from app.services.audit import log_audit
 
 routes_bp = Blueprint('routes', __name__)
 
@@ -38,6 +39,7 @@ def new_route():
         r = Route(module_id=int(request.form['module_id']), slug=slug, methods=request.form.get('methods', 'GET'), script_id=int(request.form['script_id']) if request.form.get('script_id') else None, form_id=int(request.form['form_id']) if request.form.get('form_id') else None, auth_required='auth_required' in request.form, allowed_groups=allowed, title=request.form.get('title', ''))
         db.session.add(r)
         db.session.commit()
+        log_audit('create', 'route', r.id, r.slug)
         return redirect(url_for('admin.routes.list_routes'))
     return render_admin('New Route', 'admin/routes/new.html', modules=modules, scripts=scripts, forms=forms, groups=groups)
 
@@ -71,6 +73,7 @@ def edit_route(id):
         r.allowed_groups = ','.join(request.form.getlist('allowed_groups'))
         r.title = request.form.get('title', '')
         db.session.commit()
+        log_audit('edit', 'route', r.id, r.slug)
         return redirect(url_for('admin.routes.list_routes'))
     allowed_ids = set(r.allowed_groups.split(',') if r.allowed_groups else [])
     return render_admin('Edit Route', 'admin/routes/edit.html', r=r, modules=modules, scripts=scripts, forms=forms, groups=groups, allowed_ids=allowed_ids)

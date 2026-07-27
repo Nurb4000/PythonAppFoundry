@@ -5,6 +5,7 @@ from app.services.admin_utils import developer_or_admin_required, list_view, ren
 from app.services.script_runner import execute_script
 from app import db
 from app.models import Script, Module
+from app.services.audit import log_audit
 
 scripts_bp = Blueprint('scripts', __name__)
 
@@ -32,6 +33,7 @@ def new_script():
         s = Script(module_id=int(request.form['module_id']), name=request.form['name'], language=language, source_code=source, description=request.form.get('description', ''))
         db.session.add(s)
         db.session.commit()
+        log_audit('create', 'script', s.id, s.name)
         return redirect(url_for('admin.scripts.list_scripts'))
     return render_admin('New Script', 'admin/scripts/new.html', modules=modules)
 
@@ -57,6 +59,7 @@ def edit_script(id):
         s.source_code = source
         s.description = request.form.get('description', '')
         db.session.commit()
+        log_audit('edit', 'script', s.id, s.name)
         return redirect(url_for('admin.scripts.list_scripts'))
     return render_admin('Edit Script', 'admin/scripts/edit.html', s=s, modules=modules)
 

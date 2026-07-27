@@ -3,6 +3,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, render_admin
 from app import db
 from app.models import Setting
+from app.services.audit import log_audit
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -12,6 +13,17 @@ settings_bp = Blueprint('settings', __name__)
 @csrf_protect
 def edit_settings():
     if request.method == 'POST':
+        _setting_keys = [
+            'registration_disabled', 'registration_require_approval', 'site_name',
+            'llm_provider', 'llm_endpoint', 'llm_api_key', 'llm_model',
+            'llm_temperature', 'llm_max_tokens', 'llm_timeout', 'script_timeout',
+            'smtp_host', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from',
+            'smtp_tls', 'log_retention_days',
+            'imap_host', 'imap_port', 'imap_user', 'imap_password',
+            'imap_use_ssl', 'imap_folder', 'imap_poll_interval',
+            'imap_enabled', 'imap_mark_seen', 'imap_retention_days',
+        ]
+        _old = {k: Setting.get(k, '') for k in _setting_keys}
         Setting.set('registration_disabled', 'true' if 'registration_disabled' in request.form else 'false')
         Setting.set('registration_require_approval', 'true' if 'registration_require_approval' in request.form else 'false')
         Setting.set('site_name', request.form.get('site_name', ''))
@@ -40,6 +52,9 @@ def edit_settings():
         Setting.set('imap_enabled', 'true' if 'imap_enabled' in request.form else 'false')
         Setting.set('imap_mark_seen', 'true' if 'imap_mark_seen' in request.form else 'false')
         Setting.set('imap_retention_days', request.form.get('imap_retention_days', '0'))
+        _new = {k: Setting.get(k, '') for k in _setting_keys}
+        _changed = [k for k in _setting_keys if str(_old.get(k, '')) != str(_new.get(k, ''))]
+        log_audit('update', 'settings', details=', '.join(_changed) if _changed else 'no changes')
         flash('Settings saved')
         return redirect(url_for('admin.settings.edit_settings'))
     disabled = Setting.get('registration_disabled', 'false') == 'true'

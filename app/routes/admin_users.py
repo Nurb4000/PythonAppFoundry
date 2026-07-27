@@ -4,6 +4,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, render_admin
 from app import db
 from app.models import User
+from app.services.audit import log_audit
 
 users_bp = Blueprint('users', __name__)
 
@@ -80,6 +81,7 @@ def new_user():
         )
         db.session.add(u)
         db.session.commit()
+        log_audit('create', 'user', u.id, u.username)
         return redirect(url_for('admin.users.list_users'))
     return render_admin('New User', 'admin/users/new.html')
 
@@ -97,5 +99,6 @@ def edit_user(id):
         if request.form.get('password'):
             u.password_hash = bcrypt.hashpw(request.form['password'].encode(), bcrypt.gensalt()).decode()
         db.session.commit()
+        log_audit('edit', 'user', u.id, u.username)
         return redirect(url_for('admin.users.list_users'))
     return render_admin('Edit User', 'admin/users/edit.html', u=u)

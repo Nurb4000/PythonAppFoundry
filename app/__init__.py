@@ -190,6 +190,7 @@ def create_app(config_class=None):
                 <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
                 <a href="/__admin/dashboard/integration-health" style="color:#eee;text-decoration:none">Integrations</a>
                 <a href="/__admin/settings" style="color:#eee;text-decoration:none">Settings</a>
+                <a href="/__admin/audit" style="color:#eee;text-decoration:none">Audit</a>
                 <span style="flex:1"></span>
                 <span>{current_user.username}</span>
                 <a href="/" style="color:#eee;text-decoration:none">View Site</a>
@@ -210,6 +211,7 @@ def create_app(config_class=None):
                 <a href="/__admin/uploads" style="color:#eee;text-decoration:none">Uploads</a>
                 <a href="/__admin/chat" style="color:#eee;text-decoration:none">AI Designer</a>
                 <a href="/__admin/bpmn" style="color:#eee;text-decoration:none">BPMN</a>
+                <a href="/__admin/audit" style="color:#eee;text-decoration:none">Audit</a>
                 <span style="flex:1"></span>
                 <span>{current_user.username}</span>
                 <a href="/" style="color:#eee;text-decoration:none">View Site</a>

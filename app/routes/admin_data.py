@@ -9,6 +9,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, developer_or_admin_required, render_admin
 from app import db
 from app.models import Script, DynamicTableRegistry, Module
+from app.services.audit import log_audit
 
 data_bp = Blueprint('data', __name__)
 
@@ -178,6 +179,7 @@ def new_row(table_name):
                     values[c.name] = val
         db.session.execute(table.insert().values(**values))
         db.session.commit()
+        log_audit('create', 'data', details=f'table={table_name}')
         return redirect(url_for('admin.data.browse_table', table_name=table_name))
 
     return render_admin('New Row: ' + table_name, 'admin/data/new_row.html', table_name=table_name, columns=columns)
@@ -245,6 +247,7 @@ def edit_row(table_name, id):
                     values[info['name']] = val
         db.session.execute(table.update().where(table.c.id == id).values(**values))
         db.session.commit()
+        log_audit('edit', 'data', entity_id=id, details=f'table={table_name}')
         return redirect(url_for('admin.data.browse_table', table_name=table_name))
 
     return render_admin('Edit Row: ' + table_name, 'admin/data/edit_row.html', table_name=table_name, columns=columns)
@@ -260,6 +263,7 @@ def delete_row(table_name, id):
         return 'Table has no id column', 400
     db.session.execute(table.delete().where(table.c.id == id))
     db.session.commit()
+    log_audit('delete', 'data', entity_id=id, details=f'table={table_name}')
     return redirect(url_for('admin.data.browse_table', table_name=table_name))
 
 @data_bp.route('/<table_name>/delete', methods=['POST'])
@@ -281,5 +285,6 @@ def delete_table(table_name):
     bind = db.session.get_bind()
     table.drop(bind, checkfirst=True)
     db.metadata.remove(table)
+    log_audit('drop', 'data', details=f'table={table_name}')
     flash(f'Table "{table_name}" dropped')
     return redirect(url_for('admin.data.list_tables'))

@@ -1,0 +1,44 @@
+<form method="GET" style="margin-bottom:1rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <select name="entity_type" onchange="this.form.submit()" style="padding:4px 8px;">
+    <option value="">All Entity Types</option>
+    {% for t in entity_types %}
+    <option value="{{ t }}" {% if current_entity_type == t %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  </select>
+  <select name="user" onchange="this.form.submit()" style="padding:4px 8px;">
+    <option value="">All Users</option>
+    {% for u in users %}
+    <option value="{{ u }}" {% if current_user_filter == u %}selected{% endif %}>{{ u }}</option>
+    {% endfor %}
+  </select>
+  <select name="action" onchange="this.form.submit()" style="padding:4px 8px;">
+    <option value="">All Actions</option>
+    {% for a in actions %}
+    <option value="{{ a }}" {% if current_action_filter == a %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
+  <input name="limit" type="hidden" value="{{ limit }}">
+  {% if current_entity_type or current_user_filter or current_action_filter %}
+  <a href="{{ url_for('admin.audit.list_audit') }}" style="color:#007bff;">Clear Filters</a>
+  {% endif %}
+</form>
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>Name</th><th>Details</th><th>IP</th>
+</tr></thead>
+<tbody>
+{% for log in logs %}
+<tr>
+  <td style="white-space:nowrap;font-size:0.85em;">{{ log.created_at|localtime }}</td>
+  <td>{{ log.user_name or '—' }}</td>
+  <td><span style="padding:2px 6px;border-radius:3px;font-size:0.85em;{% if 'delete' in log.action or 'drop' in log.action or 'restore' in log.action or 'reset' in log.action %}background:#fee;color:#c00;{% elif 'create' in log.action or 'install' in log.action %}background:#efe;color:#080;{% elif 'edit' in log.action or 'update' in log.action %}background:#eef;color:#06c;{% else %}background:#f4f4f4;color:#666;{% endif %}">{{ log.action }}</span></td>
+  <td>{{ log.entity_type }}{% if log.entity_id %} #{{ log.entity_id }}{% endif %}</td>
+  <td>{{ log.entity_name or '—' }}</td>
+  <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85em;color:#666;">{{ log.details[:200] if log.details else '—' }}</td>
+  <td style="font-size:0.85em;color:#888;">{{ log.ip_address or '—' }}</td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+{% if not logs %}<p style="color:#888;">No audit log entries yet.</p>{% endif %}

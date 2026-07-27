@@ -5,6 +5,7 @@ from app.services.admin_utils import admin_required, list_view, render_admin
 from app.services.scheduler import refresh_tasks
 from app import db
 from app.models import Module, Script, ScheduledTask
+from app.services.audit import log_audit
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -47,6 +48,7 @@ def new_task():
         )
         db.session.add(t)
         db.session.commit()
+        log_audit('create', 'task', t.id, t.name)
         refresh_tasks()
         return redirect(url_for('admin.tasks.list_tasks'))
     return render_admin('New Scheduled Task', 'admin/tasks/new.html', modules=modules, scripts=scripts)
@@ -70,6 +72,7 @@ def edit_task(id):
         t.cron_expression = cron
         t.enabled = 'enabled' in request.form
         db.session.commit()
+        log_audit('edit', 'task', t.id, t.name)
         refresh_tasks()
         return redirect(url_for('admin.tasks.list_tasks'))
     return render_admin('Edit Scheduled Task', 'admin/tasks/edit.html', t=t, modules=modules, scripts=scripts)

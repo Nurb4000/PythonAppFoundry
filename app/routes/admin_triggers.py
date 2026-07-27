@@ -3,6 +3,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, list_view, render_admin
 from app import db
 from app.models import Module, Script, Trigger
+from app.services.audit import log_audit
 
 triggers_bp = Blueprint('triggers', __name__)
 
@@ -29,6 +30,7 @@ def new_trigger():
         )
         db.session.add(tg)
         db.session.commit()
+        log_audit('create', 'trigger', tg.id, tg.name)
         return redirect(url_for('admin.triggers.list_triggers'))
     return render_admin('New Trigger', 'admin/triggers/new.html', modules=modules, scripts=scripts)
 
@@ -48,5 +50,6 @@ def edit_trigger(id):
         tg.enabled = 'enabled' in request.form
         tg.auth_token = request.form.get('auth_token', '').strip()
         db.session.commit()
+        log_audit('edit', 'trigger', tg.id, tg.name)
         return redirect(url_for('admin.triggers.list_triggers'))
     return render_admin('Edit Trigger', 'admin/triggers/edit.html', tg=tg, modules=modules, scripts=scripts)

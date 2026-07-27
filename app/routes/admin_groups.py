@@ -4,6 +4,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, render_admin
 from app import db
 from app.models import Group, User
+from app.services.audit import log_audit
 
 groups_bp = Blueprint('groups', __name__)
 
@@ -21,6 +22,7 @@ def new_group():
         g = Group(name=request.form['name'], description=request.form.get('description', ''))
         db.session.add(g)
         db.session.commit()
+        log_audit('create', 'group', g.id, g.name)
         return redirect(url_for('admin.groups.list_groups'))
     return render_admin('New Group', 'admin/groups/new.html')
 
@@ -36,6 +38,7 @@ def edit_group(id):
         selected_ids = [int(x) for x in request.form.getlist('user_ids')]
         g.users = [u for u in users if u.id in selected_ids]
         db.session.commit()
+        log_audit('edit', 'group', g.id, g.name)
         return redirect(url_for('admin.groups.list_groups'))
     selected_ids = {u.id for u in g.users}
     return render_admin('Edit Group', 'admin/groups/edit.html', g=g, users=users, selected_ids=selected_ids)
@@ -45,6 +48,8 @@ def edit_group(id):
 @csrf_protect
 def delete_group(id):
     g = Group.query.get_or_404(id)
+    name = g.name
     db.session.delete(g)
     db.session.commit()
+    log_audit('delete', 'group', g.id, name)
     return redirect(url_for('admin.groups.list_groups'))

@@ -442,3 +442,21 @@ class IncomingEmail(db.Model):
 
     def __repr__(self):
         return f'<IncomingEmail {self.subject!r} from {self.from_address}>'
+
+
+class AuditLog(db.Model):
+    __tablename__ = 'audit_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    user_id = db.Column(db.Integer, nullable=True)
+    user_name = db.Column(db.String(80), default='')
+    action = db.Column(db.String(100), nullable=False)
+    entity_type = db.Column(db.String(50), nullable=False)
+    entity_id = db.Column(db.Integer, nullable=True)
+    entity_name = db.Column(db.String(200), default='')
+    details = db.Column(db.Text, default='')
+    ip_address = db.Column(db.String(100), default='')
+
+    def __repr__(self):
+        return f'<AuditLog {self.action} {self.entity_type}:{self.entity_name} by {self.user_name}>'

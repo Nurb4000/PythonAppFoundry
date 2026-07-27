@@ -3,6 +3,7 @@ from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, render_admin
 from app import db
 from app.models import Credential, Module
+from app.services.audit import log_audit
 
 credentials_bp = Blueprint('credentials', __name__)
 
@@ -36,6 +37,7 @@ def new_credential():
         )
         db.session.add(c)
         db.session.commit()
+        log_audit('create', 'credential', c.id, c.name)
         flash(f'Credential "{c.name}" saved')
         return redirect(url_for('admin.credentials.list_credentials'))
     return render_admin('New Credential', 'admin/credentials/new.html', modules=modules)
@@ -56,6 +58,7 @@ def edit_credential(id):
         if request.form.get('value'):
             c.value_encrypted = encrypt_value(request.form['value'])
         db.session.commit()
+        log_audit('edit', 'credential', c.id, c.name)
         flash(f'Credential "{c.name}" updated')
         return redirect(url_for('admin.credentials.list_credentials'))
     return render_admin('Edit Credential', 'admin/credentials/edit.html', c=c, modules=modules)
@@ -66,7 +69,9 @@ def edit_credential(id):
 @csrf_protect
 def delete_credential(id):
     c = Credential.query.get_or_404(id)
+    name = c.name
     db.session.delete(c)
     db.session.commit()
-    flash(f'Credential "{c.name}" deleted')
+    log_audit('delete', 'credential', c.id, name)
+    flash(f'Credential "{name}" deleted')
     return redirect(url_for('admin.credentials.list_credentials'))

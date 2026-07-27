@@ -33,6 +33,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Webhook Support** — External services can trigger scripts via HTTP POST to `/__api/webhook/{slug}`. Configure webhooks as triggers with `event_type='webhook'`. Scripts receive the payload data for processing.
 - **Group-Based Route Access** — Restrict routes to specific user groups. Users must be logged in and belong to at least one allowed group to access the route.
 - **AI-Powered Script Debugging** — When a script fails, click "Ask AI about this error" on the dashboard, debug page, or test modal. The error and script source are sent to the configured LLM for root cause analysis and a corrected script. On the script editor, "Apply Fix" auto-populates the source code textarea.
+- **Audit Log** — Tracks all administrative actions (module CRUD, user management, settings changes, imports, deletions) with user, timestamp, entity, and IP address. Filterable list view at `/__admin/audit`.
 - **Script Debug Mode** — Run scripts directly from the editor with "Run Debug" to see source code, line numbers, output, and execution timing.
 - **Encrypted Credential Store** — API keys, tokens, and passwords stored encrypted at rest (Fernet), module-scoped, accessible in scripts via `get_credential('name')`.
 - **Built-in HTTP Client** — `call_api()` in scripts handles retries, timeouts, JSON parsing, and consistent error returns — no extra dependencies needed.

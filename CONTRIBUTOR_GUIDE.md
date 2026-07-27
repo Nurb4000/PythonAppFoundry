@@ -23,6 +23,7 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/routes/api.py` | ~155 | `api_bp` | `/__api` | REST: module list/export/import, file upload, webhook receiver. |
 | `app/routes/chat.py` | ~145 | `chat_bp` | `/__admin/chat` | AI Designer chat sessions (new, list, send message, import XML, refine). |
 | `app/routes/bpmn.py` | ~120 | `bpmn_bp` | `/__admin/bpmn` | BPMN visual designer (load XML, convert diagram to module via LLM, import). |
+| `app/routes/admin_audit.py` | ~40 | `audit_bp` | `/__admin/audit` | Audit log list view with filtering by entity_type, user, and action. |
 
 ### Services
 
@@ -46,12 +47,13 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/openapi.py` | ~100 | OpenAPI 3.0 spec generation from route table. Exports JSON spec and provides Swagger UI endpoint. |
 | `app/services/structured_logging.py` | ~80 | JSON-formatted structured logging with context (script, module, user). Includes execution and webhook loggers. |
 | `app/services/tenant.py` | ~70 | Multi-tenant support — tenant selection via subdomain or path prefix, `tenant_required` decorator, in-memory tenant store. |
+| `app/services/audit.py` | ~30 | Audit logging helper — `log_audit()` captures current user, IP, timestamp and writes `AuditLog` entries. Used across all admin CRUD routes. |
 
 ### Models
 
 | File | Lines | What It Contains |
 |---|---|---|
-| `app/models.py` | 332 | 15 model classes + `DynamicModel` factory, `user_groups` association table. |
+| `app/models.py` | 350 | 16 model classes + `DynamicModel` factory, `user_groups` association table. Includes `AuditLog` for admin action tracking. |
 
 ## Key Code Patterns
 
@@ -187,6 +189,8 @@ chat.py ──> ai_assistant.chat_completion()
 
 bpmn.py ──> ai_assistant.chat_completion()
         ──> bundle.import_module()
+
+admin_* routes ──> audit.log_audit()
 ```
 
 ## Common Gotchas & Bug Patterns

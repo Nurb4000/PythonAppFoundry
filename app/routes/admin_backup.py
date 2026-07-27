@@ -2,6 +2,7 @@ from flask import Blueprint, request, redirect, url_for, flash
 import os
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, render_admin
+from app.services.audit import log_audit
 
 backup_bp = Blueprint('backup', __name__)
 
@@ -13,6 +14,7 @@ def backup_database():
     from app.services.backup import create_backup
     try:
         backup_path = create_backup()
+        log_audit('create', 'backup', details=os.path.basename(backup_path))
         flash(f'Backup created: {os.path.basename(backup_path)}')
         return redirect(url_for('admin.backup.list_backups'))
     except Exception as e:
@@ -52,6 +54,7 @@ def delete_backup(path):
     for b in backups:
         if b['filename'] == path:
             _delete(b['path'])
+            log_audit('delete', 'backup', details=path)
             flash(f'Backup {path} deleted')
             return redirect(url_for('admin.backup.list_backups'))
     flash('Backup not found', 'error')
@@ -69,6 +72,7 @@ def restore_backup(path):
         if b['filename'] == path:
             try:
                 _restore(b['path'])
+                log_audit('restore', 'backup', details=path)
                 flash(f'Database restored from {path}. Restart the application to apply changes.')
                 return redirect(url_for('admin.backup.list_backups'))
             except Exception as e:

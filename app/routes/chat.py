@@ -5,6 +5,7 @@ from app import db
 from app.models import ChatSession, ChatMessage, Module
 from app.services.ai_assistant import chat_completion
 from app.services.bundle import import_module, export_module
+from app.services.audit import log_audit
 
 chat_bp = Blueprint('chat', __name__, url_prefix='/__admin/chat')
 
@@ -120,6 +121,7 @@ def import_module_route(id):
         session.status = 'imported'
         session.module_id = module.id
         db.session.commit()
+        log_audit('import', 'module', module.id, module.name, details='source=ai_chat')
         
         # Get version comment from form (optional)
         version_comment = request.form.get('version_comment', '').strip()

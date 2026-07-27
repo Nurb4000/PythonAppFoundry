@@ -6,6 +6,7 @@ from app.services.admin_utils import developer_or_admin_required, admin_required
 from app.services.scheduler import refresh_tasks
 from app import db
 from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport
+from app.services.audit import log_audit
 
 modules_bp = Blueprint('modules', __name__)
 
@@ -67,6 +68,7 @@ def new_module():
         m = Module(name=request.form['name'], slug=slug, description=request.form.get('description', ''), version=request.form.get('version', '1.0.0'), author=request.form.get('author', ''))
         db.session.add(m)
         db.session.commit()
+        log_audit('create', 'module', m.id, m.name)
         return redirect(url_for('admin.modules.list_modules'))
     return render_admin('New Module', 'admin/modules/new.html')
 
@@ -86,6 +88,7 @@ def edit_module(id):
         m.author = request.form.get('author', '')
         m.enabled = 'enabled' in request.form
         db.session.commit()
+        log_audit('edit', 'module', m.id, m.name)
         flash(f'Module "{m.name}" saved')
         return redirect(url_for('admin.modules.edit_module', id=id))
     from app.services.bundle import export_module
@@ -147,6 +150,7 @@ def delete_module(id):
     for dep in m.dependencies_to.all(): db.session.delete(dep)
     db.session.delete(m)
     db.session.commit()
+    log_audit('delete', 'module', m.id, name)
     refresh_tasks()
     tbl_msg = f' and dropped {len(dyn_tables)} table(s)' if drop_tables and dyn_tables else ''
     flash(f'Module "{name}" deleted{tbl_msg}')
@@ -172,6 +176,7 @@ def reset_system_module(id):
     for query in m.query_reports.all(): db.session.delete(query)
     for credential in m.credentials.all(): db.session.delete(credential)
     db.session.commit()
+    log_audit('reset', 'module', m.id, m.name)
     refresh_tasks()
     flash(f'System module "{m.name}" reset to default (empty).')
     return redirect(url_for('admin.modules.list_modules'))
@@ -225,6 +230,7 @@ def clone_module(id):
     root.set('slug', m.slug + '-copy')
     try:
         new_m = import_module(ET.tostring(root, encoding='unicode', xml_declaration=True))
+        log_audit('clone', 'module', new_m.id, new_m.name)
         flash(f'Module cloned as "{new_m.name}"')
     except Exception as e:
         flash(f'Clone failed: {e}', 'error')
@@ -247,6 +253,7 @@ def import_module_xml(id):
         from app.services.bundle import import_module
         import_module(xml_file.read().decode('utf-8'), update_existing=True, module_id=id)
         create_auto_version(id)
+        log_audit('import', 'module', m.id, m.name)
         flash(f'Module "{m.name}" updated from XML')
     except Exception as e:
         flash(f'Import failed: {e}', 'error')

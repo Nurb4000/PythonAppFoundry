@@ -5,6 +5,7 @@ from app import db
 from app.models import Setting, Module
 from app.services.ai_assistant import _call_llm, _build_system_prompt
 from app.services.bundle import import_module
+from app.services.audit import log_audit
 
 bpmn_bp = Blueprint('bpmn', __name__, url_prefix='/__admin/bpmn')
 
@@ -121,6 +122,7 @@ def import_route():
             module.bpmn_xml = bpmn_xml
             module.bpmn_description = bpmn_desc
             db.session.commit()
+        log_audit('import', 'module', module.id, module.name, details='source=bpmn')
         try:
             from app.routes.admin import create_auto_version
             create_auto_version(module.id)
