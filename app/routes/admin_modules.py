@@ -11,6 +11,51 @@ from app.services.audit import log_audit
 modules_bp = Blueprint('modules', __name__)
 
 
+@modules_bp.route('/import', methods=['GET', 'POST'])
+@developer_or_admin_required
+@csrf_protect
+def import_module_page():
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('No file uploaded', 'error')
+            return redirect(url_for('admin.modules.import_module_page'))
+        xml_file = request.files['file']
+        if not xml_file.filename:
+            flash('Empty filename', 'error')
+            return redirect(url_for('admin.modules.import_module_page'))
+
+        from app.services.bundle import import_module
+        import xml.etree.ElementTree as ET
+
+        try:
+            xml_str = xml_file.read().decode('utf-8')
+            root = ET.fromstring(xml_str)
+            slug = root.get('slug', '')
+
+            existing = db.session.query(Module).filter_by(slug=slug).first()
+            update_existing = request.form.get('update_existing') == 'true'
+
+            if existing and update_existing:
+                version_comment = request.form.get('version_comment', '').strip()
+                if not version_comment:
+                    version_comment = f'Updated from XML import'
+                import_module(xml_str, update_existing=True, module_id=existing.id)
+                create_auto_version(existing.id, comment=version_comment)
+                log_audit('import', 'module', existing.id, existing.name, details='update=True')
+                flash(f'Module "{existing.name}" updated from XML')
+                return redirect(url_for('admin.modules.edit_module', id=existing.id))
+            else:
+                m = import_module(xml_str)
+                log_audit('import', 'module', m.id, m.name, details='update=False')
+                flash(f'Module "{m.name}" imported successfully')
+                return redirect(url_for('admin.modules.list_modules'))
+        except Exception as e:
+            flash(f'Import failed: {e}', 'error')
+            return redirect(url_for('admin.modules.import_module_page'))
+
+    return render_admin('Import Module', 'admin/modules/import.html')
+
+
 @modules_bp.route('/')
 @developer_or_admin_required
 def list_modules():
@@ -50,16 +95,6 @@ def list_modules():
 @csrf_protect
 def new_module():
     if request.method == 'POST':
-        if 'import_xml' in request.files and request.files['import_xml'].filename:
-            from app.services.bundle import import_module
-            try:
-                xml_file = request.files['import_xml']
-                m = import_module(xml_file.read().decode('utf-8'))
-                flash(f'Module "{m.name}" imported from XML')
-                return redirect(url_for('admin.modules.list_modules'))
-            except Exception as e:
-                flash(f'Import failed: {e}', 'error')
-                return redirect(url_for('admin.modules.list_modules'))
         slug = request.form['slug'].strip()
         valid, err = validate_slug(slug)
         if not valid:

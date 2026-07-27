@@ -1,5 +1,6 @@
 <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
   <a href="{{ new_url }}">+ New</a>
+  <a href="{{ url_for('admin.modules.import_module_page') }}">Import XML</a>
   <a href="?format=csv{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}" style="margin-left:auto;">Export CSV</a>
 </div>
 <div class="table-wrap">
