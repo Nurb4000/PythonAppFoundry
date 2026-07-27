@@ -13,6 +13,7 @@ from flask_login import current_user
 from datetime import datetime, timezone
 from sqlalchemy import Integer, String, DateTime, Text, Boolean, Float, Column
 from app.models import DynamicModel
+from app.services.template_renderer import render_db_template
 
 from app import db
 from app.models import Setting, ExecutionLog
@@ -319,6 +320,7 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'get_credential': _make_get_credential(script.module_id),
         'call_api': _call_api,
         'get_setting': _get_setting_safe,
+        'render_db_template': render_db_template,
     }
 
     if extra_globals:

@@ -1,0 +1,15 @@
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Name <input name="name" required placeholder="e.g. dashboard_layout"></label>
+<label>Module <select name="module_id">{% for m in modules %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></label>
+<label>Content Type <select name="content_type">
+  <option value="html">HTML</option>
+  <option value="text">Plain Text</option>
+  <option value="json">JSON</option>
+</select></label>
+<label>Description <input name="description" placeholder="Brief description of this template"></label>
+<label>Template Body (Jinja2)
+  <textarea name="body" rows="20" style="width:100%;font-family:monospace;font-size:13px;line-height:1.5" placeholder="<h1>Hello {{ name }}!</h1>"></textarea>
+</label>
+<button>Save</button>
+</form>

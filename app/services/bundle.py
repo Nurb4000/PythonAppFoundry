@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from slugify import slugify
 
 from app import db
-from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport
+from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport, Template
 
 
 def export_module(module):
@@ -41,6 +41,15 @@ def export_module(module):
         f = ET.SubElement(forms_elem, 'form')
         f.set('name', form.name)
         f.text = f'\n{form.schema_json}\n'
+
+    templates_elem = ET.SubElement(root, 'templates')
+    for tpl in module.templates:
+        t = ET.SubElement(templates_elem, 'template')
+        t.set('name', tpl.name)
+        t.set('content_type', tpl.content_type)
+        t.set('description', tpl.description or '')
+        body = ET.SubElement(t, 'body')
+        body.text = f'\n{tpl.body}\n'
 
     tasks_elem = ET.SubElement(root, 'scheduled_tasks')
     for task in module.scheduled_tasks:
@@ -111,6 +120,8 @@ def import_module(xml_str, update_existing=False, module_id=None):
                 db.session.delete(trigger)
             for query in existing.query_reports.all():
                 db.session.delete(query)
+            for tpl in existing.templates.all():
+                db.session.delete(tpl)
             db.session.flush()
             # Update in place to preserve the module ID
             module = existing
@@ -167,6 +178,22 @@ def import_module(xml_str, update_existing=False, module_id=None):
             db.session.add(form)
             db.session.flush()
             form_map[form.name] = form
+
+    # Templates
+    templates_elem = root.find('templates')
+    template_map = {}
+    if templates_elem is not None:
+        for t_elem in templates_elem.findall('template'):
+            tpl = Template(
+                module_id=module.id,
+                name=t_elem.get('name', 'unnamed'),
+                body=(t_elem.findtext('body') or '').strip(),
+                content_type=t_elem.get('content_type', 'html'),
+                description=t_elem.get('description', ''),
+            )
+            db.session.add(tpl)
+            db.session.flush()
+            template_map[tpl.name] = tpl
 
     # Routes
     routes_elem = root.find('routes')

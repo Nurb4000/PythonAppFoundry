@@ -244,6 +244,25 @@ class Form(db.Model):
         return f'<Form {self.name}>'
 
 
+class Template(db.Model):
+    __tablename__ = 'templates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    module_id = db.Column(db.Integer, db.ForeignKey('modules.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    content_type = db.Column(db.String(50), default='html')
+    description = db.Column(db.Text, default='')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    module = db.relationship('Module', backref=db.backref('templates', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Template {self.name}>'
+
+
 class ScheduledTask(db.Model):
     __tablename__ = 'scheduled_tasks'
 

@@ -36,6 +36,7 @@ This document describes the XML bundle format for generating application modules
 #   url_for()     - flask.url_for
 #   flash()       - flask.flash
 #   render()      - flask.render_template_string (render HTML inline)
+#   render_db_template(body, **ctx) - render a database-stored Jinja2 template (sandboxed)
 #   jsonify()     - flask.jsonify
 #   route         - the Route model object for this route
 
@@ -290,6 +291,29 @@ send_email(['user1@example.com', 'user2@example.com'], 'Notice', 'System update.
 ```
 
 SMTP settings (host, port, credentials, TLS, from address) are managed by the admin via Settings and should never be hardcoded in scripts.
+
+### Rendering Database Templates
+
+`render_db_template(body, **context)` renders a Jinja2 template stored in the database. Templates are looked up via `Template.query.filter_by(name='...')` then the `body` is passed to the renderer:
+
+```python
+from app.models import Template
+
+tpl = Template.query.filter_by(name='welcome_email', module_id=module_id).first()
+if tpl:
+    _result = render_db_template(tpl.body, user_name='Alice', items=['item1', 'item2'])
+```
+
+**Template syntax:** Standard Jinja2 — `{{ variables }}`, `{% for %}`, `{% if %}`, `{% raw %}...{% endraw %}` for CSS/JS with curly braces.
+
+**Security:** Rendered in a sandboxed environment that blocks unsafe attribute access (`__class__`, `__subclasses__`), mutating operations (`.append()`, `.update()`), and auto-escapes all variables. Missing variables raise `UndefinedError`.
+
+**Cross-module:** Scripts can render templates from any module (not just their own):
+
+```python
+tpl = Template.query.filter_by(name='base_layout').first()  # any module
+_result = render_db_template(tpl.body, content=page_html)
+```
 
 ### Accessing Cross-Module Data
 
@@ -691,11 +715,11 @@ Then in a Jinja template use the dict key, not dot-chaining:
 12. **No Flask URL converters** — route slugs must be exact paths like `/projects`, not `/project/<int:id>`. Use query parameters (`/project?project_id=1`) and read them in the script via `request.args.get('project_id')`. Never put `<` or `>` inside XML attribute values — they will break XML parsing.
 13. **Scripts must produce output** — end every script with either `return redirect(...)`, `return jsonify(...)`, `_result = <value>`, or `render(...)`. A script that does nothing will render a blank page.
 14. **Form field names must match** — `request.form.get('field_name')` in the script must match `"name":"field_name"` in the form's JSON schema exactly.
-15. **Limit imports in scripts** — the script runner provides `session`, `db`, `request`, `current_user`, `redirect`, `url_for`, `flash`, `render`, `jsonify`, `send_email`, `render_form`, `render_chart`, `DynamicModel`, `datetime`, and `timezone` already. **Do NOT import these from anywhere** — they are pre-injected into every script. There is no `app.helpers` module.
+15. **Limit imports in scripts** — the script runner provides `session`, `db`, `request`, `current_user`, `redirect`, `url_for`, `flash`, `render`, `render_db_template`, `jsonify`, `send_email`, `render_form`, `render_chart`, `DynamicModel`, `datetime`, and `timezone` already. **Do NOT import these from anywhere** — they are pre-injected into every script. There is no `app.helpers` module.
 16. **Avoid Python syntax in Jinja2** — use `{% for item in items %}`, NOT `{% for i in range(len(items)) %}`. Use `{{ item.field }}`, NOT `{{ item["field"] }}`.
 17. **Watch for typos** — `_result` not `_reult` or `_results`. `render` not `render_template`. `session` not `sesson`.
 18. **Script runner provides common builtins** — `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `zip`, `sorted`, `min`, `max`, `sum`, `any`, `all`, `isinstance`, `type`, `hasattr`, `getattr`, `setattr`, `dir`, `print`, `ValueError`, `TypeError`, `KeyError`, `AttributeError` are all available. Do not import them.
-19. **Only use documented helpers** — `render_form(action, method, submit_label, fields=form_fields)` renders the form with its defined fields. `form_fields` is automatically available and contains the parsed field definitions from the form's JSON schema. `send_email(to, subject, body, html=False)` sends email via admin-configured SMTP. `render_chart(chart_type, labels, datasets, title)` renders a Chart.js chart. Do not invent custom function names.
+19. **Only use documented helpers** — `render_form(action, method, submit_label, fields=form_fields)` renders the form with its defined fields. `form_fields` is automatically available and contains the parsed field definitions from the form's JSON schema. `send_email(to, subject, body, html=False)` sends email via admin-configured SMTP. `render_chart(chart_type, labels, datasets, title)` renders a Chart.js chart. `render_db_template(body, **context)` renders a Jinja2 template in a sandboxed environment. Do not invent custom function names.
 20. **No automatic timestamps** — DynamicModel tables have no `created_at` or `updated_at` unless you explicitly define them.
 21. **Cross-module data** — use `DynamicModel.get_or_create("TableName", {...})` to access tables from other modules. List all columns you need. You can also query the `User` model directly: `from app.models import User` then `session.query(User).all()`.
 22. **Execution timeout** — Scripts are terminated after 30 seconds by default (configurable via `script_timeout` setting). Long-running operations like bulk processing should be broken into smaller batches or designed to be idempotent so they can resume on retry. Admins can increase the timeout in Settings if needed.

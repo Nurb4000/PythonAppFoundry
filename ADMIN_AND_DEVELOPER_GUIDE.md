@@ -710,6 +710,125 @@ Navigate to **Admin → Audit** (linked in the top admin bar). The list view sup
 - Current user and IP are captured automatically from the Flask request context
 - All admin CRUD routes across 17 blueprints are wired with `log_audit()` calls
 
+## Database Templates
+
+Templates let you store reusable Jinja2 HTML fragments in the database alongside scripts and forms. Instead of building HTML strings inline in scripts, you define templates once and render them with context variables.
+
+### Creating a Template
+
+1. Navigate to **Admin → Templates** (or **Dev → Templates**)
+2. Click **+ New**
+3. Fill in:
+   - **Name** — identifier used to look up the template (e.g. `dashboard_layout`, `email_welcome`)
+   - **Module** — which module this template belongs to
+   - **Content Type** — `html` (default), `text`, or `json`
+   - **Description** — what this template is for
+   - **Template Body** — the Jinja2 source code
+4. Click **Save**
+
+### Template Syntax
+
+Templates use standard Jinja2 syntax:
+
+```html
+<h1>Hello {{ name }}!</h1>
+
+{% if items %}
+<ul>
+  {% for item in items %}
+  <li>{{ item.title }} - {{ item.price }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No items found.</p>
+{% endif %}
+```
+
+**Key features available:**
+- **Variables:** `{{ variable }}` — auto-HTML-escaped to prevent XSS
+- **Conditionals:** `{% if condition %}...{% else %}...{% endif %}`
+- **Loops:** `{% for item in items %}...{% endfor %}`
+- **Filters:** `{{ name|upper }}`, `{{ items|length }}`, `{{ html|safe }}`
+- **Raw blocks:** `{% raw %}<div>{{ CSS }}</div>{% endraw %}` — disables Jinja2 parsing for CSS/JS with curly braces
+
+### Using Templates in Scripts
+
+Scripts look up templates by name and pass the body to `render_db_template()`:
+
+```python
+from app.models import Template
+
+# Look up the template
+tpl = Template.query.filter_by(name='dashboard', module_id=module_id).first()
+if tpl:
+    # Render with context variables
+    return render_db_template(tpl.body, title='Sales Report', rows=data)
+return '<h1>No template found</h1>'
+```
+
+**Cross-module templates** — a script can render templates from other modules:
+
+```python
+tpl = Template.query.filter_by(name='base_layout').first()  # any module
+return render_db_template(tpl.body, content=inner_html)
+```
+
+### `render_db_template()` Reference
+
+```
+render_db_template(template_body, **context)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `template_body` | str | The Jinja2 template source (from `Template.body`) |
+| `**context` | any | Key-value pairs passed as template variables |
+
+**Returns:** rendered string (HTML, text, or JSON depending on template content)
+
+**Security:** Templates are rendered in an `ImmutableSandboxedEnvironment`:
+- All variables are HTML-escaped by default (prevents XSS)
+- Blocks `_`-prefixed attribute access (e.g. `__class__`, `__subclasses__`)
+- Blocks mutating operations on passed objects (`.append()`, `.update()`)
+- Blocks calling unsafe callables
+- Missing variables raise `UndefinedError` (fail loud, not silent)
+
+### Live Preview
+
+The template edit page includes a **Preview** panel:
+
+1. Enter the template body in the left editor
+2. Optionally enter sample context as JSON (e.g. `{"name":"World","items":["a","b"]}`)
+3. Click **Render** to see the output
+4. The preview uses the same sandboxed renderer as production scripts
+
+### XML Import/Export
+
+Templates are included in module XML bundles:
+
+```xml
+<templates>
+  <template name="welcome_email" content_type="html" description="Welcome email body">
+    <body>
+    <![CDATA[
+      <h1>Welcome {{ user.name }}!</h1>
+      <p>Your account is ready.</p>
+    ]]>
+    </body>
+  </template>
+</templates>
+```
+
+Templates are imported after scripts and forms, and are deleted on module update (cascade).
+
+### Technical Details
+
+- Model: `Template` in `app/models.py`
+- Renderer: `render_db_template()` in `app/services/template_renderer.py`
+- Blueprint: `app/routes/admin_templates.py` registered at `/__admin/templates`
+- Preview endpoint: `POST /__admin/templates/preview` (AJAX, JSON body)
+- `render_db_template` is injected into every script's globals
+
 ## XML Import Preview
 
 Before importing a module XML, you can now preview what will be imported:

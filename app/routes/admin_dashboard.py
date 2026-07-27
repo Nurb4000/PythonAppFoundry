@@ -88,7 +88,7 @@ def dashboard():
     import re as _re
     from sqlalchemy import inspect as _sa_inspect
     platform_tables = {'users', 'user_groups', 'groups', 'modules', 'routes',
-                       'scripts', 'forms', 'scheduled_tasks', 'triggers',
+                       'scripts', 'forms', 'templates', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
                        'query_reports', 'incoming_emails', 'credentials',

@@ -176,6 +176,7 @@ def create_app(config_class=None):
                 <a href="/__admin/routes" style="color:#eee;text-decoration:none">Routes</a>
                 <a href="/__admin/scripts" style="color:#eee;text-decoration:none">Scripts</a>
                 <a href="/__admin/forms" style="color:#eee;text-decoration:none">Forms</a>
+                <a href="/__admin/templates" style="color:#eee;text-decoration:none">Templates</a>
                 <a href="/__admin/tasks" style="color:#eee;text-decoration:none">Tasks</a>
                 <a href="/__admin/triggers" style="color:#eee;text-decoration:none">Triggers</a>
                 <a href="/__admin/users" style="color:#eee;text-decoration:none">Users</a>
@@ -204,6 +205,7 @@ def create_app(config_class=None):
                 <a href="/__admin/routes" style="color:#eee;text-decoration:none">Routes</a>
                 <a href="/__admin/scripts" style="color:#eee;text-decoration:none">Scripts</a>
                 <a href="/__admin/forms" style="color:#eee;text-decoration:none">Forms</a>
+                <a href="/__admin/templates" style="color:#eee;text-decoration:none">Templates</a>
                 <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
                 <a href="/__admin/credentials" style="color:#eee;text-decoration:none">Credentials</a>
                 <a href="/__admin/incoming-emails" style="color:#eee;text-decoration:none">Incoming</a>
