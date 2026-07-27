@@ -119,6 +119,31 @@ Internally it:
 
 **Gotcha:** Dynamic tables are not automatically dropped when a module is deleted. The admin UI shows a checkbox "Drop associated database tables?" which does `table.drop(db.engine, checkfirst=True)`.
 
+### Schema Evolution for Dynamic Tables
+
+When a module is updated (via XML import) and its scripts declare new columns for an existing dynamic table, `DynamicModel.get_or_create()` automatically issues `ALTER TABLE ADD COLUMN` for any missing columns. This happens on the next request that calls `get_or_create` with the new schema — no manual migration needed.
+
+**How it works:**
+1. Module XML is imported (scripts updated in DB)
+2. User visits the route → script executes → calls `get_or_create()` with new columns
+3. `get_or_create()` introspects the actual table columns via SQLAlchemy inspector
+4. For each declared column not present in the DB, issues `ALTER TABLE "table_name" ADD COLUMN "col_name" TYPE`
+5. Commits the change
+
+**What it does NOT handle (by design):**
+- Column type changes (e.g., `String(100)` → `String(200)`) — SQLite can't alter types easily, PostgreSQL requires `ALTER COLUMN ... TYPE`
+- Column removals — never drops columns automatically (data loss risk)
+- Renames — treat as drop + add
+
+**Migration workflow for dev → prod:**
+1. Dev: update module script to add columns → test locally
+2. Export module XML from dev
+3. Import XML into prod
+4. Next request to that route triggers schema evolution automatically
+5. No downtime, no data loss, no manual SQL needed
+
+For complex schema changes (type modifications, renames), use the admin Data Browser's raw SQL editor or write a migration script.
+
 ## admin.py Navigation
 
 At ~2430 lines, `admin.py` is the largest file. It's organized as a flat list of route functions, grouped by entity. Key landmarks:
@@ -249,13 +274,15 @@ Job IDs are `'task_' + str(task.id)`. The `replace_existing=True` flag means re-
 
 - **16 platform tables** are created by `db.create_all()` on startup
 - **Dynamic tables** are created by `DynamicModel.get_or_create()` — they're regular SQLAlchemy tables but not registered in `db.metadata` until first access
-- **Migration strategy:** New columns on existing tables use raw `ALTER TABLE` SQL in `create_app()`. See the `routes.allowed_groups` migration at `app/__init__.py:150-155` as the pattern:
-  ```python
-  inspector = sa_inspect(db.engine)
-  cols = {c['name'] for c in inspector.get_columns('routes')}
-  if 'allowed_groups' not in cols:
-      db.session.execute(text('ALTER TABLE routes ADD COLUMN ...'))
-  ```
+- **Migration strategy:**
+  - **Platform tables:** New columns use raw `ALTER TABLE` SQL in `create_app()`. See the `routes.allowed_groups` migration at `app/__init__.py:150-155` as the pattern:
+    ```python
+    inspector = sa_inspect(db.engine)
+    cols = {c['name'] for c in inspector.get_columns('routes')}
+    if 'allowed_groups' not in cols:
+        db.session.execute(text('ALTER TABLE routes ADD COLUMN ...'))
+    ```
+  - **Dynamic tables:** Schema evolution is automatic. When `get_or_create()` is called with new columns for an existing table, it issues `ALTER TABLE ADD COLUMN` for missing columns. No manual migration needed — just update the module script and import.
 - **No Alembic migrations are set up** despite `flask-migrate` being installed. The `migrations/` directory exists but has no version scripts.
 
 ## Adding a DB Setting
