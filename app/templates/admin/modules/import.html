@@ -38,7 +38,10 @@ function previewImport() {
       if (data.error) { alert('Preview failed: ' + data.error); return; }
       var p = data.preview;
       var html = '<p><strong>' + p.name + '</strong> (slug: <code>' + p.slug + '</code>)</p>';
-      html += '<ul><li>Scripts: ' + p.counts.scripts + '</li><li>Routes: ' + p.counts.routes + '</li><li>Forms: ' + p.counts.forms + '</li><li>Tasks: ' + p.counts.tasks + '</li><li>Triggers: ' + p.counts.triggers + '</li></ul>';
+      html += '<ul><li>Scripts: ' + p.counts.scripts + '</li><li>Routes: ' + p.counts.routes + '</li><li>Forms: ' + p.counts.forms + '</li><li>Tasks: ' + p.counts.tasks + '</li><li>Triggers: ' + p.counts.triggers + '</li>';
+      if (p.counts.credentials > 0) html += '<li>Credentials: ' + p.counts.credentials + ' <span style="color:#856404;">(values needed)</span></li>';
+      if (p.counts.has_requirements) html += '<li>Requirements: <span style="color:#0d6efd;">will install via pip</span></li>';
+      html += '</ul>';
       document.getElementById('previewContent').innerHTML = html;
 
       if (p.existing) {

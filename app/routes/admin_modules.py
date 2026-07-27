@@ -11,6 +11,15 @@ from app.services.audit import log_audit
 modules_bp = Blueprint('modules', __name__)
 
 
+def _flash_import_metadata(module):
+    creds = getattr(module, '_import_creds_created', None) or []
+    settings = getattr(module, '_import_settings_applied', None) or []
+    if creds:
+        flash(f'Credentials created (values needed): {", ".join(creds)}', 'info')
+    if settings:
+        flash(f'Default settings applied: {", ".join(settings)}', 'info')
+
+
 @modules_bp.route('/import', methods=['GET', 'POST'])
 @developer_or_admin_required
 @csrf_protect
@@ -39,15 +48,17 @@ def import_module_page():
                 version_comment = request.form.get('version_comment', '').strip()
                 if not version_comment:
                     version_comment = f'Updated from XML import'
-                import_module(xml_str, update_existing=True, module_id=existing.id)
+                m = import_module(xml_str, update_existing=True, module_id=existing.id)
                 create_auto_version(existing.id, comment=version_comment)
                 log_audit('import', 'module', existing.id, existing.name, details='update=True')
                 flash(f'Module "{existing.name}" updated from XML')
+                _flash_import_metadata(m)
                 return redirect(url_for('admin.modules.edit_module', id=existing.id))
             else:
                 m = import_module(xml_str)
                 log_audit('import', 'module', m.id, m.name, details='update=False')
                 flash(f'Module "{m.name}" imported successfully')
+                _flash_import_metadata(m)
                 return redirect(url_for('admin.modules.list_modules'))
         except Exception as e:
             flash(f'Import failed: {e}', 'error')
@@ -286,10 +297,11 @@ def import_module_xml(id):
         return redirect(url_for('admin.modules.edit_module', id=id))
     try:
         from app.services.bundle import import_module
-        import_module(xml_file.read().decode('utf-8'), update_existing=True, module_id=id)
+        m2 = import_module(xml_file.read().decode('utf-8'), update_existing=True, module_id=id)
         create_auto_version(id)
         log_audit('import', 'module', m.id, m.name)
         flash(f'Module "{m.name}" updated from XML')
+        _flash_import_metadata(m2)
     except Exception as e:
         flash(f'Import failed: {e}', 'error')
     return redirect(url_for('admin.modules.edit_module', id=id))

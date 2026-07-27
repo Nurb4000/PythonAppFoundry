@@ -487,7 +487,7 @@ The Packages page (`/__admin/packages`) lets you install, list, and uninstall Py
 
 ### Declaring Requirements in Module XML
 
-Module XML bundles can include a `<requirements>` element to auto-install dependencies on import:
+Module XML bundles can include a `<requirements>` element to auto-install dependencies on import. Requirements are also exported in the XML for round-trip fidelity:
 
 ```xml
 <requirements>
@@ -498,6 +498,30 @@ pandas
 ```
 
 When the module is imported (via AI Designer, BPMN, or XML import), each requirement is installed via `pip install` automatically. Failed installs are logged but do not block module import.
+
+### Declaring Credentials in Module XML
+
+Modules can declare required credentials (API keys, secrets) in their XML. On import, placeholder credential records are created with empty values — the admin fills in the real values via the Credentials page. Existing credentials are never overwritten.
+
+```xml
+<credentials>
+  <credential name="api_key" type="api_key" description="MyAPI authentication key" />
+  <credential name="webhook_secret" type="secret" description="Webhook signature verification" />
+</credentials>
+```
+
+Credential types: `api_key`, `oauth_token`, `basic_auth`, `custom`.
+
+### Declaring Default Settings in Module XML
+
+Modules can declare default configuration keys in their XML. Settings are created only if the key doesn't already exist — production configuration is never overwritten. Namespace your keys with your module name to avoid collisions.
+
+```xml
+<settings>
+  <setting key="myapi_base_url" value="https://api.example.com" />
+  <setting key="myapi_timeout" value="30" />
+</settings>
+```
 
 ## SMTP / Email Configuration
 

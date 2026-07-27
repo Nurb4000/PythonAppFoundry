@@ -254,6 +254,11 @@ def create_app(config_class=None):
             db.session.execute(text("ALTER TABLE modules ADD COLUMN is_system BOOLEAN DEFAULT 0"))
             db.session.commit()
 
+        # Add requirements_text to modules if missing
+        if 'requirements_text' not in mod_cols:
+            db.session.execute(text("ALTER TABLE modules ADD COLUMN requirements_text TEXT DEFAULT ''"))
+            db.session.commit()
+
         # Check if query_reports table exists and has module_id
         table_names = inspector.get_table_names()
         if 'query_reports' in table_names:

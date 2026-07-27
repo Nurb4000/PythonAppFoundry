@@ -134,6 +134,30 @@ _result = "<h2>Add Item</h2><form method=POST>..."
       <sql>SELECT done, COUNT(*) as count FROM Item GROUP BY done</sql>
     </query_report>
   </query_reports>
+
+  <credentials>
+    <!-- Optional: declare required credentials (API keys, secrets).
+         On import, placeholder records are created for the admin to fill in.
+         Never put actual secret values here — only names, types, and descriptions.
+         type: api_key, oauth_token, basic_auth, custom -->
+    <credential name="api_key" type="api_key" description="MyAPI authentication key" />
+    <credential name="webhook_secret" type="secret" description="Webhook signature verification" />
+  </credentials>
+
+  <settings>
+    <!-- Optional: declare default configuration keys.
+         On import, settings are created only if the key doesn't already exist.
+         Namespace your keys with your module name to avoid collisions. -->
+    <setting key="myapi_base_url" value="https://api.example.com" />
+    <setting key="myapi_timeout" value="30" />
+  </settings>
+
+  <requirements>
+    <!-- Optional: Python packages to install via pip on import.
+         One package per line. Supports version specifiers. -->
+    requests>=2.31.0
+    pandas
+  </requirements>
 </module>
 ```
 
@@ -774,7 +798,24 @@ Then in a Jinja template use the dict key, not dot-chaining:
     ```
     The install runs automatically when the module is imported (AI Designer, BPMN, or XML import). Failed installs are logged but don't block the import. Packages can also be managed manually from the Packages admin page (`/__admin/packages`). No server restart is needed after install.
 
-33. **Use `get_setting()` for non-sensitive configuration** — Scripts can read platform settings via `get_setting('key', 'default')`. However, sensitive keys like `smtp_password`, `llm_api_key`, and `imap_password` are blocked and will return the default value. Use `get_credential()` for secrets.
+33. **Declare required credentials in module XML** — If your module needs API keys or secrets, declare them in a `<credentials>` element. On import, placeholder credential records are created (empty values) so the admin can fill them in. Never put actual secret values in XML. Example:
+    ```xml
+    <credentials>
+      <credential name="api_key" type="api_key" description="MyAPI authentication key" />
+      <credential name="webhook_secret" type="secret" description="Webhook signature verification" />
+    </credentials>
+    ```
+    Credential types: `api_key`, `oauth_token`, `basic_auth`, `custom`. Existing credentials are never overwritten on re-import.
+
+34. **Declare default settings in module XML** — If your module needs configuration keys, declare them in a `<settings>` element with default values. On import, settings are created only if the key doesn't already exist (never overwrite production config). Namespace your keys with your module name to avoid collisions. Example:
+    ```xml
+    <settings>
+      <setting key="myapi_base_url" value="https://api.example.com" />
+      <setting key="myapi_timeout" value="30" />
+    </settings>
+    ```
+
+35. **Use `get_setting()` for non-sensitive configuration** — Scripts can read platform settings via `get_setting('key', 'default')`. However, sensitive keys like `smtp_password`, `llm_api_key`, and `imap_password` are blocked and will return the default value. Use `get_credential()` for secrets.
 
 34. **Webhook scripts receive payload data** — When a webhook trigger fires, your script has access to `webhook_slug` (the slug used in the URL) and `webhook_payload` (the JSON data from the POST body). Design handlers to be idempotent since webhooks may be retried.
 

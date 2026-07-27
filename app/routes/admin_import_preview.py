@@ -49,7 +49,13 @@ def import_preview():
         
         triggers = root.find('triggers')
         trigger_count = len(triggers.findall('trigger')) if triggers is not None else 0
-        
+
+        creds = root.find('credentials')
+        cred_count = len(creds.findall('credential')) if creds is not None else 0
+
+        requirements = root.find('requirements')
+        has_requirements = bool(requirements is not None and requirements.text and requirements.text.strip())
+
         # Check for existing module with same slug
         existing = db.session.query(Module).filter_by(slug=slug).first()
         
@@ -66,6 +72,8 @@ def import_preview():
                     'forms': form_count,
                     'tasks': task_count,
                     'triggers': trigger_count,
+                    'credentials': cred_count,
+                    'has_requirements': has_requirements,
                 }
             }
         })

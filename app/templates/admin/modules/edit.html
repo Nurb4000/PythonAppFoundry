@@ -15,6 +15,7 @@
   <a href="{{ url_for('admin.forms.list_forms', module_id=m.id) }}" class="btn">Edit Forms</a>
   <a href="{{ url_for('admin.triggers.list_triggers', module_id=m.id) }}" class="btn">Edit Triggers</a>
   <a href="{{ url_for('admin.tasks.list_tasks', module_id=m.id) }}" class="btn">Edit Tasks</a>
+  <a href="{{ url_for('admin.credentials.list_credentials', module_id=m.id) }}" class="btn">Credentials</a>
   <a href="{{ url_for('admin.modules.module_executions', module_id=m.id) }}" class="btn">Execution History</a>
   <a href="{{ url_for('api.api_export', slug=m.slug) }}" class="btn">Export XML</a>
   <a href="{{ url_for('chat.refine_module', id=m.id) }}" class="btn">Refine in AI</a>

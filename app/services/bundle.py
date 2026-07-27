@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from slugify import slugify
 
 from app import db
-from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport, Template
+from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport, Template, Credential
 
 
 def export_module(module):
@@ -82,6 +82,21 @@ def export_module(module):
         sql_elem = ET.SubElement(elem, 'sql')
         sql_elem.text = q.sql or ''
 
+    # Credentials (name, type, description only — never values)
+    creds = module.credentials.all()
+    if creds:
+        creds_elem = ET.SubElement(root, 'credentials')
+        for c in creds:
+            ce = ET.SubElement(creds_elem, 'credential')
+            ce.set('name', c.name)
+            ce.set('type', c.credential_type)
+            ce.set('description', c.description or '')
+
+    # Requirements (pip dependencies)
+    if module.requirements_text:
+        req_elem = ET.SubElement(root, 'requirements')
+        req_elem.text = f'\n{module.requirements_text}\n'
+
     return ET.tostring(root, encoding='unicode', xml_declaration=True)
 
 
@@ -136,6 +151,9 @@ def import_module(xml_str, update_existing=False, module_id=None):
             except (IndexError, ValueError):
                 module.version = version
             module.author = author
+            module.requirements_text = (root.find('requirements').text.strip()
+                                        if root.find('requirements') is not None
+                                        and root.find('requirements').text else '')
             db.session.flush()
         else:
             raise ValueError(f'Module with slug "{new_slug}" already exists')
@@ -146,6 +164,9 @@ def import_module(xml_str, update_existing=False, module_id=None):
             description=(root.findtext('description') or ''),
             version=version,
             author=author,
+            requirements_text=(root.find('requirements').text.strip()
+                               if root.find('requirements') is not None
+                               and root.find('requirements').text else ''),
         )
         db.session.add(module)
         db.session.flush()
@@ -259,6 +280,41 @@ def import_module(xml_str, update_existing=False, module_id=None):
     if queries_elem is not None:
         _import_queries_from_element(queries_elem, module_id=module.id)
 
+    # Credentials (create placeholders — never overwrite existing values)
+    creds_created = []
+    creds_elem = root.find('credentials')
+    if creds_elem is not None:
+        existing_cred_names = {c.name for c in module.credentials.all()}
+        for ce in creds_elem.findall('credential'):
+            cred_name = ce.get('name', '').strip()
+            if not cred_name or cred_name in existing_cred_names:
+                continue
+            from app.services.credential_store import encrypt_value
+            cred = Credential(
+                module_id=module.id,
+                name=cred_name,
+                credential_type=ce.get('type', 'api_key'),
+                description=ce.get('description', ''),
+                value_encrypted=encrypt_value(''),
+            )
+            db.session.add(cred)
+            creds_created.append(cred_name)
+
+    # Module settings (set defaults only — never overwrite existing)
+    settings_applied = []
+    settings_elem = root.find('settings')
+    if settings_elem is not None:
+        from app.models import Setting
+        for se in settings_elem.findall('setting'):
+            key = se.get('key', '').strip()
+            value = se.get('value', '')
+            if not key:
+                continue
+            existingSetting = db.session.query(Setting).filter_by(key=key).first()
+            if not existingSetting:
+                db.session.add(Setting(key=key, value=value))
+                settings_applied.append(key)
+
     db.session.commit()
 
     # Auto-detect dependencies for the imported module
@@ -296,6 +352,10 @@ def import_module(xml_str, update_existing=False, module_id=None):
             logging.getLogger(__name__).warning(
                 f'pip not available, skipping requirements install:\n{pip.stderr[:500]}'
             )
+
+    # Attach import metadata for callers to display in flash messages
+    module._import_creds_created = creds_created
+    module._import_settings_applied = settings_applied
 
     return module
 

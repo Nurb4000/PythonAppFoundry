@@ -189,6 +189,7 @@ class Module(db.Model):
     is_system = db.Column(db.Boolean, default=False)
     bpmn_xml = db.Column(db.Text, default='')
     bpmn_description = db.Column(db.Text, default='')
+    requirements_text = db.Column(db.Text, default='')
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
