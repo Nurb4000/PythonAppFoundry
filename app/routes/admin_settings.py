@@ -18,7 +18,7 @@ def edit_settings():
             'llm_provider', 'llm_endpoint', 'llm_api_key', 'llm_model',
             'llm_temperature', 'llm_max_tokens', 'llm_timeout', 'script_timeout',
             'smtp_host', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_from',
-            'smtp_tls', 'log_retention_days',
+            'smtp_tls', 'log_retention_days', 'async_workers',
             'imap_host', 'imap_port', 'imap_user', 'imap_password',
             'imap_use_ssl', 'imap_folder', 'imap_poll_interval',
             'imap_enabled', 'imap_mark_seen', 'imap_retention_days',
@@ -42,6 +42,7 @@ def edit_settings():
         Setting.set('smtp_from', request.form.get('smtp_from', 'noreply@example.com'))
         Setting.set('smtp_tls', 'true' if 'smtp_tls' in request.form else 'false')
         Setting.set('log_retention_days', request.form.get('log_retention_days', '0'))
+        Setting.set('async_workers', request.form.get('async_workers', '4'))
         Setting.set('imap_host', request.form.get('imap_host', ''))
         Setting.set('imap_port', request.form.get('imap_port', '993'))
         Setting.set('imap_user', request.form.get('imap_user', ''))
@@ -75,6 +76,7 @@ def edit_settings():
     smtp_from = Setting.get('smtp_from', 'noreply@example.com')
     smtp_tls = Setting.get('smtp_tls', 'true') == 'true'
     log_retention_days = Setting.get('log_retention_days', '0')
+    async_workers = Setting.get('async_workers', '4')
     imap_host = Setting.get('imap_host', '')
     imap_port = Setting.get('imap_port', '993')
     imap_user = Setting.get('imap_user', '')
@@ -96,6 +98,7 @@ def edit_settings():
         smtp_user=smtp_user, smtp_password=smtp_password,
         smtp_from=smtp_from, smtp_tls=smtp_tls,
         log_retention_days=log_retention_days,
+        async_workers=async_workers,
         imap_host=imap_host, imap_port=imap_port, imap_user=imap_user,
         imap_password=imap_password, imap_use_ssl=imap_use_ssl,
         imap_folder=imap_folder, imap_poll_interval=imap_poll_interval,

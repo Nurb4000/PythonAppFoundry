@@ -190,8 +190,11 @@ def api_webhook(slug):
     Accepts JSON or form data in the request body.
     Optional auth: include ?token=XXX or Authorization: Bearer XXX header.
     Rate limited to 30 calls/minute and 600 calls/hour per webhook slug.
+    
+    Use ?async=true to run scripts in background threads (returns 202 immediately).
+    Without ?async=true (default), scripts run synchronously for backward compatibility.
     """
-    from app.services.triggers import fire_webhook
+    from app.services.triggers import fire_webhook, fire_webhook_async
     from app.services.rate_limiter import _webhook_limiter
     
     # Rate limiting per webhook slug
@@ -212,9 +215,36 @@ def api_webhook(slug):
     # Extract auth token from query param or header
     provided_token = request.args.get('token') or request.headers.get('Authorization', '').replace('Bearer ', '')
     
-    fire_webhook(slug, payload, provided_token=provided_token)
+    # Check for async mode
+    async_mode = request.args.get('async', 'false').lower() in ('true', '1', 'yes')
     
-    return jsonify({'status': 'ok', 'webhook': slug})
+    if async_mode:
+        execution_ids = fire_webhook_async(slug, payload, provided_token=provided_token)
+        return jsonify({
+            'status': 'queued',
+            'webhook': slug,
+            'execution_ids': execution_ids,
+            'status_url': f'/__api/execution/{execution_ids[0]}' if execution_ids else None,
+        }), 202
+    else:
+        fire_webhook(slug, payload, provided_token=provided_token)
+        return jsonify({'status': 'ok', 'webhook': slug})
+
+
+@api_bp.route('/execution/<int:execution_id>')
+def api_execution_status(execution_id):
+    """Poll for async script execution status. Returns Retry-After header for pending jobs."""
+    from app.services.async_executor import get_status
+    from flask import make_response
+    
+    status = get_status(execution_id)
+    if not status:
+        return jsonify({'error': 'Execution not found'}), 404
+    
+    resp = make_response(jsonify(status))
+    if status['status'] in ('queued', 'running'):
+        resp.headers['Retry-After'] = '2'
+    return resp
 
 
 # ── OpenAPI Spec ──

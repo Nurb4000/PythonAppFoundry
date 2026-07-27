@@ -310,6 +310,7 @@ LLM settings are managed via **Admin → Settings** in the GUI. No server access
 | Max Tokens | `4096` | Maximum response length |
 | Script Timeout | `30` | Max seconds a script can run before being terminated (0 = no timeout) |
 | Log Retention | `0` | Days to keep execution logs (0 = forever). Old logs are deleted on dashboard load. |
+| Async Workers | `4` | Number of background threads for async script execution (webhooks with `?async=true` and scheduled tasks). |
 
 ## Environment Variables (`.env`)
 
@@ -709,6 +710,76 @@ Navigate to **Admin → Audit** (linked in the top admin bar). The list view sup
 - Blueprint: `app/routes/admin_audit.py` registered at `/__admin/audit`
 - Current user and IP are captured automatically from the Flask request context
 - All admin CRUD routes across 17 blueprints are wired with `log_audit()` calls
+
+## Async Script Execution
+
+Scripts can be executed in background threads via a `ThreadPoolExecutor`. This is useful for long-running webhooks and scheduled tasks that shouldn't block the caller.
+
+### How It Works
+
+1. A webhook or scheduled task is submitted to the thread pool
+2. The caller gets an execution ID immediately (HTTP 202 for webhooks)
+3. The script runs in a background thread with its own Flask app context
+4. Status transitions: `queued` → `running` → `success` | `error` | `timeout`
+5. The caller polls `GET /__api/execution/<id>` to check progress
+
+### Webhook Async Mode
+
+By default, webhooks execute synchronously (the caller waits for the script to finish). To opt into async execution, add `?async=true` to the webhook URL:
+
+```bash
+# Synchronous (default) — caller waits, gets 200
+curl -X POST http://localhost:5000/__api/webhook/my-trigger \
+  -H "Content-Type: application/json" -d '{"event": "push"}'
+
+# Asynchronous — caller gets 202 immediately, polls for result
+curl -X POST "http://localhost:5000/__api/webhook/my-trigger?async=true" \
+  -H "Content-Type: application/json" -d '{"event": "push"}'
+```
+
+**Async response (202):**
+```json
+{
+  "status": "queued",
+  "webhook": "my-trigger",
+  "execution_ids": [42],
+  "status_url": "/__api/execution/42"
+}
+```
+
+**Polling status:**
+```
+GET /__api/execution/42
+```
+
+| Status | Meaning |
+|--------|---------|
+| `queued` | Waiting for a thread pool worker |
+| `running` | Script is executing |
+| `success` | Completed without error (result in `result_summary`) |
+| `error` | Script raised an exception (details in `error_message`) |
+| `timeout` | Script exceeded the configured timeout |
+
+While queued or running, the response includes a `Retry-After: 2` header suggesting how long to wait before polling again.
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `async_workers` | `4` | Number of threads in the pool. Adjust in **Admin → Settings**. |
+| `script_timeout` | `30` | Max seconds per script (applies to async scripts too). |
+
+### Script Execution Model
+
+All executions (route, task, trigger, webhook, async) are tracked in the `script_executions` table with fields for status, timing, result, and error details. The async executor writes to this table directly; synchronous executions use `execution_logs`.
+
+### Technical Details
+
+- Model: `ScriptExecution` in `app/models.py`
+- Executor: `app/services/async_executor.py` — `submit_script()`, `get_status()`, `_run_script()`
+- Status endpoint: `GET /__api/execution/<id>` in `app/routes/api.py`
+- Webhook async handler: `fire_webhook_async()` in `app/services/triggers.py`
+- Scheduler: uses `submit_script()` for all scheduled task execution
 
 ## Database Templates
 

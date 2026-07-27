@@ -92,7 +92,7 @@ def dashboard():
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
                        'query_reports', 'incoming_emails', 'credentials',
-                       'audit_logs'}
+                       'audit_logs', 'script_executions'}
     table_stats = []
     bind = db.session.get_bind()
     inspector = _sa_inspect(bind)

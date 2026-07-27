@@ -50,12 +50,13 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/tenant.py` | ~70 | Multi-tenant support — tenant selection via subdomain or path prefix, `tenant_required` decorator, in-memory tenant store. |
 | `app/services/audit.py` | ~30 | Audit logging helper — `log_audit()` captures current user, IP, timestamp and writes `AuditLog` entries. Used across all admin CRUD routes. |
 | `app/services/template_renderer.py` | ~25 | Sandboxed Jinja2 renderer — `render_db_template(body, **ctx)` uses `ImmutableSandboxedEnvironment` with autoescape and StrictUndefined. Blocks unsafe attribute access and mutating operations on passed objects. |
+| `app/services/async_executor.py` | ~100 | Background script execution via `ThreadPoolExecutor`. `submit_script()` queues scripts, tracks status via `ScriptExecution` model. `get_status()` returns execution result for polling. |
 
 ### Models
 
 | File | Lines | What It Contains |
 |---|---|---|
-| `app/models.py` | 380 | 17 model classes + `DynamicModel` factory, `user_groups` association table. Includes `AuditLog` and `Template`. |
+| `app/models.py` | 400 | 18 model classes + `DynamicModel` factory, `user_groups` association table. Includes `AuditLog`, `Template`, `ScriptExecution`. |
 
 ## Key Code Patterns
 
@@ -195,6 +196,9 @@ bpmn.py ──> ai_assistant.chat_completion()
 admin_* routes ──> audit.log_audit()
 template_renderer.py ──> ImmutableSandboxedEnvironment
 script_runner.py ──> render_db_template (injected into scripts)
+async_executor.py ──> ThreadPoolExecutor ──> ScriptExecution model
+triggers.py ──> async_executor.submit_script (webhooks)
+scheduler.py ──> async_executor.submit_script (tasks)
 ```
 
 ## Common Gotchas & Bug Patterns

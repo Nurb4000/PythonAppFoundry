@@ -25,7 +25,7 @@ def list_tables():
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
                        'query_reports', 'incoming_emails', 'dynamic_table_registry',
-                       'credentials', 'audit_logs'}
+                       'credentials', 'audit_logs', 'script_executions'}
     for t in platform_tables:
         table_modules[t] = 'Platform'
 
@@ -275,7 +275,7 @@ def delete_table(table_name):
                        'scripts', 'forms', 'templates', 'scheduled_tasks', 'triggers',
                        'settings', 'uploads', 'chat_sessions', 'chat_messages',
                        'execution_logs', 'module_dependencies', 'module_versions',
-                       'query_reports', 'incoming_emails', 'credentials', 'audit_logs'}
+                       'query_reports', 'incoming_emails', 'credentials', 'audit_logs', 'script_executions'}
     if table_name in platform_tables:
         flash(f'Cannot drop platform table "{table_name}"', 'error')
         return redirect(url_for('admin.data.list_tables'))

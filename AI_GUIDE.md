@@ -616,9 +616,18 @@ _result = f'Processed {action} from {sender} on {repository}'
 
 **Testing webhooks manually:**
 ```bash
+# Synchronous (default)
 curl -X POST http://localhost:5000/__api/webhook/github-push \
   -H "Content-Type: application/json" \
   -d '{"action": "push", "repository": {"name": "my-repo"}, "sender": {"login": "user"}}'
+
+# Asynchronous (returns 202 immediately, poll for status)
+curl -X POST "http://localhost:5000/__api/webhook/github-push?async=true" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "push", "repository": {"name": "my-repo"}}'
+
+# Check execution status (use the execution_id from the 202 response)
+curl http://localhost:5000/__api/execution/42
 ```
 
 **Security Notes:**
@@ -745,6 +754,7 @@ Then in a Jinja template use the dict key, not dot-chaining:
     | QueryReport | `query_reports` |
     | ModuleVersion | `module_versions` |
     | ModuleDependency | `module_dependencies` |
+    | ScriptExecution | `script_executions` |
     | ChatSession | `chat_sessions` |
     | ChatMessage | `chat_messages` |
 
@@ -768,7 +778,9 @@ Then in a Jinja template use the dict key, not dot-chaining:
 
 34. **Webhook scripts receive payload data** — When a webhook trigger fires, your script has access to `webhook_slug` (the slug used in the URL) and `webhook_payload` (the JSON data from the POST body). Design handlers to be idempotent since webhooks may be retried.
 
-35. **Scheduled tasks run in background threads** — Tasks executed by the scheduler run in daemon threads, not the main thread. The SIGALRM timeout does not apply to them; instead, the scheduler uses threading with a timeout join. Scripts running as tasks should be designed to complete within the configured `script_timeout`.
+35. **Async webhook mode** — Add `?async=true` to a webhook URL to run the script in a background thread. The caller gets a 202 response with `execution_ids` and can poll `GET /__api/execution/<id>` for status. Without `?async=true`, scripts run synchronously (default). Async mode is useful for long-running scripts that shouldn't block the caller.
+
+36. **Scheduled tasks run in background threads** — Tasks executed by the scheduler run in daemon threads, not the main thread. The SIGALRM timeout does not apply to them; instead, the scheduler uses threading with a timeout join. Scripts running as tasks should be designed to complete within the configured `script_timeout`.
 
 36. **Module marketplace** — You can publish modules to the built-in marketplace for sharing. Use `app.services.marketplace.publish_module()` to add a module entry. Modules in the marketplace can be installed by other users via `/__admin/marketplace`.
 

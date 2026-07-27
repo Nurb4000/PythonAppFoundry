@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from app import db
 from app.models import ScheduledTask, ExecutionLog, Setting
 from app.services.script_runner import execute_script
+from app.services.async_executor import submit_script
 
 _scheduler = None
 _app = None
@@ -70,42 +71,15 @@ def run_task_wrapper(task_id):
             task.next_run = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
         db.session.commit()
         if task.script:
-            timeout = int(Setting.get('script_timeout', '30'))
-            result_container = {'result': None, 'error': None, 'finished': False}
-
-            def _run_with_timeout():
-                try:
-                    with app.app_context():
-                        result_container['result'] = execute_script(
-                            task.script, source_type='task', source_name=task.name
-                        )
-                except Exception as e:
-                    result_container['error'] = str(e)
-                result_container['finished'] = True
-
-            t = threading.Thread(target=_run_with_timeout, daemon=True)
-            t.start()
-            t.join(timeout=timeout)
-            if not result_container['finished']:
-                log = ExecutionLog(
-                    source_type='task',
-                    source_name=task.name,
-                    duration_ms=timeout * 1000,
-                    status='error',
-                    error_message=f'Task timed out after {timeout}s',
-                )
-                db.session.add(log)
-                db.session.commit()
-                logging.getLogger(__name__).error(f'Task {task.name} timed out')
-            elif result_container['error']:
-                log = ExecutionLog(
-                    source_type='task',
-                    source_name=task.name,
-                    status='error',
-                    error_message=result_container['error'],
-                )
-                db.session.add(log)
-                db.session.commit()
+            submit_script(
+                task.script,
+                source_type='task',
+                source_name=task.name,
+                extra_globals={
+                    'task_id': task.id,
+                    'task_name': task.name,
+                },
+            )
 
 
 def _run_script_in_app_context(app, script, name):

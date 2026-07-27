@@ -60,6 +60,11 @@
   <input name="log_retention_days" type="number" min="0" step="1" value="{{ log_retention_days }}" style="padding:6px 10px;width:120px;"><br>
   <span style="color:#888;font-size:0.85em;">Auto-delete execution logs older than this. 0 = keep forever.</span>
 </label>
+<label style="display:block;margin-bottom:12px;">
+  <strong>Async Workers (thread pool size)</strong><br>
+  <input name="async_workers" type="number" min="1" max="16" step="1" value="{{ async_workers }}" style="padding:6px 10px;width:120px;"><br>
+  <span style="color:#888;font-size:0.85em;">Number of background threads for async webhooks and scheduled tasks. Default: 4.</span>
+</label>
 
 <h3>Incoming Mail (IMAP)</h3>
 <label style="display:block;margin-bottom:12px;">

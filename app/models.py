@@ -410,6 +410,27 @@ class ExecutionLog(db.Model):
         return f'<ExecutionLog {self.source_type}:{self.source_name} {self.status}>'
 
 
+class ScriptExecution(db.Model):
+    __tablename__ = 'script_executions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), default='queued')
+    source_type = db.Column(db.String(20), nullable=False)
+    source_name = db.Column(db.String(200), nullable=False)
+    script_name = db.Column(db.String(200), nullable=False)
+    module_id = db.Column(db.Integer, nullable=True)
+    duration_ms = db.Column(db.Integer, default=0)
+    result_summary = db.Column(db.Text, default='')
+    error_message = db.Column(db.Text, default='')
+    correlation_id = db.Column(db.String(100), nullable=True)
+
+    def __repr__(self):
+        return f'<ScriptExecution {self.source_type}:{self.source_name} {self.status}>'
+
+
 class DynamicTableRegistry(db.Model):
     __tablename__ = 'dynamic_table_registry'
 

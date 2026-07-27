@@ -40,7 +40,7 @@ def fire_triggers(event_type, target_table, context=None):
 
 
 def fire_webhook(webhook_slug, payload=None, provided_token=None):
-    """Fire triggers for a webhook event with retry support.
+    """Fire triggers for a webhook event synchronously.
     
     Args:
         webhook_slug: The webhook identifier (used as event_type)
@@ -50,7 +50,6 @@ def fire_webhook(webhook_slug, payload=None, provided_token=None):
     if payload is None:
         payload = {}
 
-    # Webhook triggers use 'webhook' as event_type and the slug as target_table
     triggers = db.session.query(Trigger).filter_by(
         event_type='webhook',
         target_table=webhook_slug,
@@ -60,45 +59,73 @@ def fire_webhook(webhook_slug, payload=None, provided_token=None):
     for trigger in triggers:
         if not trigger.script:
             continue
-        # Check auth token if configured
         if trigger.auth_token:
             if not provided_token or not __import__('secrets').compare_digest(trigger.auth_token, provided_token):
                 logger.warning(f'Webhook trigger {trigger.name}: invalid auth token')
                 continue
         
-        success = False
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                t0 = time.time()
-                logger.info(f'Firing webhook trigger: {trigger.name} ({webhook_slug}) [attempt {attempt}/{MAX_RETRIES}]')
-                execute_script(trigger.script, source_type='webhook', source_name=trigger.name, extra_globals={
-                    'webhook_slug': webhook_slug,
-                    'webhook_payload': payload,
-                    'webhook_request': None,
-                })
-                duration_ms = int((time.time() - t0) * 1000)
-                
-                # Log successful execution
-                log = ExecutionLog(
-                    source_type='webhook',
-                    source_name=trigger.name,
-                    duration_ms=duration_ms,
-                    status='success',
-                )
-                db.session.add(log)
-                db.session.commit()
-                
-                success = True
-                break
-            except Exception as e:
-                logger.error(f'Webhook trigger {trigger.name} failed (attempt {attempt}/{MAX_RETRIES}): {e}')
-                if attempt < MAX_RETRIES:
-                    time.sleep(RETRY_DELAY_SECONDS)
-                else:
-                    _add_to_dead_letter(trigger.name, 'webhook', webhook_slug, str(e))
+        try:
+            t0 = time.time()
+            logger.info(f'Firing webhook trigger: {trigger.name} ({webhook_slug})')
+            execute_script(trigger.script, source_type='webhook', source_name=trigger.name, extra_globals={
+                'webhook_slug': webhook_slug,
+                'webhook_payload': payload,
+                'webhook_request': None,
+            })
+            duration_ms = int((time.time() - t0) * 1000)
+            
+            log = ExecutionLog(
+                source_type='webhook',
+                source_name=trigger.name,
+                duration_ms=duration_ms,
+                status='success',
+            )
+            db.session.add(log)
+            db.session.commit()
+        except Exception as e:
+            logger.error(f'Webhook trigger {trigger.name} failed: {e}')
+            _add_to_dead_letter(trigger.name, 'webhook', webhook_slug, str(e))
+
+
+def fire_webhook_async(webhook_slug, payload=None, provided_token=None):
+    """Fire triggers for a webhook event asynchronously via the thread pool.
+    
+    Returns a list of execution IDs for status polling.
+    """
+    from app.services.async_executor import submit_script
+    
+    if payload is None:
+        payload = {}
+
+    triggers = db.session.query(Trigger).filter_by(
+        event_type='webhook',
+        target_table=webhook_slug,
+        enabled=True,
+    ).all()
+
+    execution_ids = []
+    for trigger in triggers:
+        if not trigger.script:
+            continue
+        if trigger.auth_token:
+            if not provided_token or not __import__('secrets').compare_digest(trigger.auth_token, provided_token):
+                logger.warning(f'Webhook trigger {trigger.name}: invalid auth token')
+                continue
         
-        if not success:
-            logger.error(f'Webhook trigger {trigger.name} exhausted all retries')
+        exec_id = submit_script(
+            trigger.script,
+            source_type='webhook',
+            source_name=trigger.name,
+            extra_globals={
+                'webhook_slug': webhook_slug,
+                'webhook_payload': payload,
+                'webhook_request': None,
+            },
+            correlation_id=f'webhook:{webhook_slug}',
+        )
+        execution_ids.append(exec_id)
+
+    return execution_ids
 
 
 def _add_to_dead_letter(trigger_name, event_type, target, error_msg):
@@ -112,7 +139,6 @@ def _add_to_dead_letter(trigger_name, event_type, target, error_msg):
     }
     _dead_letter_queue.append(entry)
     
-    # Log to dead letter queue
     dl_logger = logging.getLogger('platform.dead_letter')
     dl_logger.warning(f'Dead letter: {trigger_name} - {error_msg[:200]}')
 
@@ -131,7 +157,6 @@ def retry_dead_letter(index=0):
     """Retry a specific dead letter entry (by index)."""
     if 0 <= index < len(_dead_letter_queue):
         entry = _dead_letter_queue.pop(index)
-        # Log the retry
         logger.info(f'Retrying dead letter: {entry["trigger_name"]} - {entry["target"]}')
         return True
     return False
