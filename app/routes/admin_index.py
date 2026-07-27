@@ -64,9 +64,12 @@ def list_indexes():
 def add_index(table_name):
     """Add an index to a dynamic table."""
     column = request.form.get('column', '').strip()
+    module_id = request.form.get('module_id', type=int)
     
     if not column:
         flash('Column name is required.', 'error')
+        if module_id:
+            return redirect(url_for('admin.index.list_indexes', module_id=module_id))
         return redirect(url_for('admin.index.list_indexes'))
     
     try:
@@ -76,6 +79,8 @@ def add_index(table_name):
     except Exception as e:
         flash(f'Failed to create index: {e}', 'error')
     
+    if module_id:
+        return redirect(url_for('admin.index.list_indexes', module_id=module_id))
     return redirect(url_for('admin.index.list_indexes'))
 
 
@@ -84,6 +89,8 @@ def add_index(table_name):
 @csrf_protect
 def drop_index(table_name, index_name):
     """Drop an index from a dynamic table."""
+    module_id = request.form.get('module_id', type=int)
+    
     try:
         _drop_index_on_table(table_name, index_name)
         log_audit('drop', 'index', details=f'{table_name}.{index_name}')
@@ -91,6 +98,8 @@ def drop_index(table_name, index_name):
     except Exception as e:
         flash(f'Failed to drop index: {e}', 'error')
     
+    if module_id:
+        return redirect(url_for('admin.index.list_indexes', module_id=module_id))
     return redirect(url_for('admin.index.list_indexes'))
 
 

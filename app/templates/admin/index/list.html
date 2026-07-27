@@ -1,7 +1,6 @@
 <div style="max-width: 1200px; margin: 0 auto;">
     <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h3 style="margin: 0; color: #333;">Dynamic Table Index Management</h3>
             {% if modules %}
             <form method="GET" style="display: inline;">
                 <select name="module_id" onchange="this.form.submit()" style="padding: 6px 12px; border: 1px solid #ced4da; border-radius: 4px;">
@@ -12,6 +11,7 @@
                 </select>
             </form>
             {% endif %}
+            <h3 style="margin: 0; color: #333;">Dynamic Table Index Management</h3>
         </div>
         <p style="color: #666; margin: 0 0 16px 0;">
             Manage indexes on dynamic tables created by modules. Indexes improve query performance 
@@ -68,6 +68,9 @@
                             <td style="padding: 8px; text-align: center;">
                                 <form method="POST" style="display: inline;">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    {% if selected_module_id %}
+                                    <input type="hidden" name="module_id" value="{{ selected_module_id }}">
+                                    {% endif %}
                                     <button type="submit" 
                                             formaction="{{ url_for('admin.index.drop_index', table_name=table.table_name, index_name=idx.name) }}"
                                             style="padding: 4px 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
@@ -91,6 +94,9 @@
                 <h5 style="color: #333; margin-top: 0; margin-bottom: 12px;">Add New Index:</h5>
                 <form method="POST" action="{{ url_for('admin.index.add_index', table_name=table.table_name) }}" style="display: flex; gap: 12px; align-items: center;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if selected_module_id %}
+                    <input type="hidden" name="module_id" value="{{ selected_module_id }}">
+                    {% endif %}
                     <select name="column" required style="padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; min-width: 200px;">
                         <option value="">Select column...</option>
                         {% for col in table.columns|default([]) %}

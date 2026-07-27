@@ -85,23 +85,31 @@ def health_page():
     
     try:
         disk_usage = shutil.disk_usage('/')
+        uploads_writable = os.access(upload_dir, os.W_OK) if os.path.exists(upload_dir) else False
+        backups_writable = os.access(backup_dir, os.W_OK) if os.path.exists(backup_dir) else False
+        
         fs_status = {
-            'uploads_writable': os.access(upload_dir, os.W_OK),
-            'backups_writable': os.access(backup_dir, os.W_OK),
+            'uploads_writable': uploads_writable,
+            'backups_writable': backups_writable,
             'disk_usage_percent': round(disk_usage.used / disk_usage.total * 100, 1),
             'disk_total_gb': round(disk_usage.total / (1024**3), 1),
             'disk_free_gb': round(disk_usage.free / (1024**3), 1),
-            'status': 'ok'
+            'status': 'ok',
+            'upload_dir': upload_dir,
+            'backup_dir': backup_dir
         }
         
-        if not fs_status['uploads_writable'] or not fs_status['backups_writable']:
+        if not uploads_writable:
             fs_status['status'] = 'error'
-            fs_status['message'] = 'directory not writable'
+            fs_status['message'] = f'uploads directory not writable: {upload_dir}'
+        elif not backups_writable:
+            fs_status['status'] = 'error'
+            fs_status['message'] = f'backups directory not writable: {backup_dir}'
         elif fs_status['disk_usage_percent'] > 90:
             fs_status['status'] = 'warning'
-            fs_status['message'] = 'disk usage high'
+            fs_status['message'] = f'disk usage high: {fs_status["disk_usage_percent"]}%'
     except Exception as e:
-        fs_status = {'status': 'error', 'message': str(e)}
+        fs_status = {'status': 'error', 'message': f'filesystem check failed: {str(e)}'}
     
     # IMAP status
     imap_status = {'configured': False, 'status': 'ok'}
