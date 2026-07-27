@@ -1,12 +1,24 @@
 <div style="max-width: 1200px; margin: 0 auto;">
     <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 24px; margin-bottom: 24px;">
-        <h3 style="margin-top: 0; color: #333;">Dynamic Table Index Management</h3>
-        <p style="color: #666; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0; color: #333;">Dynamic Table Index Management</h3>
+            {% if modules %}
+            <form method="GET" style="display: inline;">
+                <select name="module_id" onchange="this.form.submit()" style="padding: 6px 12px; border: 1px solid #ced4da; border-radius: 4px;">
+                    <option value="">All Modules</option>
+                    {% for module in modules %}
+                    <option value="{{ module.id }}" {% if selected_module_id == module.id %}selected{% endif %}>{{ module.name }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% endif %}
+        </div>
+        <p style="color: #666; margin: 0 0 16px 0;">
             Manage indexes on dynamic tables created by modules. Indexes improve query performance 
             for columns that are frequently filtered or sorted.
         </p>
         
-        <div style="background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px; padding: 12px; margin-bottom: 16px;">
+        <div style="background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px; padding: 12px; margin-bottom: 0;">
             <strong style="color: #004085;">Best Practices:</strong>
             <ul style="margin: 8px 0 0 20px; color: #004085; font-size: 14px;">
                 <li>Index columns used in WHERE clauses, JOIN conditions, or ORDER BY</li>

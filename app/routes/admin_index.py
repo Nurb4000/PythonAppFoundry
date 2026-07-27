@@ -12,11 +12,21 @@ index_bp = Blueprint('index', __name__)
 @admin_required
 def list_indexes():
     """List all dynamic tables and their indexes."""
-    from app.models import DynamicTableRegistry
+    from app.models import DynamicTableRegistry, Module
     
-    tables = DynamicTableRegistry.query.all()
+    # Get module filter from query params
+    selected_module_id = request.args.get('module_id', type=int)
+    
+    # Query tables with optional module filter
+    query = DynamicTableRegistry.query
+    if selected_module_id:
+        query = query.filter_by(module_id=selected_module_id)
+    tables = query.all()
+    
+    # Get all modules for the filter dropdown
+    all_modules = Module.query.order_by(Module.name).all()
+    
     table_info = []
-    
     for reg in tables:
         try:
             inspector = sa_inspect(db.session.get_bind())
@@ -43,7 +53,9 @@ def list_indexes():
                 'error': str(e),
             })
     
-    return render_admin('Index Management', 'admin/index/list.html', tables=table_info)
+    return render_admin('Index Management', 'admin/index/list.html', 
+                       tables=table_info, modules=all_modules, 
+                       selected_module_id=selected_module_id)
 
 
 @index_bp.route('/<table_name>/add', methods=['POST'])
