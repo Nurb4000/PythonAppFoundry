@@ -98,7 +98,7 @@ def _search_modules(query: str, limit: int) -> List[Dict[str, Any]]:
         'name': m.name,
         'slug': m.slug,
         'description': m.description[:100] if m.description else '',
-        'url': f'/__admin/modules/{m.id}/edit',
+        'url': '/__admin/modules/',
     } for m in modules]
 
 
@@ -117,7 +117,7 @@ def _search_routes(query: str, limit: int) -> List[Dict[str, Any]]:
         'name': r.slug,
         'title': r.title or r.slug,
         'module': r.module.name if r.module else 'Unknown',
-        'url': f'/__admin/routes/{r.id}/edit',
+        'url': f'/__admin/routes/edit/{r.id}',
     } for r in routes]
 
 
@@ -135,7 +135,7 @@ def _search_scripts(query: str, limit: int) -> List[Dict[str, Any]]:
         'type': 'script',
         'name': s.name,
         'module': s.module.name if s.module else 'Unknown',
-        'url': f'/__admin/scripts/{s.id}/edit',
+        'url': f'/__admin/scripts/edit/{s.id}',
     } for s in scripts]
 
 
@@ -150,7 +150,7 @@ def _search_forms(query: str, limit: int) -> List[Dict[str, Any]]:
         'type': 'form',
         'name': f.name,
         'module': f.module.name if f.module else 'Unknown',
-        'url': f'/__admin/forms/{f.id}/edit',
+        'url': f'/__admin/forms/edit/{f.id}',
     } for f in forms]
 
 
@@ -165,7 +165,7 @@ def _search_users(query: str, limit: int) -> List[Dict[str, Any]]:
         'type': 'user',
         'name': u.username,
         'role': u.role,
-        'url': f'/__admin/users/{u.id}/edit',
+        'url': f'/__admin/users/edit/{u.id}',
     } for u in users]
 
 
@@ -179,7 +179,7 @@ def _search_groups(query: str, limit: int) -> List[Dict[str, Any]]:
         'id': g.id,
         'type': 'group',
         'name': g.name,
-        'url': f'/__admin/groups/{g.id}/edit',
+        'url': f'/__admin/groups/edit/{g.id}',
     } for g in groups]
 
 
@@ -194,7 +194,7 @@ def _search_tasks(query: str, limit: int) -> List[Dict[str, Any]]:
         'type': 'task',
         'name': t.name,
         'module': t.module.name if t.module else 'Unknown',
-        'url': f'/__admin/tasks/{t.id}/edit',
+        'url': f'/__admin/tasks/edit/{t.id}',
     } for t in tasks]
 
 
@@ -209,7 +209,7 @@ def _search_triggers(query: str, limit: int) -> List[Dict[str, Any]]:
         'type': 'trigger',
         'name': t.name,
         'module': t.module.name if t.module else 'Unknown',
-        'url': f'/__admin/triggers/{t.id}/edit',
+        'url': f'/__admin/triggers/edit/{t.id}',
     } for t in triggers]
 
 
