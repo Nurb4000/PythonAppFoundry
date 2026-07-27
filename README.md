@@ -62,6 +62,12 @@ For the most part the database is fed by XML imports. The original plan was to c
 
 Import demo modules to explore the platform:
 
+**Jinja2 Template Demos** (use `render_db_template()` with stored templates):
+- `demos/recipe_book.xml` — Recipe grid with search, detail pages, cuisine filters. Demonstrates list/detail templates with loops, conditionals, and filters.
+- `demos/task_board.xml` — Kanban board with columns, priority badges, overdue detection. Demonstrates grouped data rendering and dark theme templates.
+- `demos/bookshelf.xml` — Book spine shelf with hover modals, ratings, status filters. Demonstrates creative CSS layouts and interactive templates.
+
+**Legacy Demos** (use inline `render()` or string concatenation):
 - `demos/guestbook.xml` — Forms, DynamicModel data collection, rendered output at site root
 - `demos/pixel_art_gallery.xml` — Visual showcase of retro pixel art with styled grid layout
 - `demos/cat_fact_finder.xml` — Scheduled email delivery, webhook triggers, group-based route access

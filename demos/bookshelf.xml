@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Bookshelf" slug="bookshelf" version="1.0.0" author="Demo">
+  <description>A personal bookshelf and reading tracker demo showcasing the Jinja2 database template system (render_db_template). Browse books as styled spines on wooden shelves with ratings, reading status, filtering, and stats.</description>
+
+  <routes>
+    <route slug="/bookshelf" method="GET" title="My Bookshelf" auth_required="false" script="bookshelf_handler"/>
+  </routes>
+
+  <scripts>
+    <script name="bookshelf_handler" language="python"><![CDATA[
+from app.models import Template
+
+books_model = DynamicModel.get_or_create('bookshelf_books', {
+    'title': db.String(200),
+    'author': db.String(150),
+    'genre': db.String(80),
+    'status': db.String(20),
+    'rating': db.Integer,
+    'notes': db.Text,
+    'cover_color': db.String(7),
+    'pages': db.Integer,
+    'year': db.Integer,
+    'created_at': db.DateTime,
+})
+
+existing_count = session.query(books_model).count()
+if existing_count == 0:
+    seed_books = [
+        {'title': 'Dune', 'author': 'Frank Herbert', 'genre': 'Sci-Fi', 'status': 'completed', 'rating': 5,
+         'notes': 'A masterpiece of world-building. The spice must flow.', 'cover_color': '#c9a959', 'pages': 688, 'year': 1965},
+        {'title': 'The Great Gatsby', 'author': 'F. Scott Fitzgerald', 'genre': 'Classic', 'status': 'completed', 'rating': 4,
+         'notes': 'Beautiful prose, tragic characters. An American classic.', 'cover_color': '#1a6b3c', 'pages': 180, 'year': 1925},
+        {'title': 'Neuromancer', 'author': 'William Gibson', 'genre': 'Sci-Fi', 'status': 'completed', 'rating': 4,
+         'notes': 'Cyberpunk origin story. Case jacked into the matrix.', 'cover_color': '#2d2d2d', 'pages': 271, 'year': 1984},
+        {'title': 'Pride and Prejudice', 'author': 'Jane Austen', 'genre': 'Romance', 'status': 'completed', 'rating': 5,
+         'notes': 'Wit, romance, and social commentary. Absolutely timeless.', 'cover_color': '#c4547a', 'pages': 432, 'year': 1813},
+        {'title': 'The Hobbit', 'author': 'J.R.R. Tolkien', 'genre': 'Fantasy', 'status': 'reading', 'rating': 0,
+         'notes': 'Re-reading for the fifth time. Still magical.', 'cover_color': '#2e7d32', 'pages': 310, 'year': 1937},
+        {'title': '1984', 'author': 'George Orwell', 'genre': 'Dystopian', 'status': 'completed', 'rating': 5,
+         'notes': 'Chillingly relevant. Big Brother is watching.', 'cover_color': '#b71c1c', 'pages': 328, 'year': 1949},
+        {'title': 'Sapiens', 'author': 'Yuval Noah Harari', 'genre': 'Non-Fiction', 'status': 'reading', 'rating': 0,
+         'notes': 'Fascinating look at human history. Halfway through.', 'cover_color': '#e65100', 'pages': 443, 'year': 2011},
+        {'title': 'The Name of the Wind', 'author': 'Patrick Rothfuss', 'genre': 'Fantasy', 'status': 'completed', 'rating': 4,
+         'notes': 'Kvothe tells his tale. Beautiful language and magic system.', 'cover_color': '#4a148c', 'pages': 662, 'year': 2007},
+        {'title': 'Atomic Habits', 'author': 'James Clear', 'genre': 'Self-Help', 'status': 'unread', 'rating': 0,
+         'notes': 'Next on the list. Heard great things about habit stacking.', 'cover_color': '#0277bd', 'pages': 320, 'year': 2018},
+        {'title': 'The Martian', 'author': 'Andy Weir', 'genre': 'Sci-Fi', 'status': 'unread', 'rating': 0,
+         'notes': 'Bought it on sale. Space survival sounds fun.', 'cover_color': '#bf360c', 'pages': 369, 'year': 2011},
+    ]
+    for b in seed_books:
+        book = books_model(
+            title=b['title'], author=b['author'], genre=b['genre'], status=b['status'],
+            rating=b['rating'], notes=b['notes'], cover_color=b['cover_color'],
+            pages=b['pages'], year=b['year'],
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(book)
+    session.commit()
+
+status_filter = request.args.get('status', '').strip()
+if status_filter in ('reading', 'completed', 'unread'):
+    all_books = books_model.query.filter_by(status=status_filter).order_by(books_model.title).all()
+else:
+    all_books = books_model.query.order_by(books_model.title).all()
+    status_filter = ''
+
+all_count = books_model.query.count()
+completed_count = books_model.query.filter_by(status='completed').count()
+reading_list = books_model.query.filter_by(status='reading').all()
+unread_count = books_model.query.filter_by(status='unread').count()
+
+rated_books = books_model.query.filter(books_model.rating > 0).all()
+avg_rating = sum(b.rating for b in rated_books) / len(rated_books) if rated_books else 0
+
+stats = {
+    'total': all_count,
+    'completed': completed_count,
+    'reading': len(reading_list),
+    'unread': unread_count,
+    'avg_rating': round(avg_rating, 1),
+}
+
+tpl = Template.query.filter_by(name='book_shelf', module_id=module_id).first()
+if tpl:
+    _result = render_db_template(tpl.body, books=all_books, stats=stats, filter_status=status_filter)
+else:
+    _result = '<h2>Bookshelf</h2><p>Template not found. Please re-import the Bookshelf module.</p>'
+]]></script>
+  </scripts>
+
+  <templates>
+    <template name="book_shelf" content_type="html" description="A warm library-themed bookshelf displaying books as colored spines on wooden shelves with stats, filtering, and detail overlays.">
+      <body><![CDATA[<style>
+  .shelf-wrap{max-width:1100px;margin:0 auto;padding:1.5rem;background:#faf6f0;min-height:100vh;font-family:Georgia,serif}
+  .shelf-header{text-align:center;padding:2rem 0 0.5rem}
+  .shelf-header h1{font-size:2.8rem;color:#3e2723;margin:0;letter-spacing:1px;text-shadow:1px 1px 0 rgba(0,0,0,0.05)}
+  .shelf-header .subtitle{font-style:italic;color:#8d6e63;font-size:1.05rem;margin:0.3rem 0 0}
+  .shelf-divider{height:3px;background:linear-gradient(90deg,transparent 0%,#8d6e63 20%,#5d4037 50%,#8d6e63 80%,transparent 100%);margin:1.2rem auto;max-width:600px;border-radius:2px}
+  .shelf-stats{display:flex;justify-content:center;gap:1.8rem;flex-wrap:wrap;padding:1rem 0;margin:0.5rem auto 1rem;max-width:700px}
+  .stat-card{background:#fff;border:1px solid #d7ccc8;border-radius:10px;padding:0.7rem 1.3rem;text-align:center;min-width:120px;box-shadow:0 2px 8px rgba(0,0,0,0.04)}
+  .stat-card .stat-value{font-size:1.6rem;font-weight:700;color:#3e2723;display:block}
+  .stat-card .stat-label{font-size:0.75rem;color:#8d6e63;text-transform:uppercase;letter-spacing:1px}
+  .shelf-filters{display:flex;justify-content:center;gap:0.5rem;flex-wrap:wrap;margin:1rem 0 1.5rem}
+  .shelf-filters a{display:inline-block;padding:0.4rem 1rem;border-radius:20px;text-decoration:none;font-size:0.85rem;border:1.5px solid #bcaaa4;color:#5d4037;background:#fff;transition:all 0.2s}
+  .shelf-filters a:hover{background:#efebe9;border-color:#8d6e63}
+  .shelf-filters a.active{background:#5d4037;color:#fff;border-color:#5d4037}
+  .shelf-unit{position:relative;margin:0 auto 0;max-width:1060px}
+  .shelf-plank{height:22px;background:linear-gradient(180deg,#a1887f 0%,#795548 40%,#5d4037 100%);border-radius:0 0 4px 4px;position:relative;z-index:2;margin:0 -10px;box-shadow:0 6px 16px rgba(0,0,0,0.18),0 2px 4px rgba(0,0,0,0.1)}
+  .shelf-plank::after{content:'';position:absolute;top:2px;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.12) 30%,rgba(255,255,255,0.12) 70%,transparent);border-radius:2px}
+  .shelf-surface{display:flex;align-items:flex-end;justify-content:flex-start;padding:0 15px;min-height:220px;background:linear-gradient(180deg,#faf6f0 0%,#f5ede3 100%);border-left:4px solid #8d6e63;border-right:4px solid #8d6e63;position:relative;overflow:visible}
+  .shelf-surface::before{content:'';position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(180deg,transparent,rgba(0,0,0,0.03));pointer-events:none}
+  .book-spine{position:relative;cursor:pointer;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0 3px;border-radius:2px 4px 4px 2px;overflow:hidden;box-shadow:2px 0 4px rgba(0,0,0,0.2),-1px 0 2px rgba(0,0,0,0.1),inset -3px 0 8px rgba(0,0,0,0.15)}
+  .book-spine::before{content:'';position:absolute;top:0;left:0;right:0;height:8px;background:linear-gradient(180deg,rgba(255,255,255,0.2),transparent);z-index:1}
+  .book-spine::after{content:'';position:absolute;top:0;left:4px;bottom:0;width:1px;background:rgba(255,255,255,0.15)}
+  .book-spine:hover{transform:translateY(-25px) scale(1.05);z-index:10;box-shadow:0 12px 30px rgba(0,0,0,0.35),0 4px 10px rgba(0,0,0,0.2)}
+  .book-spine .spine-title{writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);color:#fff;font-size:0.7rem;font-weight:600;letter-spacing:0.5px;text-shadow:1px 1px 2px rgba(0,0,0,0.5);padding:8px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:180px;z-index:1}
+  .book-spine .spine-author{writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);color:rgba(255,255,255,0.7);font-size:0.55rem;font-style:italic;padding:4px 0;z-index:1}
+  .book-spine .spine-reading-badge{position:absolute;top:6px;right:2px;font-size:0.6rem;background:rgba(255,255,255,0.9);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.3)}
+  .shelf-book-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:100;justify-content:center;align-items:center;backdrop-filter:blur(3px)}
+  .shelf-book-overlay.show{display:flex}
+  .shelf-book-card{background:#faf6f0;border-radius:16px;max-width:480px;width:90%;padding:0;box-shadow:0 20px 60px rgba(0,0,0,0.3);position:relative;overflow:hidden;animation:slideUp 0.3s ease}
+  @keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .shelf-book-card .card-header{padding:1.5rem 1.5rem 1rem;position:relative}
+  .shelf-book-card .card-color-bar{height:8px;border-radius:8px 8px 0 0;position:absolute;top:0;left:0;right:0}
+  .shelf-book-card .card-close{position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.5rem;color:#8d6e63;cursor:pointer;line-height:1;padding:4px 8px;border-radius:50%;transition:background 0.2s}
+  .shelf-book-card .card-close:hover{background:rgba(0,0,0,0.08)}
+  .shelf-book-card .card-title{font-size:1.5rem;color:#3e2723;margin:0;padding-right:2rem}
+  .shelf-book-card .card-author{color:#8d6e63;font-style:italic;margin:0.3rem 0 0}
+  .shelf-book-card .card-meta{display:flex;gap:0.8rem;flex-wrap:wrap;padding:0.5rem 1.5rem;font-size:0.8rem;color:#6d4c41}
+  .shelf-book-card .card-meta span{background:#f5ede3;padding:0.25rem 0.6rem;border-radius:12px}
+  .shelf-book-card .card-rating{padding:0.5rem 1.5rem;font-size:1.3rem;color:#e8a317}
+  .shelf-book-card .card-notes{padding:0 1.5rem 1.5rem;color:#5d4037;font-size:0.95rem;line-height:1.6;border-top:1px solid #e8e0d8;margin-top:0.5rem;padding-top:1rem}
+  .shelf-empty{text-align:center;padding:3rem 1rem;color:#8d6e63;font-style:italic}
+  .shelf-footer{text-align:center;padding:1.5rem 0;color:#bcaaa4;font-size:0.8rem}
+  .shelf-footer span{color:#8d6e63}
+  @media(max-width:700px){.shelf-surface{padding:0 8px;min-height:180px}.book-spine .spine-title{font-size:0.6rem}.shelf-stats{gap:0.8rem}.stat-card{min-width:90px;padding:0.5rem 0.8rem}}
+</style>
+
+<div class="shelf-wrap">
+  <div class="shelf-header">
+    <h1>&#128218; My Bookshelf</h1>
+    <p class="subtitle">A curated collection of stories and ideas</p>
+  </div>
+  <div class="shelf-divider"></div>
+
+  <div class="shelf-stats">
+    <div class="stat-card">
+      <span class="stat-value">{{ stats.total|default(0) }}</span>
+      <span class="stat-label">Total Books</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value">{{ stats.completed|default(0) }}</span>
+      <span class="stat-label">Completed</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value">{{ stats.reading|default(0) }}</span>
+      <span class="stat-label">Reading</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value">{{ stats.avg_rating|default(0) }}</span>
+      <span class="stat-label">Avg Rating</span>
+    </div>
+  </div>
+
+  <div class="shelf-filters">
+    <a href="/bookshelf" class="{{ '' if filter_status else 'active' }}">All ({{ stats.total }})</a>
+    <a href="/bookshelf?status=completed" class="{{ 'active' if filter_status == 'completed' }}">&#9989; Completed ({{ stats.completed }})</a>
+    <a href="/bookshelf?status=reading" class="{{ 'active' if filter_status == 'reading' }}">&#128214; Reading ({{ stats.reading }})</a>
+    <a href="/bookshelf?status=unread" class="{{ 'active' if filter_status == 'unread' }}">&#128218; Unread ({{ stats.unread }})</a>
+  </div>
+
+  {% if books|length == 0 %}
+    <div class="shelf-empty">
+      <p>&#128218; No books found{% if filter_status %} with status "{{ filter_status|upper }}"{% endif %}. The shelves are empty!</p>
+    </div>
+  {% else %}
+
+    {% set shelf_size = 6 %}
+    {% for book_batch in books|batch(shelf_size) %}
+    <div class="shelf-unit">
+      <div class="shelf-surface">
+        {% for book in book_batch %}
+          {% set h = 140 + (book.pages|default(200) / 10)|int %}
+          {% if h > 210 %}{% set h = 210 %}{% endif %}
+          {% if h < 120 %}{% set h = 120 %}{% endif %}
+          <div class="book-spine" style="height:{{ h }}px;width:{{ 28 + (book.title|length) }}px;background:{{ book.cover_color|default('#607d8b') }};" onclick="showBook('{{ book.id }}', '{{ book.title|e }}', '{{ book.author|e }}', '{{ book.genre|default("Unknown")|e }}', '{{ book.status|default("unread")|e }}', '{{ book.rating|default(0) }}', '{{ book.notes|default("")|e }}', '{{ book.pages|default(0) }}', '{{ book.year|default(0) }}', '{{ book.cover_color|default("#607d8b")|e }}')">
+            <span class="spine-title">{{ book.title|truncate(25, True) }}</span>
+            <span class="spine-author">{{ book.author|truncate(18, True) }}</span>
+            {% if book.status == 'reading' %}
+              <span class="spine-reading-badge">&#128214;</span>
+            {% elif book.status == 'completed' %}
+              <span class="spine-reading-badge">&#9989;</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="shelf-plank"></div>
+    </div>
+    {% endfor %}
+
+  {% endif %}
+
+  <div class="shelf-footer">
+    <span>{{ books|length }} book{{ 's' if books|length != 1 else '' }}</span>
+    {% if filter_status %} &mdash; filtered by <span>{{ filter_status|upper }}</span>{% endif %}
+    &middot; Powered by <span>PythonAppFoundry</span>
+  </div>
+</div>
+
+<div class="shelf-book-overlay" id="bookOverlay" onclick="if(event.target===this)hideBook()">
+  <div class="shelf-book-card">
+    <div class="card-color-bar" id="cardColorBar"></div>
+    <button class="card-close" onclick="hideBook()">&times;</button>
+    <div class="card-header">
+      <h2 class="card-title" id="cardTitle"></h2>
+      <p class="card-author" id="cardAuthor"></p>
+    </div>
+    <div class="card-meta">
+      <span id="cardGenre"></span>
+      <span id="cardStatus"></span>
+      <span id="cardPages"></span>
+      <span id="cardYear"></span>
+    </div>
+    <div class="card-rating" id="cardRating"></div>
+    <div class="card-notes" id="cardNotes"></div>
+  </div>
+</div>
+
+<script>
+function showBook(id, title, author, genre, status, rating, notes, pages, year, color) {
+  document.getElementById('cardColorBar').style.background = color;
+  document.getElementById('cardTitle').textContent = title;
+  document.getElementById('cardAuthor').textContent = 'by ' + author;
+  document.getElementById('cardGenre').textContent = genre;
+  var statusIcons = {reading: '\u{1F4D6} Reading', completed: '\u{2705} Completed', unread: '\u{1F4DA} Unread'};
+  document.getElementById('cardStatus').textContent = statusIcons[status] || status;
+  document.getElementById('cardPages').textContent = pages ? pages + ' pages' : '';
+  document.getElementById('cardYear').textContent = year || '';
+  var stars = '';
+  if (rating > 0) {
+    for (var i = 0; i < 5; i++) { stars += i < rating ? '\u2605' : '\u2606'; }
+    document.getElementById('cardRating').textContent = stars + ' (' + rating + '/5)';
+  } else {
+    document.getElementById('cardRating').textContent = 'Not yet rated';
+  }
+  document.getElementById('cardNotes').textContent = notes || '';
+  document.getElementById('bookOverlay').classList.add('show');
+}
+function hideBook() {
+  document.getElementById('bookOverlay').classList.remove('show');
+}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') hideBook(); });
+</script>]]></body>
+    </template>
+  </templates>
+</module>

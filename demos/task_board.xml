@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Task Board" slug="task-board" version="1.0.0" author="Demo">
+  <description>A Kanban-style project management board showcasing the Jinja2 database template system (render_db_template). Features three columns, priority badges, assignee avatars, due date tracking with overdue highlighting, and tag pills. Responsive dark-theme layout.</description>
+
+  <routes>
+    <route slug="/task-board" method="GET" title="Task Board" auth_required="false" script="task_board_handler"/>
+  </routes>
+
+  <scripts>
+    <script name="task_board_handler" language="python"><![CDATA[
+from app.models import Template
+
+Task = DynamicModel.get_or_create('task_board_tasks', {
+    'title': db.String(200),
+    'description': db.Text,
+    'column_status': db.String(20),
+    'priority': db.String(10),
+    'assignee': db.String(100),
+    'due_date': db.Text,
+    'tags': db.Text,
+    'created_at': db.DateTime,
+})
+
+if session.query(Task).count() == 0:
+    now = datetime.now(timezone.utc)
+    seed_data = [
+        dict(title='Design login page mockups',
+             description='Create high-fidelity mockups for the new login and registration flow',
+             column_status='todo', priority='high', assignee='Alice Morgan',
+             due_date='2026-08-01', tags='design,ui', created_at=now),
+        dict(title='Set up CI/CD pipeline',
+             description='Configure GitHub Actions for automated testing and deployment',
+             column_status='todo', priority='medium', assignee='Bob Chen',
+             due_date='2026-08-10', tags='devops,infra', created_at=now),
+        dict(title='Write API documentation',
+             description='Document all REST endpoints with request/response examples',
+             column_status='todo', priority='low', assignee='Charlie Ross',
+             due_date='2026-08-15', tags='docs', created_at=now),
+        dict(title='Refactor payment module',
+             description='Restructure payment processing for better error handling and retry logic',
+             column_status='todo', priority='urgent', assignee='Eve Wang',
+             due_date='2026-07-20', tags='backend,billing', created_at=now),
+        dict(title='Implement user authentication',
+             description='Build JWT-based auth with refresh tokens and session management',
+             column_status='in-progress', priority='urgent', assignee='Dave Sharma',
+             due_date='2026-07-25', tags='backend,security', created_at=now),
+        dict(title='Build dashboard components',
+             description='Develop reusable chart and stat card widgets for the analytics dashboard',
+             column_status='in-progress', priority='high', assignee='Eve Wang',
+             due_date='2026-08-05', tags='frontend,ui', created_at=now),
+        dict(title='Database schema migration',
+             description='Migrate user and project tables to the new normalized schema',
+             column_status='in-progress', priority='medium', assignee='Alice Morgan',
+             due_date='2026-08-03', tags='backend,db', created_at=now),
+        dict(title='Set up project repository',
+             description='Initialize repo with branch protection, linting, and README',
+             column_status='done', priority='medium', assignee='Bob Chen',
+             due_date='2026-07-20', tags='devops', created_at=now),
+        dict(title='Define project requirements',
+             description='Gather stakeholder input and create detailed requirement specifications',
+             column_status='done', priority='high', assignee='Charlie Ross',
+             due_date='2026-07-18', tags='planning,management', created_at=now),
+        dict(title='Configure development environment',
+             description='Set up Docker containers, linting rules, and local dev workflow',
+             column_status='done', priority='low', assignee='Dave Sharma',
+             due_date='2026-07-22', tags='devops,setup', created_at=now),
+    ]
+    for t in seed_data:
+        session.add(Task(**t))
+    session.commit()
+
+all_tasks = session.query(Task).order_by(Task.created_at.desc()).all()
+
+grouped = {'todo': [], 'in-progress': [], 'done': []}
+overdue_count = 0
+today = datetime.now(timezone.utc).date()
+
+for t in all_tasks:
+    task_dict = {
+        'title': t.title,
+        'description': t.description or '',
+        'column_status': t.column_status,
+        'priority': t.priority,
+        'assignee': t.assignee or 'Unassigned',
+        'due_date': t.due_date or 'No date',
+        'tags': [tag.strip() for tag in (t.tags or '').split(',') if tag.strip()],
+        'is_overdue': False,
+    }
+    if t.due_date and t.column_status != 'done':
+        try:
+            due = datetime.strptime(t.due_date, '%Y-%m-%d').date()
+            if due < today:
+                task_dict['is_overdue'] = True
+                overdue_count += 1
+        except (ValueError, AttributeError):
+            pass
+    col = t.column_status if t.column_status in grouped else 'todo'
+    grouped[col].append(task_dict)
+
+stats = {
+    'total': len(all_tasks),
+    'todo_count': len(grouped['todo']),
+    'in_progress_count': len(grouped['in-progress']),
+    'done_count': len(grouped['done']),
+    'overdue_count': overdue_count,
+}
+
+columns_list = [
+    ('todo', 'To Do', grouped['todo']),
+    ('in-progress', 'In Progress', grouped['in-progress']),
+    ('done', 'Done', grouped['done']),
+]
+
+tpl = Template.query.filter_by(name='task_board', module_id=module_id).first()
+if tpl:
+    _result = render_db_template(tpl.body, columns_list=columns_list, stats=stats)
+else:
+    _result = '<h2>Task Board</h2><p>Template not found. Please re-import the module.</p>'
+    ]]></script>
+  </scripts>
+
+  <templates>
+    <template name="task_board" content_type="html" description="Kanban board layout with three columns, priority badges, assignee avatars, and overdue highlighting">
+      <body><![CDATA[
+{% raw %}
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  .tb-wrap { max-width: 1200px; margin: 0 auto; padding: 1.5rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; color: #e0e0e0; }
+  .tb-head { margin-bottom: 1.5rem; }
+  .tb-head h1 { font-size: 1.75rem; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+  .tb-head p { color: #6a6a8e; font-size: 0.88rem; margin-top: 0.25rem; }
+
+  .tb-summary { display: flex; gap: 0.75rem; margin-bottom: 1.75rem; flex-wrap: wrap; }
+  .tb-stat { background: #16213e; border: 1px solid #252545; border-radius: 10px; padding: 0.85rem 1.25rem; flex: 1; min-width: 110px; text-align: center; }
+  .tb-stat-val { display: block; font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+  .tb-stat-lbl { display: block; font-size: 0.7rem; color: #6a6a8e; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.2rem; }
+  .tb-c-todo { color: #7c83ff; }
+  .tb-c-prog { color: #f0a500; }
+  .tb-c-done { color: #2ecc71; }
+  .tb-c-over { color: #e74c3c; }
+
+  .tb-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; align-items: start; }
+  @media (max-width: 920px) { .tb-board { grid-template-columns: 1fr; } }
+
+  .tb-col { background: #0f0f23; border: 1px solid #252545; border-radius: 12px; padding: 0.85rem; }
+  .tb-col-hdr { display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.7rem; margin-bottom: 0.75rem; border-bottom: 2px solid #252545; }
+  .tb-col-hdr h2 { font-size: 0.95rem; font-weight: 600; color: #fff; flex: 1; }
+  .tb-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .tb-dot-todo { background: #7c83ff; }
+  .tb-dot-in-progress { background: #f0a500; }
+  .tb-dot-done { background: #2ecc71; }
+  .tb-col-cnt { background: #1e1e3a; color: #8888aa; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.55rem; border-radius: 10px; }
+
+  .tb-cards { display: flex; flex-direction: column; gap: 0.6rem; min-height: 48px; }
+  .tb-card { background: #16213e; border: 1px solid #252545; border-radius: 10px; padding: 0.9rem; transition: border-color 0.15s, box-shadow 0.15s; }
+  .tb-card:hover { border-color: #3a3a5a; box-shadow: 0 2px 12px rgba(0,0,0,0.25); }
+  .tb-card-over { border-left: 3px solid #e74c3c; }
+
+  .tb-card-top { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .tb-badge { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.18rem 0.5rem; border-radius: 4px; line-height: 1.3; }
+  .tb-b-low { background: #14302a; color: #2ecc71; }
+  .tb-b-medium { background: #14253a; color: #5dade2; }
+  .tb-b-high { background: #33291a; color: #f0a500; }
+  .tb-b-urgent { background: #331a1a; color: #e74c3c; }
+  .tb-over-tag { font-size: 0.6rem; font-weight: 700; color: #e74c3c; background: #331a1a; padding: 0.15rem 0.45rem; border-radius: 4px; margin-left: auto; white-space: nowrap; }
+
+  .tb-card-title { font-size: 0.92rem; font-weight: 600; color: #eee; line-height: 1.35; margin-bottom: 0.35rem; }
+  .tb-card-desc { font-size: 0.78rem; color: #6a6a8e; line-height: 1.45; margin-bottom: 0.55rem; }
+
+  .tb-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.65rem; }
+  .tb-tag { font-size: 0.68rem; background: #0f0f23; color: #8888aa; padding: 0.12rem 0.45rem; border-radius: 3px; border: 1px solid #252545; }
+
+  .tb-card-foot { display: flex; align-items: center; justify-content: space-between; padding-top: 0.55rem; border-top: 1px solid #252545; }
+  .tb-assignee { display: flex; align-items: center; gap: 0.35rem; }
+  .tb-avatar { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: #fff; text-transform: uppercase; flex-shrink: 0; }
+  .tb-avatar-0 { background: #7c83ff; }
+  .tb-avatar-1 { background: #e94560; }
+  .tb-avatar-2 { background: #2ecc71; }
+  .tb-avatar-3 { background: #f0a500; }
+  .tb-assignee-name { font-size: 0.75rem; color: #8888aa; }
+  .tb-due { font-size: 0.72rem; color: #6a6a8e; white-space: nowrap; }
+  .tb-due-over { color: #e74c3c; font-weight: 600; }
+
+  .tb-empty { text-align: center; color: #3a3a5a; font-size: 0.82rem; padding: 1.5rem 0; font-style: italic; }
+  .tb-foot { text-align: center; margin-top: 2rem; color: #3a3a5a; font-size: 0.72rem; }
+</style>
+{% endraw %}
+
+<div class="tb-wrap">
+  <div class="tb-head">
+    <h1>Task Board</h1>
+    <p>Sprint 4 · Week of Jul 27, 2026</p>
+  </div>
+
+  <div class="tb-summary">
+    <div class="tb-stat">
+      <span class="tb-stat-val">{{ stats.total }}</span>
+      <span class="tb-stat-lbl">Total</span>
+    </div>
+    <div class="tb-stat">
+      <span class="tb-stat-val tb-c-todo">{{ stats.todo_count }}</span>
+      <span class="tb-stat-lbl">To Do</span>
+    </div>
+    <div class="tb-stat">
+      <span class="tb-stat-val tb-c-prog">{{ stats.in_progress_count }}</span>
+      <span class="tb-stat-lbl">In Progress</span>
+    </div>
+    <div class="tb-stat">
+      <span class="tb-stat-val tb-c-done">{{ stats.done_count }}</span>
+      <span class="tb-stat-lbl">Done</span>
+    </div>
+    <div class="tb-stat">
+      <span class="tb-stat-val tb-c-over">{{ stats.overdue_count }}</span>
+      <span class="tb-stat-lbl">Overdue</span>
+    </div>
+  </div>
+
+  <div class="tb-board">
+    {% for col_id, col_name, col_tasks in columns_list %}
+    <div class="tb-col">
+      <div class="tb-col-hdr">
+        <span class="tb-dot tb-dot-{{ col_id }}"></span>
+        <h2>{{ col_name }}</h2>
+        <span class="tb-col-cnt">{{ col_tasks|length }}</span>
+      </div>
+      <div class="tb-cards">
+        {% for task in col_tasks %}
+        <div class="tb-card{% if task.is_overdue %} tb-card-over{% endif %}">
+          <div class="tb-card-top">
+            <span class="tb-badge tb-b-{{ task.priority|default('medium', true) }}">{{ task.priority|default('medium', true) }}</span>
+            {% if task.is_overdue %}
+            <span class="tb-over-tag">Overdue</span>
+            {% endif %}
+          </div>
+          <div class="tb-card-title">{{ task.title|default('Untitled', true) }}</div>
+          {% if task.description|default('', true) %}
+          <div class="tb-card-desc">{{ task.description }}</div>
+          {% endif %}
+          {% if task.tags|default([], true)|length > 0 %}
+          <div class="tb-tags">
+            {% for tag in task.tags %}
+            <span class="tb-tag">{{ tag }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <div class="tb-card-foot">
+            <div class="tb-assignee">
+              {% set avatar_idx = loop.index0 % 4 %}
+              <span class="tb-avatar tb-avatar-{{ avatar_idx }}">{{ task.assignee|default('U', true)|truncate(1, True, '') }}</span>
+              <span class="tb-assignee-name">{{ task.assignee|default('Unassigned', true) }}</span>
+            </div>
+            <span class="tb-due{% if task.is_overdue %} tb-due-over{% endif %}">{{ task.due_date|default('No date', true) }}</span>
+          </div>
+        </div>
+        {% endfor %}
+        {% if col_tasks|length == 0 %}
+        <div class="tb-empty">No tasks</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="tb-foot">Powered by PythonAppFoundry · Task Board v1.0.0</div>
+</div>
+      ]]></body>
+    </template>
+  </templates>
+</module>
