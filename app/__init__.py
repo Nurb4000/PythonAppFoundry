@@ -88,7 +88,19 @@ def create_app(config_class=None):
             return dt
 
     upload_dir = os.path.join(app.instance_path, 'uploads')
+    backups_dir = os.path.join(app.instance_path, 'backups')
+    credentials_dir = app.instance_path  # credential.key is stored here
+    
+    # Ensure all required directories exist
     os.makedirs(upload_dir, exist_ok=True)
+    os.makedirs(backups_dir, exist_ok=True)
+    os.makedirs(credentials_dir, exist_ok=True)
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f'Instance directory: {app.instance_path}')
+    logger.info(f'Uploads directory: {upload_dir}')
+    logger.info(f'Backups directory: {backups_dir}')
 
     @app.route('/uploads/<path:filename>')
     def serve_upload(filename):
