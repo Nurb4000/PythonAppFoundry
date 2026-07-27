@@ -461,7 +461,7 @@ for row in result:
 db.session.commit()
 ```
 
-The demo module `demos/incoming_mail_demo.xml` shows a complete example — import it from **Modules → New Module → Import from XML**.
+The demo module `demos/incoming_mail_demo.xml` shows a complete example — import it from **Modules → Import XML**.
 
 ## Integration Health Dashboard
 
@@ -902,13 +902,13 @@ Templates are imported after scripts and forms, and are deleted on module update
 
 ## XML Import Preview
 
-Before importing a module XML, you can now preview what will be imported:
+Before importing a module XML, you can preview what will be imported:
 
-1. Go to **Modules** → **+ New**
-2. Click **Import from XML**
-3. Select an XML file and click **Preview Import**
-4. See counts of scripts, routes, forms, tasks, and triggers that will be imported
-5. Confirm the import if everything looks correct
+1. Go to **Modules** → **Import XML**
+2. Select an XML file and click **Preview**
+3. See counts of scripts, routes, forms, tasks, and triggers that will be imported
+4. If the module already exists, a version comment field and **Update Existing Module** button appear
+5. Confirm the import (new or update) if everything looks correct
 
 ## OpenAPI Specification
 
