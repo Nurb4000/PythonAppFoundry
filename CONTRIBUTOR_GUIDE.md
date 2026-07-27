@@ -54,6 +54,7 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/db_migration.py` | ~260 | Database migration service — exports data from current DB, imports to new DB (SQLite ↔ PostgreSQL), verifies row counts. Requires `psycopg2-binary` for PostgreSQL targets. Used by `/__admin/db-migration`. |
 | `app/services/search.py` | ~180 | Global search service — searches across modules, routes, scripts, forms, users, groups, tasks, triggers, and settings. Used by `/__admin/search`. |
 | `app/routes/admin_index.py` | ~100 | Index management admin routes — list, add, and drop indexes on dynamic tables. Used by `/__admin/indexes`. |
+| `app/routes/admin_health.py` | ~150 | Health check admin routes — detailed system monitoring at `/__admin/health`. |
 
 ### Vendored Assets
 
@@ -464,6 +465,47 @@ Job IDs are `'task_' + str(task.id)`. The `replace_existing=True` flag means re-
     ```
   - **Dynamic tables:** Schema evolution is automatic. When `get_or_create()` is called with new columns for an existing table, it issues `ALTER TABLE ADD COLUMN` for missing columns. No manual migration needed — just update the module script and import.
 - **No Alembic migrations are set up** despite `flask-migrate` being installed. The `migrations/` directory exists but has no version scripts.
+
+### Health Check System
+
+The platform provides two health check endpoints:
+
+**`GET /healthz`** — Lightweight external health check (no auth required)
+- Returns JSON with component statuses
+- HTTP 200 = healthy, 503 = unhealthy
+- Suitable for load balancers and monitoring tools
+
+**`GET /__admin/health`** — Detailed admin dashboard (admin-only)
+- Visual display of all system components
+- Shows uptime, Python/Flask versions
+- Color-coded status indicators
+- Links to related admin pages (e.g., dead letter queue)
+
+**Components monitored:**
+| Component | What It Checks |
+|-----------|----------------|
+| Database | Connection active |
+| Scheduler | Running, number of jobs |
+| Async Executor | Thread pool status, pending tasks |
+| Dead Letter Queue | Number of failed webhook executions |
+| Credential Store | Fernet key file exists |
+| Filesystem | Upload/backup directories writable, disk usage |
+| IMAP | Configuration status |
+| Script Executions | Queued/running/error counts |
+
+**Example `/healthz` response:**
+```json
+{
+  "status": "healthy",
+  "components": {
+    "database": {"status": "ok"},
+    "scheduler": {"status": "ok", "jobs": 5},
+    "async_executor": {"status": "ok", "pending_tasks": 2, "max_workers": 4},
+    "dead_letter_queue": {"status": "ok", "count": 0}
+  },
+  "uptime_seconds": 3600
+}
+```
 
 ## External Dependencies
 

@@ -62,6 +62,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Global Search** — Instantly find any entity across the platform at `/__admin/search`. Search modules, routes, scripts, forms, users, groups, tasks, triggers, and settings by name, slug, or description.
 - **Dynamic Table Indexing** — Improve query performance for dynamic tables at `/__admin/indexes`. Add indexes to frequently filtered columns via admin UI or `DynamicModel.get_or_create()` with `indexes` parameter.
 - **Vendored Swagger UI** — OpenAPI/Swagger documentation at `/__api/swagger` uses locally hosted assets (no CDN dependency). Enables air-gapped deployments.
+- **Enhanced Health Checks** — `/healthz` endpoint now checks async executor, dead letter queue, credential store, and filesystem. Admin dashboard at `/__admin/health` provides detailed system monitoring.
 
 ### Demo Modules
 
