@@ -98,7 +98,7 @@ def _search_modules(query: str, limit: int) -> List[Dict[str, Any]]:
         'name': m.name,
         'slug': m.slug,
         'description': m.description[:100] if m.description else '',
-        'url': '/__admin/modules/',
+        'url': f'/__admin/modules/edit/{m.id}',
     } for m in modules]
 
 
