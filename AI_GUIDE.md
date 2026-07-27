@@ -320,7 +320,48 @@ users = session.query(User).all()
 admins = session.query(User).filter_by(role='admin').all()
 ```
 
-**Note:** When accessing a table from another module, you must list ALL its columns in the `get_or_create()` call — missing columns will not exist in the returned model. If unsure, inspect the table schema or define all columns you need.
+**Note:** When accessing a table from another module, you must list ALL its columns in the `get_or_create()` call — missing columns will not exist in the returned model. If unsure, inspect the table schema via the Data Browser (`/__admin/data`) or export the source module's XML first.
+
+### Referencing Another Module's Query Reports
+
+Query reports are stored in the `query_reports` table and belong to a specific module. Scripts can discover and execute reports from other modules by looking up the target module's slug:
+
+```python
+from app.models import QueryReport, Module
+
+# Find another module by slug
+target_module = session.query(Module).filter_by(slug='sales-demo').first()
+if target_module:
+    # Get all query reports from that module
+    reports = session.query(QueryReport).filter_by(module_id=target_module.id).all()
+    for report in reports:
+        print(f"Report: {report.name}")
+        print(f"SQL: {report.sql_text}")
+        # Execute the report's SQL
+        result = session.execute(db.text(report.sql_text))
+        rows = result.fetchall()
+```
+
+This pattern is useful for building dashboard or aggregator modules that display data from multiple source modules without duplicating queries.
+
+### Prompt Templates for Cross-Module Generation
+
+When using the AI Designer or BPMN to create a module that references another module, include these details in your prompt for reliable generation:
+
+**Referencing another module's dynamic table:**
+> "Create module '[name]' with slug '[slug]'. It should access the '[TableName]' table (columns: col1, col2, col3) created by the '[source-module-slug]' module. Route / lists all records from that table. Use DynamicModel.get_or_create — do NOT create a new table."
+
+**Displaying another module's query reports:**
+> "Create module '[name]' with slug '[slug]'. It should find all query reports from the '[source-module-slug]' module, execute each report's SQL, and render the results as charts on route /."
+
+**Combining tables from multiple modules:**
+> "Create module '[name]' with slug '[slug]'. Join data from the '[table1]' table (from module 'module-a') with the '[table2]' table (from module 'module-b') on a shared column. Display the joined results in a table."
+
+**Tips for cross-module prompts:**
+- Always specify the source module's slug so the AI can reference it correctly
+- List ALL columns you need from the source table — missing columns cause runtime crashes
+- If you need to inspect a source table's schema first, visit `/__admin/data` in the admin panel
+- After importing a cross-module module, click "Scan" on the module edit page to register dependencies
 
 ### File Uploads
 
