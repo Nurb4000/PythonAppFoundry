@@ -55,6 +55,28 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/search.py` | ~180 | Global search service — searches across modules, routes, scripts, forms, users, groups, tasks, triggers, and settings. Used by `/__admin/search`. |
 | `app/routes/admin_index.py` | ~100 | Index management admin routes — list, add, and drop indexes on dynamic tables. Used by `/__admin/indexes`. |
 
+### Vendored Assets
+
+The platform vendors certain JavaScript/CSS assets to enable air-gapped deployments and reduce external dependencies:
+
+| Asset | Location | Purpose |
+|---|---|---|
+| **Chart.js** | `app/static/chart.umd.min.js` | Chart rendering for query reports and script-generated charts |
+| **Swagger UI** | `app/static/swagger-ui/` | OpenAPI documentation at `/__api/swagger` |
+| **CodeMirror** | `app/static/codemirror.css`, `python-highlight.js` | Script editor syntax highlighting |
+
+**Why vendoring matters:**
+- ✓ No internet required for core functionality
+- ✓ Works in air-gapped/secured environments
+- ✓ Consistent behavior regardless of CDN availability
+- ✓ Self-contained deployment
+
+**Updating vendored assets:**
+1. Download latest version from official source
+2. Replace file in `app/static/`
+3. Verify functionality with existing modules
+4. Commit changes with clear message about version update
+
 ### Models
 
 | File | Lines | What It Contains |
@@ -442,6 +464,24 @@ Job IDs are `'task_' + str(task.id)`. The `replace_existing=True` flag means re-
     ```
   - **Dynamic tables:** Schema evolution is automatic. When `get_or_create()` is called with new columns for an existing table, it issues `ALTER TABLE ADD COLUMN` for missing columns. No manual migration needed — just update the module script and import.
 - **No Alembic migrations are set up** despite `flask-migrate` being installed. The `migrations/` directory exists but has no version scripts.
+
+## External Dependencies
+
+The platform minimizes external dependencies for air-gapped deployments:
+
+**Vendored (in `app/static/`):**
+- Chart.js — Chart rendering
+- Swagger UI — OpenAPI documentation
+- CodeMirror + Python highlight — Script editor
+
+**CDN-loaded (requires internet):**
+- None currently — all assets are vendored
+
+**Why this matters:**
+- Deployments in secured/air-gapped environments work without internet
+- No risk of CDN outages affecting functionality
+- Consistent behavior across all deployments
+- Easier to track and update dependencies (version pinned in repo)
 
 ## Adding a DB Setting
 
