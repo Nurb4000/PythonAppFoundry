@@ -32,6 +32,7 @@ This document describes the XML bundle format for generating application modules
 #   session       - SQLAlchemy session (db.session)
 #   db            - SQLAlchemy db instance
 #   current_user  - Flask-Login current_user (AnonymousUserMixin if not logged in)
+#   module_id     - ID of the module this script belongs to (for Template/credential lookups)
 #   redirect()    - flask.redirect
 #   url_for()     - flask.url_for
 #   flash()       - flask.flash
@@ -715,7 +716,7 @@ Then in a Jinja template use the dict key, not dot-chaining:
 12. **No Flask URL converters** — route slugs must be exact paths like `/projects`, not `/project/<int:id>`. Use query parameters (`/project?project_id=1`) and read them in the script via `request.args.get('project_id')`. Never put `<` or `>` inside XML attribute values — they will break XML parsing.
 13. **Scripts must produce output** — end every script with either `return redirect(...)`, `return jsonify(...)`, `_result = <value>`, or `render(...)`. A script that does nothing will render a blank page.
 14. **Form field names must match** — `request.form.get('field_name')` in the script must match `"name":"field_name"` in the form's JSON schema exactly.
-15. **Limit imports in scripts** — the script runner provides `session`, `db`, `request`, `current_user`, `redirect`, `url_for`, `flash`, `render`, `render_db_template`, `jsonify`, `send_email`, `render_form`, `render_chart`, `DynamicModel`, `datetime`, and `timezone` already. **Do NOT import these from anywhere** — they are pre-injected into every script. There is no `app.helpers` module.
+15. **Limit imports in scripts** — the script runner provides `session`, `db`, `request`, `current_user`, `module_id`, `redirect`, `url_for`, `flash`, `render`, `render_db_template`, `jsonify`, `send_email`, `render_form`, `render_chart`, `DynamicModel`, `datetime`, and `timezone` already. **Do NOT import these from anywhere** — they are pre-injected into every script. There is no `app.helpers` module.
 16. **Avoid Python syntax in Jinja2** — use `{% for item in items %}`, NOT `{% for i in range(len(items)) %}`. Use `{{ item.field }}`, NOT `{{ item["field"] }}`.
 17. **Watch for typos** — `_result` not `_reult` or `_results`. `render` not `render_template`. `session` not `sesson`.
 18. **Script runner provides common builtins** — `int`, `str`, `list`, `dict`, `len`, `range`, `enumerate`, `zip`, `sorted`, `min`, `max`, `sum`, `any`, `all`, `isinstance`, `type`, `hasattr`, `getattr`, `setattr`, `dir`, `print`, `ValueError`, `TypeError`, `KeyError`, `AttributeError` are all available. Do not import them.
