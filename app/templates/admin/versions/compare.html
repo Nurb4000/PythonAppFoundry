@@ -1,0 +1,408 @@
+<style>
+  .compare-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .compare-header a {
+    color: #2563eb;
+    text-decoration: none;
+  }
+  .compare-header a:hover {
+    text-decoration: underline;
+  }
+  .version-labels {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  .version-labels .arrow {
+    color: #888;
+    font-weight: normal;
+  }
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+  .summary-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+  }
+  .summary-card .card-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+  }
+  .summary-card .card-counts {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.9rem;
+  }
+  .summary-card .count-added { color: #16a34a; font-weight: 600; }
+  .summary-card .count-removed { color: #dc2626; font-weight: 600; }
+  .summary-card .count-modified { color: #d97706; font-weight: 600; }
+  .diff-section {
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .diff-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 1rem;
+    background: #f1f5f9;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .diff-section-header:hover {
+    background: #e2e8f0;
+  }
+  .diff-section-header .section-icon {
+    transition: transform 0.2s;
+    display: inline-block;
+  }
+  .diff-section-header .section-icon.open {
+    transform: rotate(90deg);
+  }
+  .diff-section-body {
+    display: none;
+    padding: 1rem;
+  }
+  .diff-section-body.open {
+    display: block;
+  }
+  .diff-subsection {
+    margin-bottom: 1rem;
+  }
+  .diff-subsection:last-child {
+    margin-bottom: 0;
+  }
+  .diff-subsection-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid;
+  }
+  .diff-subsection-title.added { color: #16a34a; border-color: #bbf7d0; }
+  .diff-subsection-title.removed { color: #dc2626; border-color: #fecaca; }
+  .diff-subsection-title.modified { color: #d97706; border-color: #fed7aa; }
+  .diff-item {
+    padding: 0.35rem 0.75rem;
+    margin-bottom: 0.25rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+  .diff-item.added { background: #f0fdf4; color: #166534; }
+  .diff-item.removed { background: #fef2f2; color: #991b1b; }
+  .diff-item.modified { background: #fffbeb; color: #92400e; }
+  .diff-change-detail {
+    margin-left: 1.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .diff-change-detail .change-field {
+    font-weight: 600;
+    color: #d97706;
+    margin-bottom: 0.25rem;
+  }
+  .diff-change-detail .change-value {
+    font-family: monospace;
+    background: #f8fafc;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 150px;
+    overflow-y: auto;
+  }
+  .diff-change-detail .change-value .old-val { color: #991b1b; }
+  .diff-change-detail .change-value .new-val { color: #166534; }
+  .no-changes {
+    color: #888;
+    font-style: italic;
+    padding: 0.5rem 0;
+  }
+  .metadata-grid {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr;
+    gap: 0.5rem 1rem;
+    align-items: start;
+    font-size: 0.9rem;
+  }
+  .metadata-grid .meta-field {
+    font-weight: 600;
+    color: #475569;
+    text-transform: capitalize;
+  }
+  .metadata-grid .meta-old,
+  .metadata-grid .meta-new {
+    padding: 0.35rem 0.75rem;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .metadata-grid .meta-old { background: #fef2f2; color: #991b1b; }
+  .metadata-grid .meta-new { background: #f0fdf4; color: #166534; }
+  .req-diff {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .req-diff .req-panel {
+    padding: 0.75rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .req-diff .req-panel.old { background: #fef2f2; color: #991b1b; }
+  .req-diff .req-panel.new { background: #f0fdf4; color: #166534; }
+</style>
+
+<div class="compare-header">
+  <a href="{{ url_for('admin.versions.list_versions', module_id=m.id) }}">&larr; Back to Versions</a>
+  <div class="version-labels">
+    <span>{{ v1.version_number }}</span>
+    <span class="arrow">&harr;</span>
+    <span>{{ v2.version_number }}</span>
+    <span style="font-size:0.85rem;font-weight:normal;color:#888;">
+      ({{ v1.created_at|localtime }} &rarr; {{ v2.created_at|localtime }})
+    </span>
+  </div>
+</div>
+
+{% set total_added = (diff.scripts.added|length + diff.routes.added|length + diff.forms.added|length + diff.templates.added|length + diff.scheduled_tasks.added|length + diff.triggers.added|length + diff.query_reports.added|length + diff.credentials.added|length) %}
+{% set total_removed = (diff.scripts.removed|length + diff.routes.removed|length + diff.forms.removed|length + diff.templates.removed|length + diff.scheduled_tasks.removed|length + diff.triggers.removed|length + diff.query_reports.removed|length + diff.credentials.removed|length) %}
+{% set total_modified = (diff.scripts.modified|length + diff.routes.modified|length + diff.forms.modified|length + diff.templates.modified|length + diff.scheduled_tasks.modified|length + diff.triggers.modified|length + diff.query_reports.modified|length + diff.credentials.modified|length) %}
+
+{% if total_added == 0 and total_removed == 0 and total_modified == 0 and not diff.metadata and not diff.requirements %}
+<div style="padding:2rem;text-align:center;color:#888;">No differences found between these two versions.</div>
+{% else %}
+
+<div class="summary-cards">
+  {% if diff.metadata %}
+  <div class="summary-card">
+    <div class="card-title">Module Metadata</div>
+    <div class="card-counts">
+      <span class="count-modified">{{ diff.metadata|length }} field{{ 's' if diff.metadata|length != 1 else '' }}</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.requirements %}
+  <div class="summary-card">
+    <div class="card-title">Requirements</div>
+    <div class="card-counts">
+      <span class="count-modified">Modified</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.scripts.added or diff.scripts.removed or diff.scripts.modified %}
+  <div class="summary-card">
+    <div class="card-title">Scripts</div>
+    <div class="card-counts">
+      <span class="count-added">+{{ diff.scripts.added|length }}</span>
+      <span class="count-removed">-{{ diff.scripts.removed|length }}</span>
+      <span class="count-modified">~{{ diff.scripts.modified|length }}</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.routes.added or diff.routes.removed or diff.routes.modified %}
+  <div class="summary-card">
+    <div class="card-title">Routes</div>
+    <div class="card-counts">
+      <span class="count-added">+{{ diff.routes.added|length }}</span>
+      <span class="count-removed">-{{ diff.routes.removed|length }}</span>
+      <span class="count-modified">~{{ diff.routes.modified|length }}</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.forms.added or diff.forms.removed or diff.forms.modified %}
+  <div class="summary-card">
+    <div class="card-title">Forms</div>
+    <div class="card-counts">
+      <span class="count-added">+{{ diff.forms.added|length }}</span>
+      <span class="count-removed">-{{ diff.forms.removed|length }}</span>
+      <span class="count-modified">~{{ diff.forms.modified|length }}</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.templates.added or diff.templates.removed or diff.templates.modified %}
+  <div class="summary-card">
+    <div class="card-title">Templates</div>
+    <div class="card-counts">
+      <span class="count-added">+{{ diff.templates.added|length }}</span>
+      <span class="count-removed">-{{ diff.templates.removed|length }}</span>
+      <span class="count-modified">~{{ diff.templates.modified|length }}</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.scheduled_tasks.added or diff.scheduled_tasks.removed or diff.scheduled_tasks.modified %}
+  <div class="summary-card">
+    <div class="card-title">Scheduled Tasks</div>
+    <div class="card-counts">
+      <span class="count-added">+{{ diff.scheduled_tasks.added|length }}</span>
+      <span class="count-removed">-{{ diff.scheduled_tasks.removed|length }}</span>
+      <span class="count-modified">~{{ diff.scheduled_tasks.modified|length }}</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.triggers.added or diff.triggers.removed or diff.triggers.modified %}
+  <div class="summary-card">
+    <div class="card-title">Triggers</div>
+    <div class="card-counts">
+      <span class="count-added">+{{ diff.triggers.added|length }}</span>
+      <span class="count-removed">-{{ diff.triggers.removed|length }}</span>
+      <span class="count-modified">~{{ diff.triggers.modified|length }}</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.query_reports.added or diff.query_reports.removed or diff.query_reports.modified %}
+  <div class="summary-card">
+    <div class="card-title">Query Reports</div>
+    <div class="card-counts">
+      <span class="count-added">+{{ diff.query_reports.added|length }}</span>
+      <span class="count-removed">-{{ diff.query_reports.removed|length }}</span>
+      <span class="count-modified">~{{ diff.query_reports.modified|length }}</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if diff.credentials.added or diff.credentials.removed or diff.credentials.modified %}
+  <div class="summary-card">
+    <div class="card-title">Credentials</div>
+    <div class="card-counts">
+      <span class="count-added">+{{ diff.credentials.added|length }}</span>
+      <span class="count-removed">-{{ diff.credentials.removed|length }}</span>
+      <span class="count-modified">~{{ diff.credentials.modified|length }}</span>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if diff.metadata %}
+<div class="diff-section">
+  <div class="diff-section-header" onclick="toggleSection(this)">
+    <span>Module Metadata</span>
+    <span class="section-icon open">&rsaquo;</span>
+  </div>
+  <div class="diff-section-body open">
+    <div class="metadata-grid">
+      <div class="meta-field">Field</div>
+      <div style="font-weight:600;color:#991b1b;">{{ v1.version_number }}</div>
+      <div style="font-weight:600;color:#166534;">{{ v2.version_number }}</div>
+      {% for field, change in diff.metadata.items() %}
+      <div class="meta-field">{{ field }}</div>
+      <div class="meta-old">{{ change.old or '(empty)' }}</div>
+      <div class="meta-new">{{ change.new or '(empty)' }}</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if diff.requirements %}
+<div class="diff-section">
+  <div class="diff-section-header" onclick="toggleSection(this)">
+    <span>Requirements (pip dependencies)</span>
+    <span class="section-icon open">&rsaquo;</span>
+  </div>
+  <div class="diff-section-body open">
+    <div class="req-diff">
+      <div class="req-panel old">{{ diff.requirements.old or '(none)' }}</div>
+      <div class="req-panel new">{{ diff.requirements.new or '(none)' }}</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% macro render_collection(section_key, display_name) %}
+  {% set section = diff[section_key] %}
+  {% if section.added or section.removed or section.modified %}
+  <div class="diff-section">
+    <div class="diff-section-header" onclick="toggleSection(this)">
+      <span>{{ display_name }}</span>
+      <span class="section-icon open">&rsaquo;</span>
+    </div>
+    <div class="diff-section-body open">
+      {% if section.added %}
+      <div class="diff-subsection">
+        <div class="diff-subsection-title added">Added ({{ section.added|length }})</div>
+        {% for name in section.added %}
+        <div class="diff-item added">+ {{ name }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if section.removed %}
+      <div class="diff-subsection">
+        <div class="diff-subsection-title removed">Removed ({{ section.removed|length }})</div>
+        {% for name in section.removed %}
+        <div class="diff-item removed">- {{ name }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if section.modified %}
+      <div class="diff-subsection">
+        <div class="diff-subsection-title modified">Modified ({{ section.modified|length }})</div>
+        {% for item in section.modified %}
+        <div class="diff-change-detail">
+          <div class="change-field">{{ item.name }}</div>
+          {% for field, change in item.changes.items() %}
+          <div class="change-value">
+            <span class="old-val">{{ field }}: {{ change.old }}</span>
+            <br>&rarr;
+            <span class="new-val">{{ field }}: {{ change.new }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{{ render_collection('scripts', 'Scripts') }}
+{{ render_collection('routes', 'Routes') }}
+{{ render_collection('forms', 'Forms') }}
+{{ render_collection('templates', 'Templates') }}
+{{ render_collection('scheduled_tasks', 'Scheduled Tasks') }}
+{{ render_collection('triggers', 'Triggers') }}
+{{ render_collection('query_reports', 'Query Reports') }}
+{{ render_collection('credentials', 'Credentials') }}
+
+{% endif %}
+
+<script>
+function toggleSection(header) {
+  var body = header.nextElementSibling;
+  var icon = header.querySelector('.section-icon');
+  body.classList.toggle('open');
+  icon.classList.toggle('open');
+}
+</script>
