@@ -6,7 +6,6 @@
   </routes>
   <scripts>
     <script name="cat_fact_handler" language="python"><![CDATA[
-import urllib.request, json
 from app.models import Group, Route as RouteModel
 
 CatFactConfig = DynamicModel.get_or_create('cat_fact_config', {
@@ -14,20 +13,19 @@ CatFactConfig = DynamicModel.get_or_create('cat_fact_config', {
 })
 
 def send_cat_fact():
-    req = urllib.request.Request(
-        'https://catfact.ninja/fact',
-        headers={'User-Agent': 'PythonAppFoundry/1.0'},
-    )
-    resp = urllib.request.urlopen(req, timeout=10)
-    data = json.loads(resp.read())
-    fact = data['fact']
-    row = CatFactConfig.query.first()
-    if row and row.email:
-        html = f'''<h1>&#x1f431; Cat Fact</h1><p>{fact}</p><hr><p style="color:#888;font-size:0.85em;">Sent by Cat Fact Finder</p>'''
-        send_email(row.email, 'Cat Fact from PythonAppFoundry', html, html=True)
-        flash(f'Cat fact sent to {row.email}!')
+    result = call_api('GET', 'https://catfact.ninja/fact')
+    if result['status_code'] == 200:
+        data = result['body']
+        fact = data['fact']
+        row = CatFactConfig.query.first()
+        if row and row.email:
+            html = f'''<h1>&#x1f431; Cat Fact</h1><p>{fact}</p><hr><p style="color:#888;font-size:0.85em;">Sent by Cat Fact Finder</p>'''
+            send_email(row.email, 'Cat Fact from PythonAppFoundry', html, html=True)
+            flash(f'Cat fact sent to {row.email}!')
+        else:
+            flash('No email configured. Save your email first.', 'error')
     else:
-        flash('No email configured. Save your email first.', 'error')
+        flash(f'Failed to get cat fact: {result.get("error", "Unknown error")}', 'error')
 
 if request.method == 'GET':
     row = CatFactConfig.query.first()
@@ -106,24 +104,19 @@ else:
 ]]></script>
 
     <script name="cat_fact_sender" language="python"><![CDATA[
-import urllib.request, json
-
 CatFactConfig = DynamicModel.get_or_create('cat_fact_config', {
     'email': db.String(200),
 })
 
-req = urllib.request.Request(
-    'https://catfact.ninja/fact',
-    headers={'User-Agent': 'PythonAppFoundry/1.0'},
-)
-resp = urllib.request.urlopen(req, timeout=10)
-data = json.loads(resp.read())
-fact = data['fact']
-
-row = CatFactConfig.query.first()
-if row and row.email:
-    html = f'''<h1>&#x1f431; Cat Fact</h1><p>{fact}</p><hr><p style="color:#888;font-size:0.85em;">Sent by Cat Fact Finder</p>'''
-    send_email(row.email, 'Cat Fact from PythonAppFoundry', html, html=True)
+result = call_api('GET', 'https://catfact.ninja/fact')
+if result['status_code'] == 200:
+    data = result['body']
+    fact = data['fact']
+    
+    row = CatFactConfig.query.first()
+    if row and row.email:
+        html = f'''<h1>&#x1f431; Cat Fact</h1><p>{fact}</p><hr><p style="color:#888;font-size:0.85em;">Sent by Cat Fact Finder</p>'''
+        send_email(row.email, 'Cat Fact from PythonAppFoundry', html, html=True)
 ]]></script>
   </scripts>
   <forms>
