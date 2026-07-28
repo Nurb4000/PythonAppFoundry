@@ -116,9 +116,8 @@
 
 <p style="margin-top:1rem;"><a href="{{ url_for('admin.modules.list_modules') }}">&larr; Back to modules</a></p>
 
-<script type="module">
-import * as mermaid from '/static/mermaid.min.js';
-
+<script src="/static/mermaid.min.js"></script>
+<script>
 let graphData = {{ graph_data | tojson }};
 let currentFilter = '';
 
