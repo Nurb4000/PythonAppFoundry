@@ -1,4 +1,134 @@
-<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+<style>
+  .compare-bar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .compare-bar label {
+    font-size: 0.9rem;
+    color: #475569;
+    font-weight: 500;
+  }
+  .compare-bar select {
+    padding: 4px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    min-width: 160px;
+  }
+  .compare-bar button {
+    padding: 5px 14px;
+    background: #7c3aed;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .compare-bar button:hover { background: #6d28d9; }
+  .compare-bar button:disabled { background: #cbd5e1; cursor: not-allowed; }
+  .compare-bar .clear-btn {
+    background: none;
+    color: #dc2626;
+    border: 1px solid #dc2626;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .compare-bar .clear-btn:hover { background: #fef2f2; }
+
+  /* Restore modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    max-width: 520px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal-box h3 { margin-top: 0; }
+  .modal-info { margin-bottom: 1rem; font-size: 0.95rem; color: #334155; }
+  .modal-info strong { color: #1e293b; }
+  .modal-warnings {
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  .modal-warnings .warning-title {
+    font-weight: 600;
+    color: #c2410c;
+    margin-bottom: 0.25rem;
+  }
+  .modal-warnings ul { margin: 0; padding-left: 1.25rem; }
+  .modal-warnings li { margin-bottom: 0.25rem; color: #7c2d12; }
+  .modal-errors {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  .modal-errors .error-title {
+    font-weight: 600;
+    color: #dc2626;
+    margin-bottom: 0.25rem;
+  }
+  .modal-errors ul { margin: 0; padding-left: 1.25rem; }
+  .modal-errors li { margin-bottom: 0.25rem; color: #991b1b; }
+  .modal-safe {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: #166534;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+  }
+  .modal-actions button {
+    padding: 6px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    border: none;
+  }
+  .btn-cancel { background: #f1f5f9; color: #475569; }
+  .btn-cancel:hover { background: #e2e8f0; }
+  .btn-restore { background: #dc2626; color: white; }
+  .btn-restore:hover { background: #b91c1c; }
+  .btn-restore-force { background: #ea580c; color: white; }
+  .btn-restore-force:hover { background: #c2410c; }
+  .dep-checking { color: #888; font-style: italic; font-size: 0.9rem; }
+</style>
+
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
   <a href="{{ url_for('admin.modules.edit_module', id=m.id) }}">Back to Module</a>
   <form method="POST" action="{{ url_for('admin.versions.create_version', module_id=m.id) }}" style="display:inline;flex:1;max-width:400px;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -6,6 +136,28 @@
     <button type="submit" style="padding:6px 16px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;">Create Version</button>
   </form>
 </div>
+
+{% if versions|length > 1 %}
+<div class="compare-bar">
+  <label>Compare:</label>
+  <select id="compareV1">
+    <option value="">Select version...</option>
+    {% for v in versions %}
+    <option value="{{ v.id }}">{{ v.version_number }}</option>
+    {% endfor %}
+  </select>
+  <span style="color:#888;">vs</span>
+  <select id="compareV2">
+    <option value="">Select version...</option>
+    {% for v in versions %}
+    <option value="{{ v.id }}">{{ v.version_number }}</option>
+    {% endfor %}
+  </select>
+  <button id="btnCompare" disabled onclick="doCompare()">Compare</button>
+  <button class="clear-btn" onclick="clearCompare()">Clear</button>
+</div>
+{% endif %}
+
 <div class="table-wrap">
 <table>
 <thead><tr>
@@ -26,10 +178,7 @@
   <td>{% if v.is_current %}<span style="color:#16a34a;font-weight:bold;">Current</span>{% else %}<span style="color:#888;">Past</span>{% endif %}</td>
   <td>
     {% if not v.is_current %}
-    <form method="POST" action="{{ url_for('admin.versions.restore_version', module_id=m.id, version_id=v.id) }}" style="display:inline" onsubmit="return confirm('Restore module to version {{ v.version_number }}? This will replace the current state.')">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" style="background:none;border:none;color:#2563eb;cursor:pointer;text-decoration:underline;padding:0;font:inherit;">Restore</button>
-    </form>
+    <button type="button" onclick="openRestoreModal({{ v.id }}, '{{ v.version_number }}', '{{ (v.comment or '')|replace("'", "\\'") }}', '{{ v.created_at|localtime }}')" style="background:none;border:none;color:#dc2626;cursor:pointer;text-decoration:underline;padding:0;font:inherit;">Restore</button>
     {% endif %}
     |
     {% if loop.length > 1 %}
@@ -40,6 +189,137 @@
 {% endfor %}
 </tbody></table>
 </div>
+
+<div id="restoreModal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Restore Version <span id="modalVersionNum"></span></h3>
+    <div class="modal-info">
+      <strong>Comment:</strong> <span id="modalComment">-</span><br>
+      <strong>Date:</strong> <span id="modalDate">-</span>
+    </div>
+    <div id="modalDepStatus" class="dep-checking">Checking dependencies...</div>
+    <div id="modalDepWarnings" class="modal-warnings" style="display:none;">
+      <div class="warning-title">Dependency Warnings:</div>
+      <ul id="modalDepWarningList"></ul>
+    </div>
+    <div id="modalDepErrors" class="modal-errors" style="display:none;">
+      <div class="error-title">Dependency Errors:</div>
+      <ul id="modalDepErrorList"></ul>
+    </div>
+    <div id="modalDepSafe" class="modal-safe" style="display:none;">
+      No dependency issues detected. Restore should be safe.
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeRestoreModal()">Cancel</button>
+      <button id="btnConfirmRestore" class="btn-restore" style="display:none;" onclick="confirmRestore()">Restore This Version</button>
+      <button id="btnForceRestore" class="btn-restore-force" style="display:none;" onclick="confirmRestore(true)">Restore Anyway (Force)</button>
+    </div>
+  </div>
+</div>
+
+<form id="restoreForm" method="POST" action="" style="display:none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="force" value="false">
+</form>
+
+<script>
+var currentRestoreVersionId = null;
+var currentForce = false;
+
+function openRestoreModal(versionId, versionNum, comment, date) {
+  currentRestoreVersionId = versionId;
+  currentForce = false;
+  document.getElementById('modalVersionNum').textContent = versionNum;
+  document.getElementById('modalComment').textContent = comment || '(none)';
+  document.getElementById('modalDate').textContent = date;
+  document.getElementById('modalDepStatus').style.display = 'block';
+  document.getElementById('modalDepStatus').textContent = 'Checking dependencies...';
+  document.getElementById('modalDepWarnings').style.display = 'none';
+  document.getElementById('modalDepErrors').style.display = 'none';
+  document.getElementById('modalDepSafe').style.display = 'none';
+  document.getElementById('btnConfirmRestore').style.display = 'none';
+  document.getElementById('btnForceRestore').style.display = 'none';
+
+  var url = '{{ url_for("admin.versions.check_restore_deps", module_id=m.id, version_id=99999) }}'.replace('99999', versionId);
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.errors && data.errors.length > 0) {
+        document.getElementById('modalDepStatus').style.display = 'none';
+        var list = document.getElementById('modalDepErrorList');
+        list.innerHTML = '';
+        data.errors.forEach(function(e) {
+          var li = document.createElement('li');
+          li.textContent = e;
+          list.appendChild(li);
+        });
+        document.getElementById('modalDepErrors').style.display = 'block';
+        document.getElementById('btnForceRestore').style.display = 'inline-block';
+        document.getElementById('btnForceRestore').textContent = 'Restore Anyway (Force)';
+      } else if (data.warnings && data.warnings.length > 0) {
+        document.getElementById('modalDepStatus').style.display = 'none';
+        var list = document.getElementById('modalDepWarnings');
+        list.querySelector('ul').innerHTML = '';
+        data.warnings.forEach(function(w) {
+          var li = document.createElement('li');
+          li.textContent = w;
+          list.querySelector('ul').appendChild(li);
+        });
+        document.getElementById('modalDepWarnings').style.display = 'block';
+        document.getElementById('btnConfirmRestore').style.display = 'inline-block';
+        document.getElementById('btnForceRestore').style.display = 'inline-block';
+        document.getElementById('btnForceRestore').textContent = 'Restore Anyway (Force)';
+      } else {
+        document.getElementById('modalDepStatus').style.display = 'none';
+        document.getElementById('modalDepSafe').style.display = 'block';
+        document.getElementById('btnConfirmRestore').style.display = 'inline-block';
+      }
+    })
+    .catch(function() {
+      document.getElementById('modalDepStatus').textContent = 'Could not verify dependencies. Proceeding anyway.';
+      document.getElementById('btnConfirmRestore').style.display = 'inline-block';
+    });
+
+  document.getElementById('restoreModal').classList.add('active');
+}
+
+function closeRestoreModal() {
+  document.getElementById('restoreModal').classList.remove('active');
+  currentRestoreVersionId = null;
+}
+
+function confirmRestore(force) {
+  if (!currentRestoreVersionId) return;
+  var form = document.getElementById('restoreForm');
+  form.action = '{{ url_for("admin.versions.restore_version", module_id=m.id, version_id=99999) }}'.replace('99999', currentRestoreVersionId);
+  form.querySelector('[name=force]').value = force ? 'true' : 'false';
+  form.submit();
+}
+
+function doCompare() {
+  var v1 = document.getElementById('compareV1').value;
+  var v2 = document.getElementById('compareV2').value;
+  if (v1 && v2 && v1 !== v2) {
+    window.location.href = '{{ url_for("admin.versions.compare_versions", module_id=m.id) }}?v1=' + v1 + '&v2=' + v2;
+  }
+}
+
+function clearCompare() {
+  document.getElementById('compareV1').value = '';
+  document.getElementById('compareV2').value = '';
+  document.getElementById('btnCompare').disabled = true;
+}
+
+document.getElementById('compareV1').addEventListener('change', updateCompareBtn);
+document.getElementById('compareV2').addEventListener('change', updateCompareBtn);
+
+function updateCompareBtn() {
+  var v1 = document.getElementById('compareV1').value;
+  var v2 = document.getElementById('compareV2').value;
+  document.getElementById('btnCompare').disabled = !(v1 && v2 && v1 !== v2);
+}
+</script>
+
 {% if not versions %}
 <p style="color:#888;">No versions created yet. Create a version to start tracking changes.</p>
 {% endif %}
