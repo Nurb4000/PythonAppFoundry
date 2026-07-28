@@ -2,6 +2,7 @@ from flask import Blueprint, request, redirect, url_for, Response, flash
 import csv, io
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, render_admin
+from app.services.exporters import _export_json, _export_xlsx, _export_pdf
 from app import db
 from app.models import IncomingEmail
 
@@ -29,14 +30,22 @@ def list_incoming_emails():
         q = q.order_by(IncomingEmail.created_at.desc())
     emails = q.all()
 
-    if request.args.get('format') == 'csv':
+    columns = ['id', 'message_id', 'subject', 'from_address', 'to_address', 'processed', 'created_at']
+    fmt = request.args.get('format', '')
+    if fmt == 'csv':
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(['id', 'message_id', 'subject', 'from_address', 'to_address', 'processed', 'created_at'])
+        w.writerow(columns)
         for e in emails:
             w.writerow([e.id, e.message_id, e.subject, e.from_address, e.to_address, e.processed, e.created_at])
         return Response(buf.getvalue(), mimetype='text/csv',
             headers={'Content-Disposition': 'attachment; filename=incoming_emails.csv'})
+    if fmt == 'json':
+        return _export_json('incoming_emails', columns, emails, False)
+    if fmt == 'xlsx':
+        return _export_xlsx('incoming_emails', columns, emails, False)
+    if fmt == 'pdf':
+        return _export_pdf('incoming_emails', columns, emails, False)
 
     return render_admin('Incoming Emails', 'admin/incoming_email/list.html', emails=emails, sort_col=sort_col, sort_order=sort_order, search=search)
 

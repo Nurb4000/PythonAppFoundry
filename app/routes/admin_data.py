@@ -7,6 +7,7 @@ from sqlalchemy.sql import func
 from sqlalchemy import Table
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, developer_or_admin_required, render_admin
+from app.services.exporters import _export_json, _export_xlsx, _export_pdf
 from app import db
 from app.models import Script, DynamicTableRegistry, Module
 from app.services.audit import log_audit
@@ -99,14 +100,22 @@ def list_tables():
     elif sort_col == 'module':
         tables.sort(key=lambda t: t['module'], reverse=rev)
 
-    if request.args.get('format') == 'csv':
+    columns = ['table', 'rows', 'module']
+    fmt = request.args.get('format', '')
+    if fmt == 'csv':
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(['table', 'rows', 'module'])
+        w.writerow(columns)
         for t in tables:
             w.writerow([t['name'], t['count'], t['module']])
         return Response(buf.getvalue(), mimetype='text/csv',
             headers={'Content-Disposition': 'attachment; filename=tables.csv'})
+    if fmt == 'json':
+        return _export_json('tables', columns, tables, False)
+    if fmt == 'xlsx':
+        return _export_xlsx('tables', columns, tables, False)
+    if fmt == 'pdf':
+        return _export_pdf('tables', columns, tables, False)
 
     module_names = sorted(set(
         m.name for m in Module.query.order_by(Module.name).all()
@@ -133,10 +142,12 @@ def browse_table(table_name):
 
     total_pages = max(1, (total + per_page - 1) // per_page)
 
-    if request.args.get('format') == 'csv':
+    col_names = [c.name for c in columns]
+    fmt = request.args.get('format', '')
+    if fmt == 'csv':
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow([c.name for c in columns])
+        w.writerow(col_names)
         all_rows = db.session.execute(table.select()).mappings().fetchall()
         for row in all_rows:
             w.writerow([str(row.get(c.name, '') or '') for c in columns])
@@ -145,6 +156,10 @@ def browse_table(table_name):
             mimetype='text/csv',
             headers={'Content-Disposition': f'attachment; filename="{table_name}.csv"'},
         )
+    if fmt in ('json', 'xlsx', 'pdf'):
+        all_rows = db.session.execute(table.select()).mappings().fetchall()
+        exporter = {'json': _export_json, 'xlsx': _export_xlsx, 'pdf': _export_pdf}[fmt]
+        return exporter(table_name, col_names, all_rows, False)
 
     return render_admin('Browse: ' + table_name, 'admin/data/browse.html', table_name=table_name, columns=columns, rows=rows, page=page, total=total, total_pages=total_pages)
 

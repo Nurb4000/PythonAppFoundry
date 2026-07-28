@@ -7,7 +7,7 @@ This module provides common patterns used across admin routes:
 - Attribute proxy for list views
 - Render helper for admin pages
 - List view factory
-- CSV export utility
+- Multi-format export utility (CSV, JSON, XLSX, PDF)
 """
 from datetime import datetime as _datetime, timezone as _tz
 from functools import wraps
@@ -17,6 +17,7 @@ import csv, io
 
 from app import db
 from app.models import Module, Setting
+from app.services.exporters import EXPORT_FORMATS
 
 
 def admin_required(f):
@@ -136,8 +137,11 @@ def list_view(model, name_plural, columns, edit_endpoint, new_endpoint, show_vie
 
     rows = q.all()
 
-    if request.args.get('format') == 'csv':
+    fmt = request.args.get('format', '')
+    if fmt == 'csv':
         return _export_csv(name_plural, columns, rows, has_module)
+    if fmt in EXPORT_FORMATS:
+        return EXPORT_FORMATS[fmt](name_plural, columns, rows, has_module)
 
     modules = db.session.query(Module).order_by(Module.name).all() if has_module else []
 

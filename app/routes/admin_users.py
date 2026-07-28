@@ -2,6 +2,7 @@ from flask import Blueprint, request, redirect, url_for, Response, flash
 import csv, io
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import admin_required, render_admin
+from app.services.exporters import _export_json, _export_xlsx, _export_pdf
 from app import db
 from app.models import User
 from app.services.audit import log_audit
@@ -23,14 +24,22 @@ def list_users():
     users = q.all()
     pending = db.session.query(User).filter_by(is_approved=False).count()
 
-    if request.args.get('format') == 'csv':
+    fmt = request.args.get('format', '')
+    columns = ['id', 'username', 'role', 'is_active', 'is_approved', 'created_at']
+    if fmt == 'csv':
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(['id', 'username', 'role', 'is_active', 'is_approved', 'created_at'])
+        w.writerow(columns)
         for u in users:
             w.writerow([u.id, u.username, u.role, u.is_active, u.is_approved, u.created_at])
         return Response(buf.getvalue(), mimetype='text/csv',
             headers={'Content-Disposition': 'attachment; filename=users.csv'})
+    if fmt == 'json':
+        return _export_json('users', columns, users, False)
+    if fmt == 'xlsx':
+        return _export_xlsx('users', columns, users, False)
+    if fmt == 'pdf':
+        return _export_pdf('users', columns, users, False)
 
     return render_admin('Users', 'admin/users/list.html', users=users, pending=pending, sort_col=sort_col, sort_order=sort_order)
 
