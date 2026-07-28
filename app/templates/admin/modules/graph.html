@@ -117,7 +117,7 @@
 <p style="margin-top:1rem;"><a href="{{ url_for('admin.modules.list_modules') }}">&larr; Back to modules</a></p>
 
 <script type="module">
-import mermaid from '/static/mermaid.min.js';
+import * as mermaid from '/static/mermaid.min.js';
 
 let graphData = {{ graph_data | tojson }};
 let currentFilter = '';
@@ -139,7 +139,6 @@ function escapeId(slug) {
 function buildDiagram(data, filterSlug) {
   let definition = 'graph LR\n';
   definition += '  classDef cycleNode fill:#f8d7da,stroke:#f5c2c7,color:#721c24;';
-  definition += '  classDef isolatedNode fill:#fff3cd,stroke:#ffeaa7,color:#856404;';
 
   const cycleSlugs = new Set();
   for (const cycle of data.cycles) {
@@ -179,7 +178,7 @@ function buildDiagram(data, filterSlug) {
   return definition;
 }
 
-function renderGraph() {
+async function renderGraph() {
   const statusEl = document.getElementById('graph-status');
   statusEl.textContent = 'Rendering...';
 
@@ -187,7 +186,7 @@ function renderGraph() {
   const container = document.getElementById('mermaid-graph');
 
   try {
-    const { svg } = mermaid.render('mermaid-graph', definition);
+    const { svg } = await mermaid.render('mermaid-graph', definition);
     container.innerHTML = svg;
     statusEl.textContent = graphData.nodes.length + ' modules, ' + graphData.edges.length + ' dependencies';
   } catch (e) {
@@ -245,7 +244,7 @@ window.rescanAll = async function() {
   statusEl.textContent = 'Scanning all modules...';
   
   try {
-    const response = await fetch('/__admin/modules/scan-all-dependencies', {
+    const response = await fetch('{{ url_for("admin.modules.scan_all_dependencies") }}', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });

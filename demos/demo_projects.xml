@@ -18,7 +18,7 @@ rows = projects.query.order_by(projects.created_at.desc()).all()
 
 html = '<h1>Projects List</h1>'
 html += '<p>Browse projects. <a href="/projects/add">Add new project</a></p>'
-html += '<p>This module is referenced by the <a href="' + url_for('demo_contacts.list_contacts') + '">Contacts module</a>, forming a dependency cycle for demo purposes.</p>'
+html += '<p>This module is referenced by the <a href="' + url_for('dynamic.handle_dynamic', slug='demo-contacts') + '">Contacts module</a>, forming a dependency cycle for demo purposes.</p>'
 
 if rows:
     html += '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f4f4f4;">'
@@ -54,11 +54,11 @@ if request.method == 'POST':
     db.session.add(entry)
     db.session.commit()
     flash('Project added!')
-    return redirect(url_for('demo_projects.list_projects'))
+    return redirect(url_for('dynamic.handle_dynamic', slug='projects'))
 
 html = '<h1>Add Project</h1>'
 html += render_form(action='/projects/add')
-html += '<p style="margin-top:1rem;"><a href="' + url_for('demo_contacts.list_contacts') + '">Back to Contacts (cross-module link)</a></p>'
+html += '<p style="margin-top:1rem;"><a href="' + url_for('dynamic.handle_dynamic', slug='demo-contacts') + '">Back to Contacts (cross-module link)</a></p>'
 _result = render(html)
 ]]></script>
   </scripts>
