@@ -1,7 +1,15 @@
 <div style="margin-bottom:1rem;">
   <a href="{{ url_for('admin.data.list_tables') }}">&larr; All Tables</a>
   | <a href="{{ url_for('admin.data.new_row', table_name=table_name) }}">+ New Row</a>
-  | <a href="?format=csv">Export CSV</a>
+  <span style="float:left;margin-left:1rem;">
+    <select onchange="if(this.value)window.location.href=this.value" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.9em;">
+      <option value="">Export&hellip;</option>
+      <option value="?format=csv">Export CSV</option>
+      <option value="?format=json">Export JSON</option>
+      <option value="?format=xlsx">Export Excel (.xlsx)</option>
+      <option value="?format=pdf">Export PDF</option>
+    </select>
+  </span>
   <span style="float:right;">Page {{ page }} / {{ total_pages }} ({{ total }} rows)</span>
 </div>
 <table>

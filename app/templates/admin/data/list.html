@@ -9,7 +9,13 @@
     {% if sort_col %}<input name="sort" type="hidden" value="{{ sort_col }}">{% endif %}
     {% if sort_order %}<input name="order" type="hidden" value="{{ sort_order }}">{% endif %}
   </form>
-  <a href="?format=csv{% if filter_module %}&module={{ filter_module }}{% endif %}" style="margin-left:auto;">Export CSV</a>
+  <select onchange="if(this.value)window.location.href=this.value" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.9em;">
+    <option value="">Export&hellip;</option>
+    <option value="?format=csv{% if filter_module %}&module={{ filter_module }}{% endif %}">Export CSV</option>
+    <option value="?format=json{% if filter_module %}&module={{ filter_module }}{% endif %}">Export JSON</option>
+    <option value="?format=xlsx{% if filter_module %}&module={{ filter_module }}{% endif %}">Export Excel (.xlsx)</option>
+    <option value="?format=pdf{% if filter_module %}&module={{ filter_module }}{% endif %}">Export PDF</option>
+  </select>
 </div>
 <div class="table-wrap">
 <table>
