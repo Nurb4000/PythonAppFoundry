@@ -273,7 +273,7 @@ window.rescanAll = async function() {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
-        'X-CSRFToken': csrfToken
+        'X-CSRF-Token': csrfToken
       }
     });
     if (response.ok) {
