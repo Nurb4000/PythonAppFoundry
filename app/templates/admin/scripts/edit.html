@@ -193,7 +193,12 @@ function enhanceAI() {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
     body: JSON.stringify({ source_code: sourceCode, script_name: '{{ s.name }}', instructions: instructions })
   })
-  .then(function(r) { return r.json(); })
+  .then(function(r) {
+    if (!r.ok) {
+      return r.text().then(function(text) { throw new Error('Request failed with status ' + r.status); });
+    }
+    return r.json();
+  })
   .then(function(data) {
     if (!data.success) {
       resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> ' + escapeHtml(data.error) + '</div>';
