@@ -157,12 +157,12 @@ Every admin list view and the data browser supports multi-format export via a dr
 
 **Available formats:**
 
-| Format | Use case |
-|--------|----------|
-| **CSV** | Spreadsheet import, plain-text processing, legacy compatibility |
-| **JSON** | API consumption, programmatic processing, developer workflows |
-| **Excel (.xlsx)** | Reports for non-technical users, pivot tables, formatting |
-| **PDF** | Printed reports, email attachments, formal documentation |
+| Format | Content | Use case |
+|--------|---------|----------|
+| **CSV** | Data only | Spreadsheet import, plain-text processing, legacy compatibility |
+| **JSON** | Data + metadata (+ chart config for queries) | API consumption, programmatic processing, developer workflows |
+| **Excel (.xlsx)** | Data + metadata | Reports for non-technical users, pivot tables, formatting |
+| **PDF** | Data + metadata | Printed reports, email attachments, formal documentation |
 
 **Where export is available:**
 
@@ -172,7 +172,9 @@ Every admin list view and the data browser supports multi-format export via a dr
 
 **Query report exports:**
 
-When you run a query, the results page includes Export JSON / Excel / PDF buttons at the top. This downloads the actual query result set (not just the list view data). The JSON export includes column names, row count, and the raw data structured for programmatic use.
+When you run a query, the results page includes Export JSON / Excel / PDF buttons at the top. This downloads the actual query result set (not just the list view data). The JSON export includes column names, row count, chart configuration, and the raw data structured for programmatic use.
+
+**Note on charts:** Charts visible in the web UI (bar, line, pie) are client-side renderings via Chart.js and are not currently included in exports. Exported files contain the underlying data tables only. Chart visualization is available by viewing results in the web UI.
 
 **URL pattern:**
 
