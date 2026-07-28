@@ -5,7 +5,16 @@ _sandbox_env = ImmutableSandboxedEnvironment(
     autoescape=True,
     undefined=jinja2.StrictUndefined,
 )
+
+# Add commonly used filters that may not be in the sandbox by default
 _sandbox_env.filters['split'] = lambda s, sep=',': s.split(sep) if sep else s.split()
+_sandbox_env.filters['dict'] = dict
+_sandbox_env.filters['keys'] = lambda d: d.keys() if isinstance(d, dict) else []
+_sandbox_env.filters['values'] = lambda d: d.values() if isinstance(d, dict) else []
+_sandbox_env.filters['cycle'] = lambda *args: args[0] if args else ''
+_sandbox_env.filters['date'] = lambda d, fmt='%Y-%m-%d': d.strftime(fmt) if d else ''
+_sandbox_env.filters['time'] = lambda d, fmt='%H:%M': d.strftime(fmt) if d else ''
+_sandbox_env.filters['datetime'] = lambda d, fmt='%Y-%m-%d %H:%M': d.strftime(fmt) if d else ''
 
 
 def render_db_template(template_body, **context):
