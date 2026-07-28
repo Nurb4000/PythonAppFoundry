@@ -157,12 +157,6 @@ function buildDiagram(data, filterSlug) {
 
   const filteredEdges = filterSlug ? data.edges.filter(e => 
     e.source === filterSlug || e.target === filterSlug) : data.edges;
-  
-  if (filterSlug) {
-    console.log('Filtered to module:', filterSlug);
-    console.log('Filtered nodes:', filteredNodes.length, 'of', data.nodes.length);
-    console.log('Filtered edges:', filteredEdges.length, 'of', data.edges.length);
-  }
 
   definition += '  classDef cycleNode fill:#f8d7da,stroke:#f5c2c7,color:#721c24;\n';
 
@@ -198,10 +192,15 @@ function buildDiagram(data, filterSlug) {
 
 async function renderGraph() {
   const statusEl = document.getElementById('graph-status');
+  if (!statusEl) return;
   statusEl.textContent = 'Rendering...';
 
   const definition = buildDiagram(graphData, currentFilter);
   const container = document.getElementById('mermaid-graph');
+  if (!container) {
+    console.error('Mermaid container not found');
+    return;
+  }
 
   try {
     const result = await mermaid.render('mermaid-graph', definition);
@@ -251,8 +250,6 @@ function populateFilter() {
 window.filterGraph = function() {
   const select = document.getElementById('module-filter');
   currentFilter = select.value;
-  console.log('Filter set to:', currentFilter);
-  console.log('Total nodes:', graphData.nodes.length, 'edges:', graphData.edges.length);
   renderGraph();
 };
 
