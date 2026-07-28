@@ -367,18 +367,16 @@ def create_app(config_class=None):
         from app.services.credential_store import init_credential_store
         from app.services.async_executor import _get_pool
         init_credential_store(app)
-        _debug = os.environ.get('APP_DEBUG', 'true').lower() in ('1', 'true', 'yes')
-        if not _debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-            init_scheduler(app)
-            # Initialize async executor pool if there are scheduled tasks
-            try:
-                from app.models import ScheduledTask
-                task_count = db.session.query(ScheduledTask).filter_by(enabled=True).count()
-                if task_count > 0:
-                    _get_pool()  # Force pool initialization
-                    logger.info(f'Initialized async executor pool ({task_count} scheduled tasks)')
-            except Exception as e:
-                logger.warning(f'Failed to initialize async executor: {e}')
+        init_scheduler(app)
+        # Initialize async executor pool if there are scheduled tasks
+        try:
+            from app.models import ScheduledTask
+            task_count = db.session.query(ScheduledTask).filter_by(enabled=True).count()
+            if task_count > 0:
+                _get_pool()  # Force pool initialization
+                logger.info(f'Initialized async executor pool ({task_count} scheduled tasks)')
+        except Exception as e:
+            logger.warning(f'Failed to initialize async executor: {e}')
 
         # Clean up duplicate route slugs — keep only the first for each slug
         seen = set()

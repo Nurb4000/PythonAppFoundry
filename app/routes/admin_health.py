@@ -46,8 +46,18 @@ def health_page():
             async_status['status'] = 'error'
             async_status['message'] = 'unable to check queue'
     else:
-        async_status['status'] = 'warning'
-        async_status['message'] = 'not initialized'
+        try:
+            from app.models import ScheduledTask as ST
+            st_count = db.session.query(ST).filter_by(enabled=True).count()
+            if st_count > 0:
+                async_status['status'] = 'warning'
+                async_status['message'] = 'not initialized'
+            else:
+                async_status['status'] = 'ok'
+                async_status['message'] = 'idle (no scheduled tasks)'
+        except Exception:
+            async_status['status'] = 'ok'
+            async_status['message'] = 'idle (will initialize on first webhook/task)'
     
     # Dead letter queue
     dlq = get_dead_letter_queue()
