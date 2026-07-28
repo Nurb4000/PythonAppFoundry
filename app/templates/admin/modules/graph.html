@@ -196,8 +196,12 @@ async function renderGraph() {
   const container = document.getElementById('mermaid-graph');
   
   console.log('Mermaid definition:', definition);
+  console.log('Mermaid object:', typeof mermaid, Object.keys(mermaid).slice(0, 10));
 
   try {
+    if (typeof mermaid.render !== 'function') {
+      throw new Error('mermaid.render is not a function. Available methods: ' + Object.keys(mermaid).filter(k => typeof mermaid[k] === 'function').join(', '));
+    }
     const { svg } = await mermaid.render('mermaid-graph', definition);
     container.innerHTML = svg;
     statusEl.textContent = graphData.nodes.length + ' modules, ' + graphData.edges.length + ' dependencies';
