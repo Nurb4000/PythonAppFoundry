@@ -352,8 +352,7 @@ def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_dat
 
     # Draw chart as a flowable
     if chart_data and chart_data.get('datasets'):
-        from reportlab.platypus import Drawing as RLDrawing
-        from reportlab.lib import sizes
+        from reportlab.graphics import Drawing as RLDrawing
 
         chart_type = chart_data.get('type', 'bar')
         draw_width = letter[0] - inch
