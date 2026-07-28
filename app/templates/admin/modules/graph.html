@@ -278,8 +278,12 @@ window.rescanAll = async function() {
     });
     if (response.ok) {
       const result = await response.json();
-      statusEl.textContent = 'Scan complete. Refreshing graph...';
-      location.reload();
+      if (result.errors && result.errors.length > 0) {
+        statusEl.textContent = 'Scan complete with errors: ' + result.errors.join(', ');
+      } else {
+        statusEl.textContent = 'Scan complete. Refreshing graph...';
+        location.reload();
+      }
     } else {
       statusEl.textContent = 'Scan failed. Status: ' + response.status;
     }

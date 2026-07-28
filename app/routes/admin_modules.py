@@ -282,14 +282,18 @@ def api_graph():
 @csrf_protect
 def scan_all_dependencies():
     from app.services.dependencies import detect_dependencies
+    from app.models import Module
     modules = Module.query.all()
     total_found = 0
+    errors = []
     for m in modules:
         try:
             deps_found = detect_dependencies(m.id)
             total_found += len(deps_found)
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f'{m.name}: {str(e)}')
+    if errors:
+        return jsonify({'status': 'complete_with_errors', 'modules_scanned': len(modules), 'dependencies_found': total_found, 'errors': errors}), 200
     return jsonify({'status': 'complete', 'modules_scanned': len(modules), 'dependencies_found': total_found})
 
 
