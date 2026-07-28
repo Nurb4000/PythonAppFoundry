@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Demo Contacts" slug="demo-contacts" version="1.0.0" author="PythonAppFoundry">
+  <description>Demo module for contacts management. References the demo-projects module to show cross-module dependency and cycle detection in the Dependency Graph view.</description>
+  <routes>
+    <route slug="/contacts" method="GET" title="Contacts List" auth_required="false" script="list_contacts"/>
+    <route slug="/contacts/add" method="GET,POST" title="Add Contact" auth_required="false" script="add_contact" form="contact_form"/>
+  </routes>
+  <scripts>
+    <script name="list_contacts" language="python"><![CDATA[
+contacts = DynamicModel.get_or_create('demo_contacts_list', {
+    'name': db.String(100),
+    'email': db.String(100),
+    'company': db.String(100),
+    'created_at': db.DateTime,
+})
+
+rows = contacts.query.order_by(contacts.created_at.desc()).all()
+
+html = '<h1>Contact List</h1>'
+html += '<p>Viewing contacts. <a href="/contacts/add">Add new contact</a></p>'
+html += '<p>This module references the <a href="' + url_for('demo_projects.index') + '">Projects module</a> to demonstrate cross-module dependency.</p>'
+
+if rows:
+    html += '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f4f4f4;">'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Name</th>'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Email</th>'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Company</th>'
+    html += '</tr></thead><tbody>'
+    for r in rows:
+        html += '<tr><td style="padding:0.5rem;border-bottom:1px solid #eee;">' + str(r.name) + '</td>'
+        html += '<td style="padding:0.5rem;border-bottom:1px solid #eee;">' + str(r.email) + '</td>'
+        html += '<td style="padding:0.5rem;border-bottom:1px solid #eee;">' + str(r.company) + '</td></tr>'
+    html += '</tbody></table>'
+else:
+    html += '<p style="color:#888;">No contacts yet.</p>'
+
+_result = render(html)
+]]></script>
+    <script name="add_contact" language="python"><![CDATA[
+if request.method == 'POST':
+    contacts = DynamicModel.get_or_create('demo_contacts_list', {
+        'name': db.String(100),
+        'email': db.String(100),
+        'company': db.String(100),
+        'created_at': db.DateTime,
+    })
+    entry = contacts(
+        name=request.form.get('name', ''),
+        email=request.form.get('email', ''),
+        company=request.form.get('company', ''),
+        created_at=datetime.now(timezone.utc),
+    )
+    db.session.add(entry)
+    db.session.commit()
+    flash('Contact added!')
+    return redirect(url_for('demo_contacts.list_contacts'))
+
+html = '<h1>Add Contact</h1>'
+html += render_form(action='/contacts/add')
+html += '<p style="margin-top:1rem;"><a href="' + url_for('demo_projects.index') + '">Back to Projects (cross-module link)</a></p>'
+_result = render(html)
+]]></script>
+  </scripts>
+  <forms>
+    <form name="contact_form"><![CDATA[[
+  {"name":"name","type":"text","label":"Contact Name","required":true,"placeholder":"Enter name"},
+  {"name":"email","type":"email","label":"Email","required":true,"placeholder":"you@example.com"},
+  {"name":"company","type":"text","label":"Company","required":false,"placeholder":"Company name"}
+ ]]]></form>
+  </forms>
+</module>

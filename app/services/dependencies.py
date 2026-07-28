@@ -117,3 +117,78 @@ def get_dependency_count(module_id):
 def has_dependencies(module_id):
     """Check if a module has any dependencies (other modules reference it)."""
     return get_dependency_count(module_id) > 0
+
+
+def detect_cycles():
+    """Detect cycles in the module dependency graph using DFS with coloring.
+
+    Returns a list of cycles, where each cycle is a list of module slugs
+    forming the circular dependency (e.g., ['alpha', 'beta', 'gamma'] means
+    alpha -> beta -> gamma -> alpha).
+    """
+    from collections import defaultdict
+
+    adjacency = defaultdict(set)
+    all_module_ids = {m.id: m.slug for m in Module.query.all()}
+
+    deps = ModuleDependency.query.all()
+    for dep in deps:
+        src_slug = all_module_ids.get(dep.source_module_id)
+        tgt_slug = all_module_ids.get(dep.target_module_id)
+        if src_slug and tgt_slug and src_slug != tgt_slug:
+            adjacency[src_slug].add(tgt_slug)
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {slug: WHITE for slug in all_module_ids.values()}
+    parent = {}
+    cycles = []
+
+    def dfs(node):
+        color[node] = GRAY
+        for neighbor in adjacency.get(node, set()):
+            if color.get(neighbor) == GRAY:
+                cycle = []
+                curr = node
+                while curr != neighbor:
+                    cycle.append(curr)
+                    curr = parent.get(curr)
+                    if curr is None:
+                        break
+                cycle.append(neighbor)
+                cycle.reverse()
+                cycles.append(cycle)
+            elif color.get(neighbor, BLACK) == WHITE:
+                parent[neighbor] = node
+                dfs(neighbor)
+        color[node] = BLACK
+
+    for slug in all_module_ids.values():
+        if color[slug] == WHITE:
+            dfs(slug)
+
+    return cycles
+
+
+def get_graph_data():
+    """Get the full dependency graph as nodes and edges for visualization."""
+    modules = Module.query.all()
+    nodes = [{'id': m.id, 'name': m.name, 'slug': m.slug} for m in modules]
+
+    deps = ModuleDependency.query.all()
+    edges = []
+    seen = set()
+    for dep in deps:
+        key = (dep.source_module_id, dep.target_module_id, dep.dependency_type)
+        if key not in seen:
+            seen.add(key)
+            src = db.session.get(Module, dep.source_module_id)
+            tgt = db.session.get(Module, dep.target_module_id)
+            if src and tgt:
+                edges.append({
+                    'source': src.slug,
+                    'target': tgt.slug,
+                    'type': dep.dependency_type
+                })
+
+    cycles = detect_cycles()
+    return {'nodes': nodes, 'edges': edges, 'cycles': cycles}

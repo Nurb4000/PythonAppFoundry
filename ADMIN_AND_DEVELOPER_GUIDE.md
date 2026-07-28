@@ -94,6 +94,17 @@ Modules can reference other modules' routes/scripts by slug. The system tracks t
 
 This prevents the common issue of deleting a module and having other modules silently break because they reference deleted routes or scripts.
 
+#### Dependency Graph View
+
+Navigate to **Modules → Dependency Graph** (`/__admin/modules/graph`) for an interactive visualization of all module dependencies:
+
+- **Visual graph**: Modules are nodes, dependency edges show which module references which. Route references use solid lines, script references use dashed lines.
+- **Cycle detection**: Circular dependencies (A → B → A) are highlighted in red with an alert listing each cycle found. Cycles can cause issues during module deletion or refactoring.
+- **Filter**: Use the dropdown to isolate a single module and see only its direct connections.
+- **Scan All**: Click "Scan All for Dependencies" to re-scan every module's scripts for cross-module references and refresh the graph.
+
+Import `demos/demo_contacts.xml` and `demos/demo_projects.xml` to see cycle detection in action — these two modules reference each other intentionally for demonstration purposes.
+
 ### Routes
 URLs that the site responds to. Each route points to a script and optionally a form.
 
@@ -583,6 +594,7 @@ Email settings are managed via **Admin → Settings** in the GUI. Scripts use `s
 - **Module cloning**: Use the "Clone" button on the Modules list to duplicate a module as a starting point. The clone gets "(copy)" appended to its name and slug.
 - **Route group access**: When editing a route, you can restrict it to specific groups. Users must be logged in AND belong to at least one of the selected groups to access the route. Leave groups empty to allow any authenticated user.
 - **Dependency viewer**: Click the red dependency count in the Modules list to see which modules reference a given module, including the type and value of each reference. Run "Scan" on the module first to detect its references to other modules.
+- **Dependency graph**: Visit the Dependency Graph page for a visual overview of all module relationships. Useful for spotting circular dependencies before making changes that could break multiple modules.
 - **System modules** — The **System Automation** module is auto-created on first start and cannot be deleted. Use it for platform-wide scripts, queries, and scheduled tasks. If you break it, use the **Reset** button (visible in the Modules list) to wipe all its resources back to empty.
 - **Query reports are module-scoped** — Like routes and scripts, queries now belong to a module. Create queries under the **System Automation** module for platform-wide visibility, or under app modules for app-specific reporting.
 - **Use `get_credential()` instead of hardcoding secrets** — Store API keys, tokens, and passwords in the Credentials admin page. They're encrypted at rest and module-scoped. Scripts call `get_credential('name')` to retrieve them — never put secrets in script source code.

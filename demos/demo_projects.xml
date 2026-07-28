@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module name="Demo Projects" slug="demo-projects" version="1.0.0" author="PythonAppFoundry">
+  <description>Demo module for project tracking. References the demo-contacts module to demonstrate a dependency cycle for the graph visualization feature.</description>
+  <routes>
+    <route slug="/projects" method="GET" title="Projects List" auth_required="false" script="list_projects"/>
+    <route slug="/projects/add" method="GET,POST" title="Add Project" auth_required="false" script="add_project" form="project_form"/>
+  </routes>
+  <scripts>
+    <script name="list_projects" language="python"><![CDATA[
+projects = DynamicModel.get_or_create('demo_projects_list', {
+    'title': db.String(100),
+    'status': db.String(50),
+    'contact_id': db.Integer,
+    'created_at': db.DateTime,
+})
+
+rows = projects.query.order_by(projects.created_at.desc()).all()
+
+html = '<h1>Projects List</h1>'
+html += '<p>Browse projects. <a href="/projects/add">Add new project</a></p>'
+html += '<p>This module is referenced by the <a href="' + url_for('demo_contacts.list_contacts') + '">Contacts module</a>, forming a dependency cycle for demo purposes.</p>'
+
+if rows:
+    html += '<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f4f4f4;">'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Title</th>'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Status</th>'
+    html += '<th style="padding:0.5rem;text-align:left;border-bottom:2px solid #ddd;">Created</th>'
+    html += '</tr></thead><tbody>'
+    for r in rows:
+        date_str = r.created_at.strftime('%Y-%m-%d') if r.created_at else ''
+        html += '<tr><td style="padding:0.5rem;border-bottom:1px solid #eee;">' + str(r.title) + '</td>'
+        html += '<td style="padding:0.5rem;border-bottom:1px solid #eee;">' + str(r.status) + '</td>'
+        html += '<td style="padding:0.5rem;border-bottom:1px solid #eee;">' + date_str + '</td></tr>'
+    html += '</tbody></table>'
+else:
+    html += '<p style="color:#888;">No projects yet.</p>'
+
+_result = render(html)
+]]></script>
+    <script name="add_project" language="python"><![CDATA[
+if request.method == 'POST':
+    projects = DynamicModel.get_or_create('demo_projects_list', {
+        'title': db.String(100),
+        'status': db.String(50),
+        'contact_id': db.Integer,
+        'created_at': db.DateTime,
+    })
+    entry = projects(
+        title=request.form.get('title', ''),
+        status=request.form.get('status', 'planning'),
+        contact_id=None,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.session.add(entry)
+    db.session.commit()
+    flash('Project added!')
+    return redirect(url_for('demo_projects.list_projects'))
+
+html = '<h1>Add Project</h1>'
+html += render_form(action='/projects/add')
+html += '<p style="margin-top:1rem;"><a href="' + url_for('demo_contacts.list_contacts') + '">Back to Contacts (cross-module link)</a></p>'
+_result = render(html)
+]]></script>
+  </scripts>
+  <forms>
+    <form name="project_form"><![CDATA[[
+  {"name":"title","type":"text","label":"Project Title","required":true,"placeholder":"Enter project title"},
+  {"name":"status","type":"select","label":"Status","required":true,"options":"planning,in progress,completed,on hold"}
+ ]]]></form>
+  </forms>
+</module>

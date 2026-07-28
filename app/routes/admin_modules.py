@@ -261,6 +261,38 @@ def view_dependencies(module_id):
     return render_admin(f'Dependencies: {m.name}', 'admin/modules/dependencies.html', m=m, deps=deps)
 
 
+@modules_bp.route('/graph')
+@developer_or_admin_required
+def module_graph():
+    from app.services.dependencies import get_graph_data
+    data = get_graph_data()
+    return render_admin('Module Dependency Graph', 'admin/modules/graph.html', graph_data=data)
+
+
+@modules_bp.route('/api/graph')
+@developer_or_admin_required
+def api_graph():
+    from app.services.dependencies import get_graph_data
+    data = get_graph_data()
+    return jsonify(data)
+
+
+@modules_bp.route('/scan-all-dependencies', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def scan_all_dependencies():
+    from app.services.dependencies import detect_dependencies
+    modules = Module.query.all()
+    total_found = 0
+    for m in modules:
+        try:
+            deps_found = detect_dependencies(m.id)
+            total_found += len(deps_found)
+        except Exception:
+            pass
+    return jsonify({'status': 'complete', 'modules_scanned': len(modules), 'dependencies_found': total_found})
+
+
 DEPENDENCIES_TEMPLATE_REMOVED = True
 
 
