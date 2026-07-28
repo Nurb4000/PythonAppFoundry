@@ -196,22 +196,28 @@ async function renderGraph() {
   statusEl.textContent = 'Rendering...';
 
   const definition = buildDiagram(graphData, currentFilter);
-  const container = document.getElementById('mermaid-graph');
-  if (!container) {
-    console.error('Mermaid container not found');
-    return;
-  }
 
   try {
     const result = await mermaid.render('mermaid-graph', definition);
-    if (result && result.svg) {
+    const container = document.getElementById('mermaid-graph');
+    if (result && result.svg && container) {
       container.innerHTML = result.svg;
       statusEl.textContent = graphData.nodes.length + ' modules, ' + graphData.edges.length + ' dependencies';
+    } else if (!container) {
+      console.warn('Container disappeared after render, recreating...');
+      const parent = document.getElementById('graph-container');
+      if (parent) {
+        parent.innerHTML = '<div class="mermaid" id="mermaid-graph">' + result.svg + '</div>';
+        statusEl.textContent = graphData.nodes.length + ' modules, ' + graphData.edges.length + ' dependencies';
+      }
     } else {
-      container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Render returned no SVG</div>';
+      console.warn('No SVG returned from render');
     }
   } catch (e) {
-    container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Error rendering graph.<br><details open><summary>Show definition</summary><pre style="white-space:pre-wrap;font-size:0.8em;background:#f5f5f5;padding:1rem;border:1px solid #ddd;">' + definition.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></details><br>Details: ' + e.message + '</div>';
+    const container = document.getElementById('mermaid-graph');
+    if (container) {
+      container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Error rendering graph.<br><details open><summary>Show definition</summary><pre style="white-space:pre-wrap;font-size:0.8em;background:#f5f5f5;padding:1rem;border:1px solid #ddd;">' + definition.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></details><br>Details: ' + e.message + '</div>';
+    }
     statusEl.textContent = 'Render error';
     console.error('Mermaid render error:', e);
   }
