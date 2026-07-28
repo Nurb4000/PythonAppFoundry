@@ -1,5 +1,15 @@
 <script src="/static/chart.umd.min.js"></script>
 <div id="sqlBuilderApp">
+  {% if loaded_query %}
+  <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;padding:0.75rem 1rem;background:#f0e6f6;border-radius:4px;border:1px solid #d4b8e0;flex-wrap:wrap;">
+    <span style="font-weight:600;color:#6f42c1;">Editing:</span>
+    <span>{{ loaded_query[1] }}</span>
+    <span style="color:#888;font-size:0.9em;">(SQL loaded — refine below, then save &amp; return)</span>
+    <span style="flex:1;"></span>
+    <a href="{{ return_url or url_for('admin.queries.list_queries') }}" style="padding:5px 14px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;color:#333;text-decoration:none;font-size:0.9em;">Cancel &amp; Return</a>
+  </div>
+  {% endif %}
+
   <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;padding:0.75rem;background:#f8f9fa;border-radius:4px;border:1px solid #e0e0e0;flex-wrap:wrap;">
     <label style="font-weight:600;font-size:0.9em;white-space:nowrap;">Import existing query:</label>
     <select id="importQuerySelect" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;flex:1;min-width:200px;">
@@ -84,7 +94,10 @@
     <textarea id="sqlOutput" rows="6" readonly style="width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;font-family:monospace;font-size:0.9em;background:#f8f9fa;resize:vertical;"></textarea>
     <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
       <button id="executeBtn" disabled style="padding:10px 24px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;opacity:0.6;">Run Query</button>
-      <button id="saveQueryBtn" style="padding:10px 24px;background:#6f42c1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;">Save as Query Report</button>
+      {% if return_url %}
+      <button id="saveReturnBtn" disabled style="padding:10px 24px;background:#6f42c1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;opacity:0.6;">Save &amp; Return to Editor</button>
+      {% endif %}
+      <button id="saveQueryBtn" style="padding:10px 24px;background:#6f42c1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;">Save as New Query Report</button>
     </div>
   </div>
 
@@ -120,7 +133,14 @@
   var allTables = [];
   var currentSql = '';
 
+  var returnUrl = {{ return_url|tojson if return_url else 'null' }};
+  var initialSql = {{ loaded_query[2]|tojson if loaded_query else 'None' }};
+
   function init() {
+    if (initialSql) {
+      setSqlOutput(initialSql);
+    }
+
     fetch('/__admin/queries/describe_tables')
       .then(function(r) { return r.json(); })
       .then(function(tables) {
@@ -170,6 +190,9 @@
     document.getElementById('copySqlBtn').addEventListener('click', copySql);
     document.getElementById('clearSqlBtn').addEventListener('click', clearSql);
     document.getElementById('saveQueryBtn').addEventListener('click', saveAsReport);
+    {% if return_url %}
+    document.getElementById('saveReturnBtn').addEventListener('click', saveAndReturn);
+    {% endif %}
     document.getElementById('addColumnBtn').addEventListener('click', addColumnRow);
     document.getElementById('addConditionBtn').addEventListener('click', addConditionRow);
     document.getElementById('addOrderBtn').addEventListener('click', addOrderRow);
@@ -501,6 +524,11 @@
     var executeBtn = document.getElementById('executeBtn');
     executeBtn.disabled = false;
     executeBtn.style.opacity = '1';
+    {% if return_url %}
+    var saveReturnBtn = document.getElementById('saveReturnBtn');
+    saveReturnBtn.disabled = false;
+    saveReturnBtn.style.opacity = '1';
+    {% endif %}
     document.getElementById('queryResults').style.display = 'none';
   }
 
@@ -587,6 +615,37 @@
         }
       });
   }
+
+  {% if return_url %}
+  function saveAndReturn() {
+    if (!currentSql) { alert('Generate or build a query first.'); return; }
+    var btn = document.getElementById('saveReturnBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    var fd = new FormData();
+    fd.append('sql', currentSql);
+    fd.append('csrf_token', '{{ csrf_token() }}');
+    fetch('{{ return_url }}', { method: 'POST', body: fd })
+      .then(function(r) {
+        if (r.redirected || r.status === 302 || r.status === 301) {
+          window.location.href = r.url || '{{ url_for("admin.queries.list_queries") }}';
+        }
+        return r.text();
+      })
+      .then(function(html) {
+        if (html.indexOf('login') !== -1 || html.indexOf('Login') !== -1) {
+          window.location.href = '/__auth/login';
+        } else {
+          window.location.href = '{{ return_url }}';
+        }
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Save & Return to Editor';
+        alert('Save failed: ' + err.message);
+      });
+  }
+  {% endif %}
 
   init();
 })();

@@ -265,7 +265,14 @@ def visual_query():
 def query_builder():
     """Render the AI-Assisted SQL Builder page."""
     modules = db.session.query(Module).order_by(Module.name).all()
-    return render_admin('SQL Builder', 'admin/queries/builder.html', modules=modules)
+    load_id = request.args.get('load', type=int)
+    return_url = request.args.get('return', '')
+    loaded_query = None
+    if load_id:
+        loaded_query = db.session.query(QueryReport.id, QueryReport.name, QueryReport.sql, QueryReport.chart_type, QueryReport.label_column, QueryReport.data_columns, QueryReport.chart_title).filter_by(id=load_id).first()
+        if not loaded_query:
+            loaded_query = None
+    return render_admin('SQL Builder', 'admin/queries/builder.html', modules=modules, loaded_query=loaded_query, return_url=return_url)
 
 
 @queries_bp.route('/my_queries')
