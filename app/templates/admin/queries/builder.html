@@ -1,0 +1,560 @@
+<script src="/static/chart.umd.min.js"></script>
+<div id="sqlBuilderApp">
+  <div style="display:flex;gap:0.5rem;margin-bottom:1rem;border-bottom:2px solid #ddd;">
+    <button class="builder-tab active" data-tab="natural" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:0.95em;font-weight:600;border-bottom:3px solid #2563eb;margin-bottom:-2px;color:#2563eb;">Natural Language</button>
+    <button class="builder-tab" data-tab="visual" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:0.95em;font-weight:600;border-bottom:3px solid transparent;margin-bottom:-2px;color:#666;">Visual Builder</button>
+  </div>
+
+  <div id="tab-natural" class="builder-panel">
+    <div style="margin-bottom:1rem;">
+      <label style="display:block;font-weight:600;margin-bottom:4px;">Describe your query in plain English</label>
+      <textarea id="nlInput" rows="4" placeholder="e.g. Show me all users who signed up in the last 30 days, sorted by most recent" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;font-size:0.95em;resize:vertical;"></textarea>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap;">
+      <button id="generateBtn" style="padding:10px 24px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;">Generate SQL</button>
+      <label style="font-size:0.9em;color:#666;">
+        <input type="checkbox" id="nlLimitCheck" checked> Limit rows:
+        <input type="number" id="nlLimit" value="100" min="1" max="10000" style="width:70px;padding:4px 8px;border:1px solid #ccc;border-radius:3px;">
+      </label>
+    </div>
+    <div id="nlError" style="color:#c00;margin-bottom:0.75rem;display:none;"></div>
+  </div>
+
+  <div id="tab-visual" class="builder-panel" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:4px;">Table</label>
+        <select id="visualTable" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+          <option value="">-- Select a table --</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-weight:600;margin-bottom:4px;">Limit</label>
+        <input type="number" id="visualLimit" value="100" min="1" max="10000" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+      </div>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <label style="display:block;font-weight:600;margin-bottom:4px;">Columns to Select</label>
+      <div id="columnPickers" style="display:flex;flex-direction:column;gap:0.5rem;"></div>
+      <button id="addColumnBtn" style="margin-top:0.5rem;padding:6px 16px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">+ Add Column</button>
+    </div>
+
+    <details style="margin-bottom:1rem;border:1px solid #ddd;border-radius:4px;padding:0.75rem;">
+      <summary style="cursor:pointer;font-weight:600;color:#555;margin-bottom:0.5rem;">Filter Conditions (WHERE)</summary>
+      <div id="conditionRows" style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem;"></div>
+      <button id="addConditionBtn" style="margin-top:0.5rem;padding:6px 16px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">+ Add Condition</button>
+    </details>
+
+    <details style="margin-bottom:1rem;border:1px solid #ddd;border-radius:4px;padding:0.75rem;">
+      <summary style="cursor:pointer;font-weight:600;color:#555;margin-bottom:0.5rem;">Order By</summary>
+      <div id="orderRows" style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem;"></div>
+      <button id="addOrderBtn" style="margin-top:0.5rem;padding:6px 16px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">+ Add Order</button>
+    </details>
+
+    <details style="margin-bottom:1rem;border:1px solid #ddd;border-radius:4px;padding:0.75rem;">
+      <summary style="cursor:pointer;font-weight:600;color:#555;margin-bottom:0.5rem;">JOINs</summary>
+      <div id="joinRows" style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem;"></div>
+      <button id="addJoinBtn" style="margin-top:0.5rem;padding:6px 16px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">+ Add JOIN</button>
+    </details>
+
+    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+      <button id="buildQueryBtn" style="padding:10px 24px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;">Build SQL</button>
+    </div>
+    <div id="visualError" style="color:#c00;margin-bottom:0.75rem;display:none;"></div>
+  </div>
+
+  <div style="margin-top:1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <label style="font-weight:600;">Generated SQL</label>
+      <div style="display:flex;gap:0.5rem;">
+        <button id="copySqlBtn" style="padding:5px 14px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">Copy SQL</button>
+        <button id="clearSqlBtn" style="padding:5px 14px;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">Clear</button>
+      </div>
+    </div>
+    <textarea id="sqlOutput" rows="6" readonly style="width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;font-family:monospace;font-size:0.9em;background:#f8f9fa;resize:vertical;"></textarea>
+    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+      <button id="executeBtn" disabled style="padding:10px 24px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;opacity:0.6;">Run Query</button>
+      <button id="saveQueryBtn" style="padding:10px 24px;background:#6f42c1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.95em;">Save as Query Report</button>
+    </div>
+  </div>
+
+  <div id="queryResults" style="margin-top:1.5rem;display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <h3 style="margin:0;">Results</h3>
+      <div id="resultInfo" style="font-size:0.85em;color:#888;"></div>
+    </div>
+    <div id="resultError" style="color:#c00;background:#fee;padding:1rem;border-radius:4px;border:1px solid #fcc;margin-bottom:1rem;display:none;"></div>
+    <div id="chartContainer" style="max-width:600px;margin:1rem 0;display:none;"><canvas id="builderChart"></canvas></div>
+    <div id="resultTable"></div>
+  </div>
+</div>
+
+<style>
+  .builder-tab:hover { color: #2563eb !important; }
+  .builder-tab.active { color: #2563eb !important; border-bottom-color: #2563eb !important; }
+  .builder-panel { animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .builder-row { display: flex; gap: 0.5rem; align-items: center; }
+  .builder-row select, .builder-row input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
+  .builder-remove { background: none; border: none; color: #c00; cursor: pointer; font-size: 1.2em; padding: 0 4px; }
+  .builder-remove:hover { text-decoration: underline; }
+  .table-wrap { overflow-x: auto; }
+  .table-wrap table { width: 100%; border-collapse: collapse; }
+  .table-wrap th { background: #f0f0f0; padding: 8px; text-align: left; border: 1px solid #ddd; font-size: 0.9em; }
+  .table-wrap td { padding: 6px 8px; border: 1px solid #ddd; font-size: 0.9em; }
+  .table-wrap tr:hover td { background: #f8f9ff; }
+</style>
+
+<script>
+(function() {
+  var allTables = [];
+  var currentSql = '';
+
+  function init() {
+    fetch('/__admin/queries/describe_tables')
+      .then(function(r) { return r.json(); })
+      .then(function(tables) {
+        allTables = tables;
+        populateTableDropdown();
+        addColumnRow();
+        addConditionRow();
+        addOrderRow();
+      });
+
+    document.querySelectorAll('.builder-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.builder-tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.builder-panel').forEach(function(p) { p.style.display = 'none'; });
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
+      });
+    });
+
+    document.getElementById('generateBtn').addEventListener('click', generateFromNL);
+    document.getElementById('buildQueryBtn').addEventListener('click', buildFromVisual);
+    document.getElementById('executeBtn').addEventListener('click', executeQuery);
+    document.getElementById('copySqlBtn').addEventListener('click', copySql);
+    document.getElementById('clearSqlBtn').addEventListener('click', clearSql);
+    document.getElementById('saveQueryBtn').addEventListener('click', saveAsReport);
+    document.getElementById('addColumnBtn').addEventListener('click', addColumnRow);
+    document.getElementById('addConditionBtn').addEventListener('click', addConditionRow);
+    document.getElementById('addOrderBtn').addEventListener('click', addOrderRow);
+    document.getElementById('addJoinBtn').addEventListener('click', addJoinRow);
+
+    document.getElementById('visualTable').addEventListener('change', onTableChange);
+  }
+
+  function populateTableDropdown() {
+    var sel = document.getElementById('visualTable');
+    allTables.forEach(function(t) {
+      var opt = document.createElement('option');
+      opt.value = t.name;
+      opt.textContent = t.name + ' (' + t.columns.length + ' cols)';
+      sel.appendChild(opt);
+    });
+  }
+
+  function onTableChange() {
+    var tableName = document.getElementById('visualTable').value;
+    var container = document.getElementById('columnPickers');
+    container.innerHTML = '';
+    if (!tableName) return;
+    var table = allTables.find(function(t) { return t.name === tableName; });
+    if (!table) return;
+    table.columns.forEach(function(c) {
+      addColumnRow(c.name);
+    });
+  }
+
+  function addColumnRow(preselected) {
+    var tableName = document.getElementById('visualTable').value;
+    var container = document.getElementById('columnPickers');
+    if (!container) return;
+    var row = document.createElement('div');
+    row.className = 'builder-row';
+    var sel = document.createElement('select');
+    sel.className = 'col-select';
+    var defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = '-- Column --';
+    sel.appendChild(defaultOpt);
+    if (tableName) {
+      var table = allTables.find(function(t) { return t.name === tableName; });
+      if (table) {
+        table.columns.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.name;
+          opt.textContent = c.name + ' (' + c.type + ')';
+          if (preselected && c.name === preselected) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      }
+    }
+    row.appendChild(sel);
+    var removeBtn = document.createElement('button');
+    removeBtn.className = 'builder-remove';
+    removeBtn.textContent = '\u00d7';
+    removeBtn.type = 'button';
+    removeBtn.addEventListener('click', function() { row.remove(); });
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+  }
+
+  function addConditionRow() {
+    var tableName = document.getElementById('visualTable').value;
+    var container = document.getElementById('conditionRows');
+    if (!container) return;
+    var row = document.createElement('div');
+    row.className = 'builder-row';
+
+    var colSel = document.createElement('select');
+    colSel.className = 'condition_column';
+    colSel.innerHTML = '<option value="---">-- Column --</option>';
+    if (tableName) {
+      var table = allTables.find(function(t) { return t.name === tableName; });
+      if (table) {
+        table.columns.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.name;
+          opt.textContent = c.name;
+          colSel.appendChild(opt);
+        });
+      }
+    }
+    row.appendChild(colSel);
+
+    var opSel = document.createElement('select');
+    opSel.className = 'condition_operator';
+    ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IS NULL', 'IS NOT NULL'].forEach(function(op) {
+      var opt = document.createElement('option');
+      opt.value = op;
+      opt.textContent = op;
+      opSel.appendChild(opt);
+    });
+    row.appendChild(opSel);
+
+    var valInput = document.createElement('input');
+    valInput.className = 'condition_value';
+    valInput.type = 'text';
+    valInput.placeholder = 'Value';
+    row.appendChild(valInput);
+
+    var removeBtn = document.createElement('button');
+    removeBtn.className = 'builder-remove';
+    removeBtn.textContent = '\u00d7';
+    removeBtn.type = 'button';
+    removeBtn.addEventListener('click', function() { row.remove(); });
+    row.appendChild(removeBtn);
+
+    container.appendChild(row);
+  }
+
+  function addOrderRow(preselected) {
+    var tableName = document.getElementById('visualTable').value;
+    var container = document.getElementById('orderRows');
+    if (!container) return;
+    var row = document.createElement('div');
+    row.className = 'builder-row';
+
+    var colSel = document.createElement('select');
+    colSel.className = 'order_column';
+    colSel.innerHTML = '<option value="">-- Column --</option>';
+    if (tableName) {
+      var table = allTables.find(function(t) { return t.name === tableName; });
+      if (table) {
+        table.columns.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.name;
+          opt.textContent = c.name;
+          if (preselected && c.name === preselected) opt.selected = true;
+          colSel.appendChild(opt);
+        });
+      }
+    }
+    row.appendChild(colSel);
+
+    var dirSel = document.createElement('select');
+    dirSel.className = 'order_direction';
+    ['asc', 'desc'].forEach(function(d) {
+      var opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = d.toUpperCase();
+      if (!preselected && d === 'asc') opt.selected = true;
+      dirSel.appendChild(opt);
+    });
+    row.appendChild(dirSel);
+
+    var removeBtn = document.createElement('button');
+    removeBtn.className = 'builder-remove';
+    removeBtn.textContent = '\u00d7';
+    removeBtn.type = 'button';
+    removeBtn.addEventListener('click', function() { row.remove(); });
+    row.appendChild(removeBtn);
+
+    container.appendChild(row);
+  }
+
+  function addJoinRow() {
+    var container = document.getElementById('joinRows');
+    if (!container) return;
+    var row = document.createElement('div');
+    row.className = 'builder-row';
+    row.style.flexWrap = 'wrap';
+
+    var typeSel = document.createElement('select');
+    typeSel.className = 'join_type';
+    typeSel.style.width = '100px';
+    ['INNER', 'LEFT'].forEach(function(t) {
+      var opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      if (t === 'INNER') opt.selected = true;
+      typeSel.appendChild(opt);
+    });
+    row.appendChild(typeSel);
+
+    var tableSel = document.createElement('select');
+    tableSel.className = 'join_table';
+    tableSel.style.width = '150px';
+    tableSel.innerHTML = '<option value="">-- Table --</option>';
+    allTables.forEach(function(t) {
+      var opt = document.createElement('option');
+      opt.value = t.name;
+      opt.textContent = t.name;
+      tableSel.appendChild(opt);
+    });
+    row.appendChild(tableSel);
+
+    var onCol = document.createElement('input');
+    onCol.className = 'join_on_column';
+    onCol.type = 'text';
+    onCol.placeholder = 'Local column';
+    onCol.style.width = '120px';
+    row.appendChild(onCol);
+
+    var refCol = document.createElement('input');
+    refCol.className = 'join_ref_column';
+    refCol.type = 'text';
+    refCol.placeholder = 'Ref column';
+    refCol.style.width = '120px';
+    row.appendChild(refCol);
+
+    var removeBtn = document.createElement('button');
+    removeBtn.className = 'builder-remove';
+    removeBtn.textContent = '\u00d7';
+    removeBtn.type = 'button';
+    removeBtn.addEventListener('click', function() { row.remove(); });
+    row.appendChild(removeBtn);
+
+    container.appendChild(row);
+  }
+
+  function getFormData() {
+    return new FormData();
+  }
+
+  function generateFromNL() {
+    var input = document.getElementById('nlInput').value.trim();
+    var errorDiv = document.getElementById('nlError');
+    var btn = document.getElementById('generateBtn');
+    if (!input) {
+      errorDiv.textContent = 'Please enter a query description.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    errorDiv.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+
+    var fd = new FormData();
+    fd.append('input', input);
+    fd.append('limit', document.getElementById('nlLimit').value || '100');
+
+    fetch('/__admin/queries/generate_sql', { method: 'POST', body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = 'Generate SQL';
+        if (data.error) {
+          errorDiv.textContent = data.error;
+          errorDiv.style.display = 'block';
+          return;
+        }
+        setSqlOutput(data.sql);
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Generate SQL';
+        errorDiv.textContent = 'Request failed: ' + err.message;
+        errorDiv.style.display = 'block';
+      });
+  }
+
+  function buildFromVisual() {
+    var tableName = document.getElementById('visualTable').value;
+    var errorDiv = document.getElementById('visualError');
+    var btn = document.getElementById('buildQueryBtn');
+    if (!tableName) {
+      errorDiv.textContent = 'Please select a table.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    errorDiv.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Building...';
+
+    var fd = new FormData();
+    fd.append('table_name', tableName);
+    fd.append('limit', document.getElementById('visualLimit').value || '100');
+
+    document.querySelectorAll('.col-select').forEach(function(s) {
+      if (s.value) fd.append('columns[]', s.value);
+    });
+
+    document.querySelectorAll('.condition_column').forEach(function(s, i) {
+      if (s.value && s.value !== '---') {
+        fd.append('condition_column[]', s.value);
+        var ops = document.querySelectorAll('.condition_operator');
+        var vals = document.querySelectorAll('.condition_value');
+        fd.append('condition_operator[]', ops[i] ? ops[i].value : '=');
+        fd.append('condition_value[]', vals[i] ? vals[i].value : '');
+      }
+    });
+
+    document.querySelectorAll('.order_column').forEach(function(s, i) {
+      if (s.value) {
+        fd.append('order_column[]', s.value);
+        var dirs = document.querySelectorAll('.order_direction');
+        fd.append('order_direction[]', dirs[i] ? dirs[i].value : 'asc');
+      }
+    });
+
+    document.querySelectorAll('.join_table').forEach(function(s, i) {
+      if (s.value) {
+        fd.append('join_table[]', s.value);
+        var onCols = document.querySelectorAll('.join_on_column');
+        var refCols = document.querySelectorAll('.join_ref_column');
+        var jTypes = document.querySelectorAll('.join_type');
+        fd.append('join_on_column[]', onCols[i] ? onCols[i].value : '');
+        fd.append('join_ref_column[]', refCols[i] ? refCols[i].value : '');
+        fd.append('join_type[]', jTypes[i] ? jTypes[i].value : 'INNER');
+      }
+    });
+
+    fetch('/__admin/queries/visual_query', { method: 'POST', body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = 'Build SQL';
+        if (data.error) {
+          errorDiv.textContent = data.error;
+          errorDiv.style.display = 'block';
+          return;
+        }
+        setSqlOutput(data.sql);
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Build SQL';
+        errorDiv.textContent = 'Request failed: ' + err.message;
+        errorDiv.style.display = 'block';
+      });
+  }
+
+  function setSqlOutput(sql) {
+    currentSql = sql;
+    document.getElementById('sqlOutput').value = sql;
+    var executeBtn = document.getElementById('executeBtn');
+    executeBtn.disabled = false;
+    executeBtn.style.opacity = '1';
+    document.getElementById('queryResults').style.display = 'none';
+  }
+
+  function clearSql() {
+    currentSql = '';
+    document.getElementById('sqlOutput').value = '';
+    var executeBtn = document.getElementById('executeBtn');
+    executeBtn.disabled = true;
+    executeBtn.style.opacity = '0.6';
+    document.getElementById('queryResults').style.display = 'none';
+  }
+
+  function copySql() {
+    var sqlEl = document.getElementById('sqlOutput');
+    sqlEl.readOnly = false;
+    sqlEl.select();
+    document.execCommand('copy');
+    sqlEl.readOnly = true;
+    var btn = document.getElementById('copySqlBtn');
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }
+
+  function executeQuery() {
+    if (!currentSql) return;
+    var errorDiv = document.getElementById('resultError');
+    var btn = document.getElementById('executeBtn');
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+    errorDiv.style.display = 'none';
+
+    var fd = new FormData();
+    fd.append('sql', currentSql);
+
+    fetch('/__admin/queries/execute_sql', { method: 'POST', body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = 'Run Query';
+        var resultsDiv = document.getElementById('queryResults');
+        resultsDiv.style.display = 'block';
+        if (data.error) {
+          errorDiv.textContent = data.error;
+          errorDiv.style.display = 'block';
+          return;
+        }
+        document.getElementById('resultInfo').textContent = data.rows.length + ' row(s) in ' + data.duration_ms + 'ms';
+        var tableHtml = '<div class="table-wrap"><table><thead><tr>';
+        data.columns.forEach(function(c) { tableHtml += '<th>' + c + '</th>'; });
+        tableHtml += '</tr></thead><tbody>';
+        data.rows.forEach(function(r) {
+          tableHtml += '<tr>';
+          r.forEach(function(v) { tableHtml += '<td>' + (v !== null && v !== undefined ? v : '') + '</td>'; });
+          tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table></div>';
+        document.getElementById('resultTable').innerHTML = tableHtml;
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Run Query';
+        errorDiv.textContent = 'Request failed: ' + err.message;
+        errorDiv.style.display = 'block';
+      });
+  }
+
+  function saveAsReport() {
+    if (!currentSql) { alert('Generate or build a query first.'); return; }
+    var name = prompt('Query report name:', 'AI Generated Query');
+    if (!name) return;
+    var fd = new FormData();
+    fd.append('name', name);
+    fd.append('sql', currentSql);
+    fd.append('chart_type', 'none');
+    fd.append('module_id', '0');
+    fetch('/__admin/queries/new', { method: 'POST', body: fd })
+      .then(function(r) { return r.text(); })
+      .then(function(html) {
+        if (html.indexOf('login') !== -1 || html.indexOf('Login') !== -1) {
+          window.location.href = '/__auth/login';
+        } else {
+          alert('Query saved. You can edit it from the Query Reports page.');
+        }
+      });
+  }
+
+  init();
+})();
+</script>

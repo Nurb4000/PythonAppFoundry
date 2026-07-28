@@ -260,6 +260,14 @@ def visual_query():
     return jsonify({'sql': sql, 'error': None})
 
 
+@queries_bp.route('/builder')
+@developer_or_admin_required
+def query_builder():
+    """Render the AI-Assisted SQL Builder page."""
+    modules = db.session.query(Module).order_by(Module.name).all()
+    return render_admin('SQL Builder', 'admin/queries/builder.html', modules=modules)
+
+
 @queries_bp.route('/execute_sql', methods=['POST'])
 @developer_or_admin_required
 @csrf_protect
