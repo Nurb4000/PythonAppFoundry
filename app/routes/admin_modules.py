@@ -188,6 +188,7 @@ def delete_module(id):
     for route in m.routes.all(): db.session.delete(route)
     for script in m.scripts.all(): db.session.delete(script)
     for form in m.forms.all(): db.session.delete(form)
+    for tpl in m.templates.all(): db.session.delete(tpl)
     for task in m.scheduled_tasks.all(): db.session.delete(task)
     for trigger in m.triggers.all(): db.session.delete(trigger)
     for credential in m.credentials.all(): db.session.delete(credential)
