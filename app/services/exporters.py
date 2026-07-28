@@ -73,9 +73,11 @@ def _get_rows_data(name_plural, columns, rows, has_module):
     return data
 
 
-def _export_json(name_plural, columns, rows, has_module):
+def _export_json(name_plural, columns, rows, has_module, metadata=None):
     """Export rows as JSON response."""
     data = _get_rows_data(name_plural, columns, rows, has_module)
+    if metadata:
+        data['metadata'] = metadata
     buf = io.StringIO()
     json.dump(data, buf, indent=2, default=str)
     filename = name_plural.replace(' ', '_') + '.json'
@@ -86,7 +88,7 @@ def _export_json(name_plural, columns, rows, has_module):
     )
 
 
-def _export_xlsx(name_plural, columns, rows, has_module):
+def _export_xlsx(name_plural, columns, rows, has_module, metadata=None):
     """Export rows as an Excel (.xlsx) response."""
     if not HAS_OPENPYXL:
         return Response('Excel export requires openpyxl. Install with: pip install openpyxl',
@@ -105,18 +107,27 @@ def _export_xlsx(name_plural, columns, rows, has_module):
         bottom=Side(style='thin'),
     )
 
+    # Write metadata at top if provided
+    meta_start_row = 1
+    if metadata:
+        ws.cell(row=1, column=1, value=name_plural).font = Font(bold=True, size=14)
+        for i, (key, val) in enumerate(metadata.items(), 2):
+            ws.cell(row=i, column=1, value=f'{key}:').font = Font(bold=True)
+            ws.cell(row=i, column=2, value=str(val))
+        meta_start_row = len(metadata) + 3
+
     headers = list(columns)
     if has_module:
         headers.insert(0, 'module')
 
     for col_idx, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_idx, value=str(header))
+        cell = ws.cell(row=meta_start_row, column=col_idx, value=str(header))
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal='center')
         cell.border = thin_border
 
-    for row_idx, row in enumerate(rows, 2):
+    for row_idx, row in enumerate(rows, meta_start_row + 1):
         vals = []
         if has_module:
             mod = getattr(row, 'module', None)
@@ -143,7 +154,7 @@ def _export_xlsx(name_plural, columns, rows, has_module):
     )
 
 
-def _export_pdf(name_plural, columns, rows, has_module):
+def _export_pdf(name_plural, columns, rows, has_module, metadata=None):
     """Export rows as a PDF response with formatted table."""
     if not HAS_REPORTLAB:
         return Response('PDF export requires reportlab. Install with: pip install reportlab',
@@ -176,11 +187,25 @@ def _export_pdf(name_plural, columns, rows, has_module):
         textColor=colors.grey,
         spaceAfter=12,
     )
+    info_style = ParagraphStyle(
+        'Info',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.HexColor('#555555'),
+        spaceAfter=4,
+    )
     elements.append(Paragraph(name_plural.title(), title_style))
     elements.append(Paragraph(
         f'{len(rows)} row{"s" if len(rows) != 1 else ""} exported',
         subtitle_style,
     ))
+
+    # Metadata (query name, SQL, etc.)
+    if metadata:
+        elements.append(Spacer(1, 0.15 * inch))
+        for key, val in metadata.items():
+            elements.append(Paragraph(f'<b>{key}:</b> {val}', info_style))
+
     elements.append(Spacer(1, 0.25 * inch))
 
     # Build table data

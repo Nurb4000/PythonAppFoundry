@@ -183,12 +183,20 @@ def export_query(id):
     except Exception as e:
         return Response(f'Query error: {e}', status=400)
 
+    metadata = {
+        'Query': q.name,
+        'SQL': q.sql,
+        'Rows': str(len(rows)),
+    }
+    if q.description:
+        metadata['Description'] = q.description
+
     if fmt == 'json':
-        return _export_json(q.name, columns, rows, False)
+        return _export_json(q.name, columns, rows, False, metadata=metadata)
     elif fmt == 'xlsx':
-        return _export_xlsx(q.name, columns, rows, False)
+        return _export_xlsx(q.name, columns, rows, False, metadata=metadata)
     elif fmt == 'pdf':
-        return _export_pdf(q.name, columns, rows, False)
+        return _export_pdf(q.name, columns, rows, False, metadata=metadata)
 
 
 @queries_bp.route('/describe_tables')
