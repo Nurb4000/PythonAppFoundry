@@ -137,8 +137,11 @@ function escapeId(slug) {
 }
 
 function buildDiagram(data, filterSlug) {
+  if (!data || !data.nodes || data.nodes.length === 0) {
+    return 'graph LR\n  classDef cycleNode fill:#f8d7da,stroke:#f5c2c7,color:#721c24;\n';
+  }
+
   let definition = 'graph LR\n';
-  definition += '  classDef cycleNode fill:#f8d7da,stroke:#f5c2c7,color:#721c24;';
 
   const cycleSlugs = new Set();
   for (const cycle of data.cycles) {
@@ -154,13 +157,21 @@ function buildDiagram(data, filterSlug) {
   const filteredEdges = filterSlug ? data.edges.filter(e => 
     e.source === filterSlug || e.target === filterSlug) : data.edges;
 
+  definition += '  classDef cycleNode fill:#f8d7da,stroke:#f5c2c7,color:#721c24;\n';
+
   for (const node of filteredNodes) {
     const safeId = escapeId(node.slug);
-    let classDef = '';
+    definition += '  ' + safeId + '["' + node.name + '"]\n';
+  }
+
+  const cycleNodeIds = [];
+  for (const node of filteredNodes) {
     if (cycleSlugs.has(node.slug)) {
-      classDef = ' class ' + safeId + ' cycleNode;';
+      cycleNodeIds.push(escapeId(node.slug));
     }
-    definition += '  ' + safeId + '["' + node.name + ' (' + node.slug + ')"]' + classDef + '\n';
+  }
+  if (cycleNodeIds.length > 0) {
+    definition += '  class ' + cycleNodeIds.join(',') + ' cycleNode;\n';
   }
 
   for (const edge of filteredEdges) {
@@ -184,13 +195,15 @@ async function renderGraph() {
 
   const definition = buildDiagram(graphData, currentFilter);
   const container = document.getElementById('mermaid-graph');
+  
+  console.log('Mermaid definition:', definition);
 
   try {
     const { svg } = await mermaid.render('mermaid-graph', definition);
     container.innerHTML = svg;
     statusEl.textContent = graphData.nodes.length + ' modules, ' + graphData.edges.length + ' dependencies';
   } catch (e) {
-    container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Error rendering graph.<br><details><summary>Show definition</summary><pre style="white-space:pre-wrap;font-size:0.8em;">' + definition.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></details><br>Details: ' + e.message + '</div>';
+    container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Error rendering graph.<br><details open><summary>Show definition</summary><pre style="white-space:pre-wrap;font-size:0.8em;background:#f5f5f5;padding:1rem;border:1px solid #ddd;">' + definition.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></details><br>Details: ' + e.message + '</div>';
     statusEl.textContent = 'Render error';
     console.error('Mermaid render error:', e);
   }
