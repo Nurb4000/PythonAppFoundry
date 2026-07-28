@@ -59,6 +59,28 @@ def detect_dependencies(module_id):
             except re.error:
                 continue
 
+        # Pattern 1b: References via dynamic handler (url_for('dynamic.handle_dynamic', slug='...'))
+        if module_slugs:
+            slug_alt_dynamic = '|'.join([re.escape(slug) for slug in module_slugs.keys()])
+            dynamic_pattern = r"url_for\s*\(\s*['\"]dynamic\.handle_dynamic['\"].*?slug\s*=\s*['\"](" + slug_alt_dynamic + r")['\"]"
+            try:
+                matches = re.finditer(dynamic_pattern, source_code, re.IGNORECASE | re.DOTALL)
+                for match in matches:
+                    matched_slug = match.group(1)
+                    if matched_slug and matched_slug in module_slugs:
+                        target_module_id = module_slugs[matched_slug]
+                        dep = ModuleDependency(
+                            source_module_id=module_id,
+                            target_module_id=target_module_id,
+                            dependency_type='route_reference',
+                            reference_value=matched_slug,
+                            detected_at=datetime.now(timezone.utc)
+                        )
+                        db.session.add(dep)
+                        dependencies_found.append((script.name, matched_slug, 'route_reference'))
+            except re.error:
+                pass
+
         # Pattern 2: References to other modules' scripts by ID
         script_ref_pattern = r'script_id\s*=\s*(\d+)'
         matches = re.finditer(script_ref_pattern, source_code)
