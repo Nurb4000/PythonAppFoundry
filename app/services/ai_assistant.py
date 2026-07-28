@@ -465,24 +465,19 @@ Routes map URL slugs to scripts and/or forms. Each route has:
 - title: human-readable title
 
 Rules:
-1. Output a JSON object with route configuration suggestions.
+1. Output ONLY a valid JSON object, nothing else. No markdown, no code fences, no explanations.
 2. Use lowercase hyphenated slugs for URLs.
 3. Suggest appropriate HTTP methods based on the operation.
 4. Recommend auth_required=true for any data-modifying routes.
-5. Keep explanations concise.
+5. Include these fields: slug, methods, auth_required, title
 
-Respond in this format:
-
-**Suggested Route Configuration:**
-```json
+Required JSON format:
 {
   "slug": "example/route",
   "methods": "GET",
   "auth_required": false,
-  "title": "Example Route",
-  "notes": "Explanation of choices"
+  "title": "Example Route"
 }
-```
 """
 
 
@@ -505,16 +500,31 @@ def suggest_route_config(description, existing_slug=''):
     if response.startswith('Error:'):
         return {'reply': response, 'config_json': None, 'error': response}
 
+    # Try multiple strategies to extract valid JSON
+    import json as json_module
+    
+    # Strategy 1: Extract from code block
     config_text = _extract_code_block(response)
+    
+    # Strategy 2: Try to find JSON object in response
+    if not config_text:
+        match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+        if match:
+            config_text = match.group(0)
+    
+    # Strategy 3: Use raw response if it looks like JSON
     if not config_text:
         config_text = response.strip()
 
     try:
-        import json
-        parsed = json.loads(config_text)
-        return {'reply': 'Route configuration suggested', 'config_json': json.dumps(parsed, indent=2), 'error': None}
-    except (json.JSONDecodeError, ValueError):
-        return {'reply': response, 'config_json': None, 'error': 'Could not parse route configuration'}
+        parsed = json_module.loads(config_text)
+        if isinstance(parsed, dict):
+            return {'reply': 'Route configuration suggested', 'config_json': json_module.dumps(parsed, indent=2), 'error': None}
+        else:
+            raise ValueError("Expected JSON object")
+    except (json_module.JSONDecodeError, ValueError) as e:
+        # Return the raw response for display
+        return {'reply': f'LLM response: {response[:500]}', 'config_json': None, 'error': f'Could not parse route configuration: {e}'}
 
 
 def chat_completion(messages, temperature=None, max_tokens=None):
