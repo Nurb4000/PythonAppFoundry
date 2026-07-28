@@ -179,10 +179,10 @@ def _draw_bar_chart(canvas, chart_data, x, y, width, height):
         max_val = 1
 
     # Chart area
-    chart_left = x + 0.3 * inch
-    chart_right = x + width - 0.3 * inch
-    chart_bottom = y
-    chart_top = y + height - 0.3 * inch
+    chart_left = x + 0.5 * inch
+    chart_right = x + width - 0.5 * inch
+    chart_bottom = y + 0.5 * inch
+    chart_top = y + height - 0.5 * inch
     chart_height = chart_top - chart_bottom
     chart_width = chart_right - chart_left
 
@@ -203,7 +203,7 @@ def _draw_bar_chart(canvas, chart_data, x, y, width, height):
 
         # Draw label
         canvas.setFont('Helvetica', 7)
-        canvas.drawCentredString(group_x, chart_bottom - 0.15 * inch, str(label)[:15])
+        canvas.drawCentredString(group_x, chart_bottom - 0.2 * inch, str(label)[:15])
 
         # Draw bars for each dataset
         for j, ds in enumerate(datasets):
@@ -220,7 +220,7 @@ def _draw_bar_chart(canvas, chart_data, x, y, width, height):
     # Draw title
     if chart_data.get('title'):
         canvas.setFont('Helvetica-Bold', 10)
-        canvas.drawCentredString(x + width / 2, y + height - 0.2 * inch, chart_data['title'])
+        canvas.drawCentredString(x + width / 2, y + height - 0.3 * inch, chart_data['title'])
 
 
 def _draw_pie_chart(canvas, chart_data, x, y, width, height):
@@ -238,9 +238,9 @@ def _draw_pie_chart(canvas, chart_data, x, y, width, height):
     if total == 0:
         total = 1
 
-    cx = x + width / 2
-    cy = y + height / 2 - 0.2 * inch
-    radius = min(width, height) / 4
+    cx = x + width / 2 - 0.5 * inch
+    cy = y + height / 2
+    radius = min(width, height) / 5
 
     # Draw pie slices
     start_angle = 0
@@ -252,24 +252,33 @@ def _draw_pie_chart(canvas, chart_data, x, y, width, height):
         canvas.setFillColor(color)
         canvas.setStrokeColor(colors.white)
         canvas.setLineWidth(1)
-        canvas.arc(cx - radius, cy - radius, cx + radius, cy + radius, start_angle, start_angle + slice_angle, fill=1, stroke=1)
+        # Draw wedge
+        from reportlab.lib.colors import Color
+        canvas.saveState()
+        canvas.setFillColor(color)
+        canvas.beginPath()
+        canvas.moveTo(cx, cy)
+        canvas.arc(cx - radius, cy - radius, cx + radius, cy + radius, start_angle, start_angle + slice_angle)
+        canvas.closePath()
+        canvas.fill()
+        canvas.restoreState()
         start_angle += slice_angle
 
     # Draw legend
-    legend_x = x + width - 1.2 * inch
+    legend_x = x + width - 1.5 * inch
     legend_y = y + height - 0.5 * inch
     canvas.setFont('Helvetica', 8)
     for i, label in enumerate(labels[:8]):
         color = _hex_to_reportlab_color(datasets[0].get('color', '#2563eb'))
         canvas.setFillColor(color)
-        canvas.rect(legend_x, legend_y - i * 0.2 * inch, 0.15 * inch, 0.15 * inch, fill=1)
+        canvas.rect(legend_x, legend_y - i * 0.25 * inch, 0.15 * inch, 0.15 * inch, fill=1)
         canvas.setFillColor(colors.black)
-        canvas.drawString(legend_x + 0.2 * inch, legend_y - i * 0.2 * inch - 0.05 * inch, str(label)[:20])
+        canvas.drawString(legend_x + 0.2 * inch, legend_y - i * 0.25 * inch - 0.05 * inch, str(label)[:20])
 
     # Draw title
     if chart_data.get('title'):
         canvas.setFont('Helvetica-Bold', 10)
-        canvas.drawCentredString(x + width / 2, y + height - 0.2 * inch, chart_data['title'])
+        canvas.drawCentredString(x + width / 2, y + height - 0.3 * inch, chart_data['title'])
 
 
 def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_data=None):
@@ -341,23 +350,69 @@ def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_dat
 
     elements.append(Spacer(1, 0.25 * inch))
 
-    # Draw chart using Canvas for more control
+    # Draw chart as a flowable
     if chart_data and chart_data.get('datasets'):
-        from reportlab.pdfgen import canvas as pdf_canvas
-        chart_canvas = pdf_canvas.Canvas(buf, pagesize=(letter[0], page_height))
+        from reportlab.platypus import Drawing as RLDrawing
+        from reportlab.lib import sizes
 
         chart_type = chart_data.get('type', 'bar')
-        chart_width = letter[0] - inch
-        chart_x = 0.5 * inch
-        chart_y = 0.5 * inch + table_height + 0.3 * inch
+        draw_width = letter[0] - inch
+        draw_height = 2 * inch
+
+        drawing = RLDrawing(width=draw_width, height=draw_height)
+
+        # Add chart title if present
+        if chart_data.get('title'):
+            from reportlab.platypus import Paragraph as RLParagraph
+            title_para = RLParagraph(chart_data['title'], styles['Heading2'])
+            drawing.add(title_para)
+
+        # Create a simple bar chart using reportlab's charting
+        from reportlab.charts import BarChart, PieChart
+        from reportlab.lib.colors import HexColor
 
         if chart_type in ('pie', 'doughnut'):
-            _draw_pie_chart(chart_canvas, chart_data, chart_x, chart_y, chart_width, chart_height)
-        else:
-            _draw_bar_chart(chart_canvas, chart_data, chart_x, chart_y, chart_width, chart_height)
+            data = chart_data['datasets'][0]['data']
+            labels = chart_data.get('labels', [])
+            colors_list = [_hex_to_reportlab_color(ds.get('color', '#2563eb')) for ds in chart_data['datasets']]
 
-        chart_canvas.showPage()
-        chart_canvas.save()
+            pie = PieChart()
+            pie.width = draw_width
+            pie.height = draw_height - inch if chart_data.get('title') else draw_height
+            pie.x = 0
+            pie.y = 0
+            pie.data = [data]
+            pie.labels = labels
+            pie.slices = [{'fillcolor': c} for c in colors_list]
+
+            if chart_type == 'doughnut':
+                pie.slices['holeSize'] = 0.5
+
+            drawing.add(pie)
+        else:
+            # Bar chart
+            datasets = chart_data['datasets']
+            labels = chart_data.get('labels', [])
+
+            bar = BarChart()
+            bar.width = draw_width
+            bar.height = draw_height - 1.5 * inch if chart_data.get('title') else draw_height
+            bar.x = 0.5 * inch
+            bar.y = 0.5 * inch
+
+            # Set data
+            bar.data = [ds['data'] for ds in datasets]
+            bar.categoryAxis.categoryNames = labels[:10]  # Limit labels
+            bar.valueAxis.valueMin = 0
+
+            # Set colors
+            colors_list = [_hex_to_reportlab_color(ds.get('color', '#2563eb')) for ds in datasets]
+            bar.series = [{'fillColor': c} for c in colors_list]
+
+            drawing.add(bar)
+
+        elements.append(drawing)
+        elements.append(Spacer(1, 0.3 * inch))
 
     # Build table data
     headers = list(columns)
