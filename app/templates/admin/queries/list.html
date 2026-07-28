@@ -33,7 +33,10 @@
   <td>{% if q.schedule_cron %}<code>{{ q.schedule_cron }}</code>{% else %}<span style="color:#999;">—</span>{% endif %}</td>
   <td>{{ q.last_run|localtime if q.last_run else '<span style="color:#999;">never</span>'|safe }}</td>
   <td style="white-space:nowrap;">
-    <a href="{{ url_for('admin.queries.run_query', id=q.id) }}">Run</a>
+    <a href="{{ url_for('admin.queries.run_query', id=q.id) }}">Run</a> |
+    <a href="{{ url_for('admin.queries.export_query', id=q.id, format='json') }}">JSON</a> |
+    <a href="{{ url_for('admin.queries.export_query', id=q.id, format='xlsx') }}">XLSX</a> |
+    <a href="{{ url_for('admin.queries.export_query', id=q.id, format='pdf') }}">PDF</a> |
     <a href="{{ url_for('admin.queries.edit_query', id=q.id) }}">Edit</a>
     <form method="POST" action="{{ url_for('admin.queries.delete_query', id=q.id) }}" style="display:inline" onsubmit="return confirm('Delete query &quot;{{ q.name }}&quot;?')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

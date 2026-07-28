@@ -1,6 +1,7 @@
-from flask import Blueprint, request, redirect, url_for, render_template, flash, jsonify
+from flask import Blueprint, request, redirect, url_for, render_template, flash, jsonify, Response
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import developer_or_admin_required, render_admin
+from app.services.exporters import _export_json, _export_xlsx, _export_pdf
 from app import db
 from app.models import Module, QueryReport
 from app.services.audit import log_audit
@@ -158,6 +159,34 @@ def run_query(id):
         chart_labels=chart_labels, chart_datasets=chart_datasets,
         chart_title=q.chart_title, q=q)
     return render_admin('Results: ' + q.name, html)
+
+
+@queries_bp.route('/<int:id>/export')
+@developer_or_admin_required
+def export_query(id):
+    """Export query results in the requested format (json, xlsx, pdf)."""
+    q = QueryReport.query.get_or_404(id)
+    fmt = request.args.get('format', 'json')
+    if fmt not in ('json', 'xlsx', 'pdf'):
+        return Response('Unsupported format', status=400)
+
+    try:
+        result = db.session.execute(db.text(q.sql))
+        if result.returns_rows:
+            columns = list(result.keys())
+            rows = [list(r) for r in result.fetchall()]
+        else:
+            columns = []
+            rows = []
+    except Exception as e:
+        return Response(f'Query error: {e}', status=400)
+
+    if fmt == 'json':
+        return _export_json(q.name, columns, rows, False)
+    elif fmt == 'xlsx':
+        return _export_xlsx(q.name, columns, rows, False)
+    elif fmt == 'pdf':
+        return _export_pdf(q.name, columns, rows, False)
 
 
 @queries_bp.route('/describe_tables')
