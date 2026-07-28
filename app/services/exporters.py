@@ -154,16 +154,149 @@ def _export_xlsx(name_plural, columns, rows, has_module, metadata=None):
     )
 
 
-def _export_pdf(name_plural, columns, rows, has_module, metadata=None):
-    """Export rows as a PDF response with formatted table."""
+def _hex_to_reportlab_color(hex_color):
+    """Convert hex color string to reportlab Color."""
+    hex_color = hex_color.lstrip('#')
+    r = int(hex_color[0:2], 16) / 255.0
+    g = int(hex_color[2:4], 16) / 255.0
+    b = int(hex_color[4:6], 16) / 255.0
+    return colors.Color(r, g, b)
+
+
+def _draw_bar_chart(canvas, chart_data, x, y, width, height):
+    """Draw a basic bar chart on the PDF canvas."""
+    if not chart_data or not chart_data.get('datasets'):
+        return
+
+    datasets = chart_data['datasets']
+    labels = chart_data.get('labels', [])
+    if not labels or not datasets[0]['data']:
+        return
+
+    # Find max value for scaling
+    max_val = max(max(ds['data']) for ds in datasets) if datasets else 1
+    if max_val == 0:
+        max_val = 1
+
+    # Chart area
+    chart_left = x + 0.3 * inch
+    chart_right = x + width - 0.3 * inch
+    chart_bottom = y
+    chart_top = y + height - 0.3 * inch
+    chart_height = chart_top - chart_bottom
+    chart_width = chart_right - chart_left
+
+    # Draw axes
+    canvas.setStrokeColor(colors.grey)
+    canvas.setLineWidth(1)
+    canvas.line(chart_left, chart_bottom, chart_left, chart_top)
+    canvas.line(chart_left, chart_top, chart_right, chart_top)
+
+    # Draw bars
+    num_labels = len(labels)
+    num_datasets = len(datasets)
+    group_width = chart_width / num_labels if num_labels > 0 else 0
+    bar_width = min(group_width * 0.6 / max(num_datasets, 1), 0.4 * inch)
+
+    for i, label in enumerate(labels):
+        group_x = chart_left + i * group_width + group_width / 2
+
+        # Draw label
+        canvas.setFont('Helvetica', 7)
+        canvas.drawCentredString(group_x, chart_bottom - 0.15 * inch, str(label)[:15])
+
+        # Draw bars for each dataset
+        for j, ds in enumerate(datasets):
+            val = ds['data'][i] if i < len(ds['data']) else 0
+            bar_height = (val / max_val) * chart_height if max_val > 0 else 0
+            bar_x = group_x - (num_datasets * bar_width) / 2 + j * bar_width
+            bar_color = _hex_to_reportlab_color(ds.get('color', '#2563eb'))
+
+            canvas.setFillColor(bar_color)
+            canvas.setStrokeColor(colors.white)
+            canvas.setLineWidth(0.5)
+            canvas.rect(bar_x, chart_bottom, bar_width, bar_height, fill=1, stroke=1)
+
+    # Draw title
+    if chart_data.get('title'):
+        canvas.setFont('Helvetica-Bold', 10)
+        canvas.drawCentredString(x + width / 2, y + height - 0.2 * inch, chart_data['title'])
+
+
+def _draw_pie_chart(canvas, chart_data, x, y, width, height):
+    """Draw a basic pie chart on the PDF canvas."""
+    if not chart_data or not chart_data.get('datasets'):
+        return
+
+    datasets = chart_data['datasets']
+    labels = chart_data.get('labels', [])
+    if not labels or not datasets[0]['data']:
+        return
+
+    data = datasets[0]['data']
+    total = sum(data) if data else 1
+    if total == 0:
+        total = 1
+
+    cx = x + width / 2
+    cy = y + height / 2 - 0.2 * inch
+    radius = min(width, height) / 4
+
+    # Draw pie slices
+    start_angle = 0
+    for i, val in enumerate(data):
+        if i >= len(labels):
+            break
+        slice_angle = (val / total) * 360
+        color = _hex_to_reportlab_color(datasets[0].get('color', '#2563eb'))
+        canvas.setFillColor(color)
+        canvas.setStrokeColor(colors.white)
+        canvas.setLineWidth(1)
+        canvas.arc(cx - radius, cy - radius, cx + radius, cy + radius, start_angle, start_angle + slice_angle, fill=1, stroke=1)
+        start_angle += slice_angle
+
+    # Draw legend
+    legend_x = x + width - 1.2 * inch
+    legend_y = y + height - 0.5 * inch
+    canvas.setFont('Helvetica', 8)
+    for i, label in enumerate(labels[:8]):
+        color = _hex_to_reportlab_color(datasets[0].get('color', '#2563eb'))
+        canvas.setFillColor(color)
+        canvas.rect(legend_x, legend_y - i * 0.2 * inch, 0.15 * inch, 0.15 * inch, fill=1)
+        canvas.setFillColor(colors.black)
+        canvas.drawString(legend_x + 0.2 * inch, legend_y - i * 0.2 * inch - 0.05 * inch, str(label)[:20])
+
+    # Draw title
+    if chart_data.get('title'):
+        canvas.setFont('Helvetica-Bold', 10)
+        canvas.drawCentredString(x + width / 2, y + height - 0.2 * inch, chart_data['title'])
+
+
+def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_data=None):
+    """Export rows as a PDF response with formatted table and optional chart."""
     if not HAS_REPORTLAB:
         return Response('PDF export requires reportlab. Install with: pip install reportlab',
                         status=501, mimetype='text/plain')
 
     buf = io.BytesIO()
+
+    # Calculate needed height: metadata + chart + table
+    meta_height = 0
+    if metadata:
+        meta_height = len(metadata) * 0.15 * inch + 0.2 * inch
+
+    chart_height = 0
+    if chart_data and chart_data.get('datasets'):
+        chart_height = 2.5 * inch
+
+    table_height = min((len(rows) + 1) * 0.2 * inch, 4 * inch)
+
+    total_height = meta_height + chart_height + table_height + 0.5 * inch
+    page_height = max(letter[1], total_height + 1 * inch)
+
     pdf = SimpleDocTemplate(
         buf,
-        pagesize=letter,
+        pagesize=(letter[0], page_height),
         rightMargin=0.5 * inch,
         leftMargin=0.5 * inch,
         topMargin=0.5 * inch,
@@ -200,13 +333,83 @@ def _export_pdf(name_plural, columns, rows, has_module, metadata=None):
         subtitle_style,
     ))
 
-    # Metadata (query name, SQL, etc.)
+    # Metadata
     if metadata:
         elements.append(Spacer(1, 0.15 * inch))
         for key, val in metadata.items():
             elements.append(Paragraph(f'<b>{key}:</b> {val}', info_style))
 
     elements.append(Spacer(1, 0.25 * inch))
+
+    # Draw chart using Canvas for more control
+    if chart_data and chart_data.get('datasets'):
+        from reportlab.pdfgen import canvas as pdf_canvas
+        chart_canvas = pdf.Canvas(buf, pagesize=(letter[0], page_height))
+
+        chart_type = chart_data.get('type', 'bar')
+        chart_width = letter[0] - inch
+        chart_x = 0.5 * inch
+        chart_y = 0.5 * inch + table_height + 0.3 * inch
+
+        if chart_type in ('pie', 'doughnut'):
+            _draw_pie_chart(chart_canvas, chart_data, chart_x, chart_y, chart_width, chart_height)
+        else:
+            _draw_bar_chart(chart_canvas, chart_data, chart_x, chart_y, chart_width, chart_height)
+
+        chart_canvas.showPage()
+        chart_canvas.save()
+
+    # Build table data
+    headers = list(columns)
+    if has_module:
+        headers.insert(0, 'module')
+
+    table_data = [headers]
+    for row in rows:
+        vals = []
+        if has_module:
+            mod = getattr(row, 'module', None)
+            vals.append(mod.name if mod else '')
+        for col in columns:
+            val = getattr(row, col, None) if not isinstance(row, dict) else row.get(col)
+            serialized = _serialize_value(val)
+            vals.append(str(serialized) if serialized is not None else '')
+        table_data.append(vals)
+
+    # Build the PDF table
+    if table_data:
+        max_cols = len(table_data[0])
+        col_widths = min(1.5 * inch, (letter[0] - inch) / max_cols)
+        table = Table(table_data, repeatRows=1)
+
+        header_fill = PatternFill(start_color='2563EB', end_color='2563EB', fill_type='solid') if HAS_OPENPYXL else colors.HexColor('#2563EB')
+
+        table_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F3F4F6')]),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]
+
+        table.setStyle(TableStyle(table_style))
+        elements.append(table)
+
+    pdf.build(elements)
+    buf.seek(0)
+    filename = name_plural.replace(' ', '_') + '.pdf'
+    return Response(
+        buf.getvalue(),
+        mimetype='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename={filename}'},
+    )
 
     # Build table data
     headers = list(columns)

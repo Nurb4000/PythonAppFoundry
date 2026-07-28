@@ -175,28 +175,69 @@ def export_query(id):
         if result.returns_rows:
             columns = list(result.keys())
             raw_rows = result.fetchall()
-            # Convert SQLAlchemy Row objects to dicts keyed by column name
             rows = [dict(zip(columns, row)) for row in raw_rows]
         else:
             columns = []
             rows = []
+
+        chart_data = None
+        if q.chart_type != 'none' and q.label_column and q.data_columns:
+            label_idx = None
+            for i, c in enumerate(columns):
+                if c.lower() == q.label_column.lower():
+                    label_idx = i
+                    break
+            data_col_indices = []
+            data_col_names = []
+            for dc in q.data_columns.split(','):
+                dc = dc.strip()
+                for i, c in enumerate(columns):
+                    if c.lower() == dc.lower():
+                        data_col_indices.append(i)
+                        data_col_names.append(c)
+                        break
+            if label_idx is not None and data_col_indices:
+                chart_labels = [str(r.get(columns[label_idx]) or '') for r in rows]
+                colors = ['#2563eb', '#e94560', '#28a745', '#ffc107', '#6f42c1', '#fd7e14', '#20c997', '#dc3545']
+                chart_data = {
+                    'type': q.chart_type,
+                    'title': q.chart_title or q.name,
+                    'labels': chart_labels,
+                    'datasets': [],
+                }
+                for j, dc_idx in enumerate(data_col_indices):
+                    col_name = columns[dc_idx]
+                    data = []
+                    for r in rows:
+                        val = r.get(col_name)
+                        try:
+                            data.append(float(val) if val is not None else 0)
+                        except (ValueError, TypeError):
+                            data.append(0)
+                    chart_data['datasets'].append({
+                        'label': data_col_names[j],
+                        'data': data,
+                        'color': colors[j % len(colors)],
+                    })
     except Exception as e:
         return Response(f'Query error: {e}', status=400)
 
     metadata = {
         'Query': q.name,
-        'SQL': q.sql,
         'Rows': str(len(rows)),
     }
     if q.description:
         metadata['Description'] = q.description
 
     if fmt == 'json':
+        result_data = {'metadata': metadata, 'columns': columns, 'rows': rows}
+        if chart_data:
+            result_data['chart'] = chart_data
         return _export_json(q.name, columns, rows, False, metadata=metadata)
     elif fmt == 'xlsx':
         return _export_xlsx(q.name, columns, rows, False, metadata=metadata)
     elif fmt == 'pdf':
-        return _export_pdf(q.name, columns, rows, False, metadata=metadata)
+        return _export_pdf(q.name, columns, rows, False, metadata=metadata, chart_data=chart_data)
 
 
 @queries_bp.route('/describe_tables')
