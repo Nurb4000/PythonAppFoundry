@@ -1,9 +1,10 @@
-from flask import Blueprint, request, redirect, url_for, render_template, flash
+from flask import Blueprint, request, redirect, url_for, render_template, flash, jsonify
 from app.services.csrf import csrf_protect
 from app.services.admin_utils import developer_or_admin_required, render_admin
 from app import db
 from app.models import Module, QueryReport
 from app.services.audit import log_audit
+from app.services.sql_builder import describe_tables, natural_language_to_sql, validate_sql, build_visual_query, build_query_with_joins
 
 queries_bp = Blueprint('queries', __name__)
 
@@ -157,3 +158,131 @@ def run_query(id):
         chart_labels=chart_labels, chart_datasets=chart_datasets,
         chart_title=q.chart_title, q=q)
     return render_admin('Results: ' + q.name, html)
+
+
+@queries_bp.route('/describe_tables')
+@developer_or_admin_required
+def describe_tables_endpoint():
+    """Return JSON list of all tables and their columns for the SQL Builder UI."""
+    tables = describe_tables()
+    return jsonify(tables)
+
+
+@queries_bp.route('/generate_sql', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def generate_sql():
+    """Generate SQL from natural language input via the LLM."""
+    user_input = request.form.get('input', '').strip()
+    selected_tables = request.form.getlist('tables[]')
+
+    if not user_input:
+        return jsonify({'sql': None, 'error': 'Please enter a query description.'})
+
+    result = natural_language_to_sql(user_input, selected_tables or None)
+
+    if result['error']:
+        return jsonify({'sql': None, 'error': result['error']})
+
+    validation = validate_sql(result['sql'])
+    if not validation['valid']:
+        return jsonify({
+            'sql': result['sql'],
+            'error': f'Generated SQL failed validation: {validation["error"]}',
+            'warning': True,
+        })
+
+    return jsonify({'sql': result['sql'], 'error': None})
+
+
+@queries_bp.route('/visual_query', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def visual_query():
+    """Build SQL from visual query builder form data."""
+    table_name = request.form.get('table_name', '').strip()
+    columns = request.form.getlist('columns[]')
+    select_all = request.form.get('select_all') == 'on'
+
+    conditions = []
+    cond_cols = request.form.getlist('condition_column[]')
+    cond_ops = request.form.getlist('condition_operator[]')
+    cond_vals = request.form.getlist('condition_value[]')
+    for i in range(len(cond_cols)):
+        if cond_cols[i] and cond_cols[i] != '---':
+            conditions.append({
+                'column': cond_cols[i],
+                'operator': cond_ops[i] if i < len(cond_ops) else '=',
+                'value': cond_vals[i] if i < len(cond_vals) else '',
+            })
+
+    order_by = []
+    ob_cols = request.form.getlist('order_column[]')
+    ob_dirs = request.form.getlist('order_direction[]')
+    for i in range(len(ob_cols)):
+        if ob_cols[i]:
+            order_by.append({
+                'column': ob_cols[i],
+                'direction': ob_dirs[i] if i < len(ob_dirs) else 'asc',
+            })
+
+    joins = []
+    join_tables = request.form.getlist('join_table[]')
+    join_on_cols = request.form.getlist('join_on_column[]')
+    join_ref_cols = request.form.getlist('join_ref_column[]')
+    join_types = request.form.getlist('join_type[]')
+    for i in range(len(join_tables)):
+        if join_tables[i]:
+            joins.append({
+                'table': join_tables[i],
+                'on_column': join_on_cols[i] if i < len(join_on_cols) else '',
+                'on_ref_column': join_ref_cols[i] if i < len(join_ref_cols) else '',
+                'type': join_types[i] if i < len(join_types) else 'INNER',
+            })
+
+    limit = request.form.get('limit', '100', type=int)
+
+    if joins:
+        sql = build_query_with_joins(
+            table_name, columns or None, conditions or None,
+            joins, order_by or None, limit
+        )
+    else:
+        sql = build_visual_query(
+            table_name, columns or None, conditions or None,
+            order_by or None, limit, select_all
+        )
+
+    validation = validate_sql(sql)
+    if not validation['valid']:
+        return jsonify({'sql': sql, 'error': f'Query validation failed: {validation["error"]}'})
+
+    return jsonify({'sql': sql, 'error': None})
+
+
+@queries_bp.route('/execute_sql', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def execute_sql():
+    """Execute a SQL query (from NL generation or visual builder) and return results."""
+    sql = request.form.get('sql', '').strip()
+    if not sql:
+        return jsonify({'error': 'No SQL provided.', 'columns': [], 'rows': []})
+
+    import time as _t
+    t0 = _t.time()
+    error = None
+    columns = []
+    rows = []
+
+    try:
+        result = db.session.execute(db.text(sql))
+        if result.returns_rows:
+            columns = list(result.keys())
+            rows = [list(r) for r in result.fetchall()]
+        duration = int((_t.time() - t0) * 1000)
+    except Exception as e:
+        duration = int((_t.time() - t0) * 1000)
+        error = str(e)
+
+    return jsonify({'columns': columns, 'rows': rows, 'duration_ms': duration, 'error': error})
