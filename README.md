@@ -21,13 +21,13 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Dynamic Tables** — Scripts create and query database tables on the fly via `DynamicModel.get_or_create()` — no migrations, no schema changes.
 - **Sandboxed Script Runner** — Python scripts execute in a restricted environment with safe builtins and documented helpers (`send_email`, `render_form`, etc.).
 - **Role-Based Access** — Three roles: **Admin** (full system control), **Developer** (create/manage modules, routes, scripts, forms — can't manage users or settings), and **User** (can log in to auth-protected routes only).
-- **Full Admin Panel** — CRUD for modules, routes, scripts, forms, tasks, triggers, users, groups, data tables, settings, and file uploads. All list views include column sorting, module filtering, and CSV export.
+- **Full Admin Panel** — CRUD for modules, routes, scripts, forms, tasks, triggers, users, groups, data tables, settings, and file uploads. All list views include column sorting, module filtering, and multi-format export (CSV, JSON, Excel, PDF).
 - **Bundle Import/Export** — Modules export as XML for backup or transfer between instances. Import XML to create or update modules.
 - **SMTP Email** — Platform-wide SMTP settings; `send_email()` is available in all scripts.
 - **Chart.js Charts** — Saved SQL queries render results as bar, line, pie, doughnut, polar area, or radar charts using Chart.js (vendored, no CDN). Module scripts can also draw charts via the `render_chart()` helper.
 - **AI-Assisted SQL Builder** — Create queries via natural language (powered by the same LLM backend) or a visual drag-and-drop builder at `/__admin/queries/builder`. Existing queries can be enhanced with "Enhance with AI Builder" from the edit form, refining SQL without losing chart/schedule settings.
 - **Scheduled Query Reports** — Queries with a cron schedule and email recipient run automatically; results emailed as CSV.
-- **CSV Export** — Every list view and data table supports CSV download.
+- **Multi-Format Export** — Every list view and data table supports CSV, JSON, Excel (.xlsx), and PDF download via the export dropdown. Query reports can be exported to JSON, XLSX, or PDF from the query list and result pages.
 - **Module Versioning** — Automatic version snapshots on every import (AI Designer, BPMN) and manual version creation. Rollback to any previous state with one click, diff between versions, and add comments to track changes over time.
 - **Module Dependency Tracking** — Automatically detects when modules reference other modules' routes or scripts. Shows dependency warnings before deletion to prevent silent breakage. Manual "Scan" button to re-detect dependencies.
 - **System Dashboard** — Health overview at `/__admin/dashboard` showing module/route/script counts, system info (Python/Flask versions, uptime), recent execution logs with View Error/Output buttons for full details, database table sizes, and per-module summaries. All script executions are automatically logged.

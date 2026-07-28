@@ -42,7 +42,8 @@ This guide is for developers maintaining or extending the platform code itself. 
 | `app/services/csrf.py` | ~35 | CSRF token generation/validation. Supports form, header (`X-CSRF-Token`), and JSON token extraction. |
 | `app/services/rate_limiter.py` | ~45 | In-memory rate limiting for auth endpoints (5 attempts/5 min) and webhooks (30/min, 600/hr per slug). |
 | `app/services/validation.py` | ~80 | Input validation utilities: `validate_slug()`, `validate_route_slug()`, `validate_cron_expression()`, `validate_email()`, `validate_username()`. |
-| `app/services/admin_utils.py` | ~150 | Shared admin patterns extracted from monolithic `admin.py`: decorators (`admin_required`, `developer_or_admin_required`), `AttrProxy`, `render_admin()`, `list_view()`, `_export_csv()`. |
+| `app/services/admin_utils.py` | ~160 | Shared admin patterns: decorators (`admin_required`, `developer_or_admin_required`), `AttrProxy`, `render_admin()`, `list_view()` (dispatches to CSV/JSON/XLSX/PDF exporters), `_export_csv()`. |
+| `app/services/exporters.py` | ~180 | Multi-format export utilities: `_export_json()`, `_export_xlsx()`, `_export_pdf()`. Each takes `(name_plural, columns, rows, has_module)` and returns a Flask `Response`. Uses `openpyxl` for XLSX and `reportlab` for PDF. |
 | `app/services/backup.py` | ~90 | Database backup/restore — copies SQLite DB to `instance/backups/`, supports listing, downloading, restoring (with emergency backup), and deletion. |
 | `app/services/marketplace.py` | ~60 | Module marketplace — list/publish/remove modules from `marketplace/` directory as JSON entries. |
 | `app/services/openapi.py` | ~100 | OpenAPI 3.0 spec generation from route table. Exports JSON spec and provides Swagger UI endpoint. |
@@ -91,7 +92,7 @@ The platform vendors certain JavaScript/CSS assets to enable air-gapped deployme
 There is no `app/templates/` directory. All HTML is rendered via `render_template_string()` (Flask's version of `string.Template` with Jinja2). Three patterns:
 
 1. **`ADMIN_TEMPLATE`** (admin.py line ~13) — The base admin layout: sidebar, top bar, content area. Used via `render_admin()`.
-2. **`LIST_TEMPLATE`** (admin.py line ~41) — Generic list view: sortable columns, module filter, CSV export, edit links.
+2. **`LIST_TEMPLATE`** (admin.py line ~41) — Generic list view: sortable columns, module filter, multi-format export (CSV/JSON/XLSX/PDF), edit links.
 3. **Inline strings** passed directly to `render_admin()` in each route. Example from `admin.py`:
    ```python
    return render_admin('Settings', '''
@@ -112,13 +113,13 @@ There is no `app/templates/` directory. All HTML is rendered via `render_templat
 - Converts `datetime` objects to server-local time (strips tzinfo after `astimezone()`)
 - Converts everything else to `str`
 
-`list_view()` (admin.py line ~169) is a generic function that:
+`list_view()` (`app/services/admin_utils.py`) is a generic function that:
 1. Queries the model (with optional module filter)
 2. Sorts by the requested column
-3. Returns CSV or renders `LIST_TEMPLATE`
+3. Dispatches to the appropriate exporter based on `?format=` (csv, json, xlsx, pdf) or renders `LIST_TEMPLATE`
 4. Wraps each row in `AttrProxy`
 
-**Gotcha:** The `_export_csv()` function (admin.py line ~173) reads raw model attributes, not going through `AttrProxy`. So CSV exports show raw UTC datetimes and raw cron expressions.
+**Gotcha:** The `_export_csv()` function reads raw model attributes via `getattr()`, not through `AttrProxy`. So exports show raw UTC datetimes and raw cron expressions. The JSON/XLSX/PDF exporters in `app/services/exporters.py` use `_serialize_value()` to convert datetimes to ISO strings.
 
 ### `render_admin(title, content_template, **kwargs)`
 

@@ -151,6 +151,38 @@ Browse and edit any database table directly from the admin UI.
 - Input types auto-detect based on column type (text, number, boolean, datetime)
 - Password columns are hidden for security
 
+### Export Formats
+
+Every admin list view and the data browser supports multi-format export via a dropdown menu (replacing the old single "Export CSV" link).
+
+**Available formats:**
+
+| Format | Use case |
+|--------|----------|
+| **CSV** | Spreadsheet import, plain-text processing, legacy compatibility |
+| **JSON** | API consumption, programmatic processing, developer workflows |
+| **Excel (.xlsx)** | Reports for non-technical users, pivot tables, formatting |
+| **PDF** | Printed reports, email attachments, formal documentation |
+
+**Where export is available:**
+
+- All admin list views (modules, routes, scripts, forms, tasks, triggers, users, groups, etc.)
+- Data Browser — both the table list and individual table browse pages
+- Query Reports — from the query list (per-query links) and the query results page (batch export after running)
+
+**Query report exports:**
+
+When you run a query, the results page includes Export JSON / Excel / PDF buttons at the top. This downloads the actual query result set (not just the list view data). The JSON export includes column names, row count, and the raw data structured for programmatic use.
+
+**URL pattern:**
+
+All exports use the `?format=` query parameter:
+```
+/__admin/users?format=json
+/__admin/data/my_table?format=xlsx
+/__admin/queries/5/export?format=pdf
+```
+
 ### Uploads (File Manager)
 Manage files (images, PDFs, documents, etc.) for use in your pages.
 
