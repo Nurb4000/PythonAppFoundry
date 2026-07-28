@@ -256,9 +256,13 @@ window.rescanAll = async function() {
   statusEl.textContent = 'Scanning all modules...';
   
   try {
+    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}';
     const response = await fetch('{{ url_for("admin.modules.scan_all_dependencies") }}', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      }
     });
     if (response.ok) {
       const result = await response.json();
@@ -274,5 +278,5 @@ window.rescanAll = async function() {
 
 populateFilter();
 showCycleAlerts();
-renderGraph();
+renderGraph().catch(e => console.error('Initial render failed:', e));
 </script>
