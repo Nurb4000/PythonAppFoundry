@@ -166,13 +166,11 @@ function buildDiagram(data, filterSlug) {
   for (const edge of filteredEdges) {
     const srcSafe = escapeId(edge.source);
     const tgtSafe = escapeId(edge.target);
-    let style = '';
-    if (cycleSlugs.has(edge.source) && cycleSlugs.has(edge.target)) {
-      style = ' style stroke:#dc3545,stroke-width:3px;';
-    } else if (edge.type === 'script_reference') {
-      style = ' -.->';
+    let arrow = '-->';
+    if (edge.type === 'script_reference') {
+      arrow = '-.-';
     }
-    definition += '  ' + srcSafe + '-' + style + '>' + tgtSafe + ' : ' + edge.type + '\n';
+    definition += '  ' + srcSafe + ' ' + arrow + ' ' + tgtSafe + ' : ' + edge.type + '\n';
   }
 
   return definition;
@@ -190,7 +188,7 @@ async function renderGraph() {
     container.innerHTML = svg;
     statusEl.textContent = graphData.nodes.length + ' modules, ' + graphData.edges.length + ' dependencies';
   } catch (e) {
-    container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Error rendering graph: ' + e.message + '</div>';
+    container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Error rendering graph.<br><details><summary>Show definition</summary><pre style="white-space:pre-wrap;font-size:0.8em;">' + definition.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></details><br>Details: ' + e.message + '</div>';
     statusEl.textContent = 'Render error';
     console.error('Mermaid render error:', e);
   }
