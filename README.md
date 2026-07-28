@@ -25,6 +25,7 @@ For the most part the database is fed by XML imports. The original plan was to c
 - **Bundle Import/Export** — Modules export as XML for backup or transfer between instances. Import XML to create or update modules.
 - **SMTP Email** — Platform-wide SMTP settings; `send_email()` is available in all scripts.
 - **Chart.js Charts** — Saved SQL queries render results as bar, line, pie, doughnut, polar area, or radar charts using Chart.js (vendored, no CDN). Module scripts can also draw charts via the `render_chart()` helper.
+- **AI-Assisted SQL Builder** — Create queries via natural language (powered by the same LLM backend) or a visual drag-and-drop builder at `/__admin/queries/builder`. Existing queries can be enhanced with "Enhance with AI Builder" from the edit form, refining SQL without losing chart/schedule settings.
 - **Scheduled Query Reports** — Queries with a cron schedule and email recipient run automatically; results emailed as CSV.
 - **CSV Export** — Every list view and data table supports CSV download.
 - **Module Versioning** — Automatic version snapshots on every import (AI Designer, BPMN) and manual version creation. Rollback to any previous state with one click, diff between versions, and add comments to track changes over time.

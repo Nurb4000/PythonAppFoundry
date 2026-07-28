@@ -575,6 +575,27 @@ Queries are **module-scoped**, just like routes, scripts, and forms. Each query 
 6. Click **Save** to store the query
 7. Click **Save & Run** to execute and preview results as table + chart
 
+### AI-Assisted SQL Builder
+
+For users who prefer not to write SQL by hand, the platform includes an AI-powered query builder accessible at `/__admin/queries/builder` (linked from the Queries page as "AI SQL Builder").
+
+**Two modes:**
+
+- **Natural Language** — Type a description like "show me all users who signed up in the last 30 days" and the LLM generates the SQL using the database schema as context.
+- **Visual Builder** — Select a table, pick columns, add WHERE conditions, ORDER BY, and JOINs via dropdowns. SQL is built automatically.
+
+Both modes share:
+- An **Import existing query** dropdown to load a saved query's SQL for refinement
+- A **Run Query** button to execute and preview results inline
+- A **Save as New Query Report** button to store the result as a new saved query
+- A **Save & Return to Editor** button (only visible when entering via "Enhance with AI Builder" from an existing query's edit form) that updates the SQL while preserving all other settings (name, module, chart type, schedule, email)
+
+**Workflow for refining an existing query:**
+1. Open a saved query's edit page (`/__admin/queries/<id>`)
+2. Click **Enhance with AI Builder →**
+3. Refine the SQL using natural language or the visual builder
+4. Click **Save & Return to Editor** — you're back on the edit form with the new SQL, all other fields intact
+
 ### Scheduling & Email
 
 Open the **Schedule & Email** section on the edit page:

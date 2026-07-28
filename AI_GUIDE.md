@@ -123,6 +123,8 @@ _result = "<h2>Add Item</h2><form method=POST>..."
 
   <query_reports>
     <!-- Optional: saved SQL queries that ship with the module.
+         Queries can also be created/edited via the AI SQL Builder UI at /__admin/queries/builder
+         (natural language or visual mode). Use XML here to bundle queries with the module for export/import.
          chart_type: bar, line, pie, doughnut, polarArea, radar, none
          label_column: column name for chart X-axis/categories
          data_columns: comma-separated column names for chart values
