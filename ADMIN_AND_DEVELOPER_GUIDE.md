@@ -753,6 +753,105 @@ This means the AI can suggest fixes that work within the sandbox rather than sug
 - User must have Developer or Admin role
 - CSRF token is included automatically
 
+## AI Enhancement for Individual Elements
+
+In addition to the full module generation via AI Designer and BPMN, the platform now includes targeted AI enhancement features for individual elements. These let you get AI assistance on specific items without building an entire module.
+
+### Script Enhancement
+
+Improve existing scripts with AI-powered suggestions for error handling, documentation, structure, and optimization.
+
+**How to use:**
+1. Go to **Scripts** → edit any script
+2. Click the **"AI Enhance"** button (purple)
+3. Enter what you'd like to improve (e.g., "Add error handling", "Improve documentation", "Optimize performance")
+4. Click **"Send to AI"**
+5. Review the suggestions and diff preview
+6. Click **"Apply Enhancement"** to replace the current code, or **"Copy to Clipboard"**
+
+**Example prompts:**
+- "Add comprehensive error handling"
+- "Improve documentation with docstrings"
+- "Optimize for better performance"
+- "Fix potential security issues"
+
+### Form Schema Generation
+
+Generate form JSON schemas from natural language descriptions.
+
+**How to use:**
+1. Go to **Forms** → edit any form
+2. Click the **"AI Design Form"** button
+3. Describe the form you want (e.g., "Contact form with name, email, phone, and message fields")
+4. Click **"Generate Schema"**
+5. Review the generated schema and diff
+6. Click **"Apply Schema"** to replace the current schema, or **"Copy to Clipboard"**
+
+**Example prompts:**
+- "Registration form with username, email, password, and confirm password"
+- "Product inquiry form with company name, product interest dropdown, and message"
+- "Simple feedback form with rating slider and comments"
+
+### Template Improvement
+
+Enhance HTML/Jinja2 templates with AI suggestions for structure, accessibility, and responsiveness.
+
+**How to use:**
+1. Go to **Templates** → edit any template
+2. Click the **"AI Improve"** button
+3. Enter what you'd like to improve (e.g., "Fix HTML structure", "Improve accessibility", "Add responsive design")
+4. Click **"Send to AI"**
+5. Review the suggestions and diff preview
+6. Click **"Apply Improvement"** to replace the current template, or **"Copy to Clipboard"**
+
+**Example prompts:**
+- "Fix HTML structure and add proper semantic tags"
+- "Improve accessibility with ARIA labels and roles"
+- "Add responsive design for mobile devices"
+- "Convert inline styles to CSS classes"
+
+### Route Configuration Helper
+
+Get AI suggestions for route configuration based on your description.
+
+**How to use:**
+1. Go to **Routes** → edit any route
+2. Click the **"AI Configure"** button
+3. Describe what the route should do (e.g., "Public API endpoint that returns user data as JSON")
+4. Click **"Suggest Configuration"**
+5. Review the suggested configuration (slug, methods, auth requirements)
+6. Click **"Apply Configuration"** to fill in the form fields
+
+**Example prompts:**
+- "Public API endpoint for user registration"
+- "Admin-only route to manage system settings"
+- "RESTful CRUD routes for blog posts"
+
+### How It Works
+
+All AI enhancement features use the same LLM configuration as the rest of the platform (Admin → Settings). The AI receives context from `AI_GUIDE.md` to understand how elements interact within modules.
+
+**Key features:**
+- **Diff preview** — See exactly what will change before applying
+- **Lower temperature** (0.15) — More deterministic, focused output
+- **Apply or copy** — Choose to apply changes directly or copy to clipboard for manual review
+- **CSRF protected** — All requests include automatic CSRF tokens
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Temperature | `0.15` | Lower than default (0.3) for more deterministic output |
+| Max Tokens | `4096` | Maximum response length |
+
+These settings are configured in **Admin → Settings** under the LLM section.
+
+### Requirements
+
+- LLM must be configured in Admin → Settings (Provider + Endpoint at minimum)
+- User must have Developer or Admin role
+- CSRF token is included automatically
+
 ## Audit Log
 
 All administrative actions are automatically logged to the `audit_logs` table. This provides a traceable history of who changed what, when, and from where.
