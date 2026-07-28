@@ -174,7 +174,9 @@ def export_query(id):
         result = db.session.execute(db.text(q.sql))
         if result.returns_rows:
             columns = list(result.keys())
-            rows = [list(r) for r in result.fetchall()]
+            raw_rows = result.fetchall()
+            # Convert SQLAlchemy Row objects to dicts keyed by column name
+            rows = [dict(zip(columns, row)) for row in raw_rows]
         else:
             columns = []
             rows = []
