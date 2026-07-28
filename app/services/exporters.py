@@ -344,7 +344,7 @@ def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_dat
     # Draw chart using Canvas for more control
     if chart_data and chart_data.get('datasets'):
         from reportlab.pdfgen import canvas as pdf_canvas
-        chart_canvas = pdf.Canvas(buf, pagesize=(letter[0], page_height))
+        chart_canvas = pdf_canvas.Canvas(buf, pagesize=(letter[0], page_height))
 
         chart_type = chart_data.get('type', 'bar')
         chart_width = letter[0] - inch
