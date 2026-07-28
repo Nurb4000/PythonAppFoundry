@@ -113,37 +113,111 @@
   .diff-item.added { background: #f0fdf4; color: #166534; }
   .diff-item.removed { background: #fef2f2; color: #991b1b; }
   .diff-item.modified { background: #fffbeb; color: #92400e; }
-  .diff-change-detail {
-    margin-left: 1.5rem;
-    padding: 0.5rem 0.75rem;
-    background: #fff;
+
+  /* Line-by-line diff display */
+  .line-diff-container {
+    margin-bottom: 0.75rem;
     border: 1px solid #e2e8f0;
     border-radius: 4px;
+    overflow: hidden;
+  }
+  .line-diff-label {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+    color: #475569;
+  }
+  .line-diff {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    max-height: 400px;
+    overflow: auto;
+    border-top: 1px solid #e2e8f0;
+  }
+  .line-diff-col {
+    padding: 0;
+    margin: 0;
+    overflow-x: auto;
+  }
+  .line-diff-col:first-child {
+    border-right: 1px solid #e2e8f0;
+  }
+  .line-diff-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .line-diff-cell {
+    padding: 1px 0.5rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 1.5em;
+  }
+  .line-diff-cell.old-cell {
+    text-align: right;
+    color: #94a3b8;
+    border-right: 1px solid #e2e8f0;
+    padding-right: 0.5rem;
+    user-select: none;
+  }
+  .line-diff-cell.new-cell {
+    padding-left: 0.5rem;
+  }
+  .line-diff-row.added .old-cell { background: #f0fdf4; }
+  .line-diff-row.added .new-cell { background: #dcfce7; }
+  .line-diff-row.removed .old-cell { background: #fef2f2; }
+  .line-diff-row.removed .new-cell { background: #f0fdf4; }
+  .line-diff-row.same .old-cell { background: #f8fafc; color: #64748b; }
+  .line-diff-row.same .new-cell { background: #f8fafc; }
+  .line-diff-row.context .old-cell { background: #f8fafc; color: #94a3b8; }
+  .line-diff-row.context .new-cell { background: #f8fafc; }
+
+  /* Unified (single-column) diff for small changes */
+  .unified-diff {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    max-height: 400px;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background: #fff;
+  }
+  .unified-diff-row {
+    padding: 1px 0.5rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .unified-diff-row.added { background: #dcfce7; color: #166534; }
+  .unified-diff-row.removed { background: #fef2f2; color: #991b1b; }
+  .unified-diff-row.context { background: #f8fafc; color: #475569; }
+
+  .diff-change-detail {
+    margin-bottom: 0.75rem;
+  }
+  .diff-change-detail .item-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #1e293b;
     margin-bottom: 0.5rem;
-    font-size: 0.85rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #e2e8f0;
   }
   .diff-change-detail .change-field {
     font-weight: 600;
     color: #d97706;
+    font-size: 0.85rem;
     margin-bottom: 0.25rem;
+    margin-top: 0.5rem;
   }
-  .diff-change-detail .change-value {
-    font-family: monospace;
-    background: #f8fafc;
-    padding: 0.25rem 0.5rem;
-    border-radius: 3px;
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 150px;
-    overflow-y: auto;
+  .diff-change-detail .change-field:first-child {
+    margin-top: 0;
   }
-  .diff-change-detail .change-value .old-val { color: #991b1b; }
-  .diff-change-detail .change-value .new-val { color: #166534; }
-  .no-changes {
-    color: #888;
-    font-style: italic;
-    padding: 0.5rem 0;
-  }
+
   .metadata-grid {
     display: grid;
     grid-template-columns: auto 1fr 1fr;
@@ -165,6 +239,7 @@
   }
   .metadata-grid .meta-old { background: #fef2f2; color: #991b1b; }
   .metadata-grid .meta-new { background: #f0fdf4; color: #166534; }
+
   .req-diff {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -181,6 +256,12 @@
   }
   .req-diff .req-panel.old { background: #fef2f2; color: #991b1b; }
   .req-diff .req-panel.new { background: #f0fdf4; color: #166534; }
+
+  .no-changes {
+    color: #888;
+    font-style: italic;
+    padding: 0.5rem 0;
+  }
 </style>
 
 <div class="compare-header">
@@ -302,26 +383,52 @@
   {% endif %}
 </div>
 
-{% if diff.metadata %}
-<div class="diff-section">
-  <div class="diff-section-header" onclick="toggleSection(this)">
-    <span>Module Metadata</span>
-    <span class="section-icon open">&rsaquo;</span>
-  </div>
-  <div class="diff-section-body open">
-    <div class="metadata-grid">
-      <div class="meta-field">Field</div>
-      <div style="font-weight:600;color:#991b1b;">{{ v1.version_number }}</div>
-      <div style="font-weight:600;color:#166534;">{{ v2.version_number }}</div>
+{% macro render_metadata_diff() %}
+  {% if diff.metadata %}
+  <div class="diff-section">
+    <div class="diff-section-header" onclick="toggleSection(this)">
+      <span>Module Metadata</span>
+      <span class="section-icon open">&rsaquo;</span>
+    </div>
+    <div class="diff-section-body open">
       {% for field, change in diff.metadata.items() %}
-      <div class="meta-field">{{ field }}</div>
-      <div class="meta-old">{{ change.old or '(empty)' }}</div>
-      <div class="meta-new">{{ change.new or '(empty)' }}</div>
+      <div style="margin-bottom:1rem;">
+        <div style="font-weight:600;color:#475569;text-transform:capitalize;margin-bottom:0.35rem;">{{ field }}</div>
+        {% if change.diff is defined %}
+          {% if change.diff|length > 0 %}
+          <div class="unified-diff">
+            {% for dtype, dline in change.diff %}
+            <div class="unified-diff-row {{ dtype }}">{{ ('+' if dtype == 'new_only' else '-' if dtype == 'old_only' else ' ') }}{{ dline }}</div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="metadata-grid">
+            <div class="meta-field">{{ v1.version_number }}</div>
+            <div class="meta-new">{{ change.new or '(empty)' }}</div>
+            <div class="meta-field" style="visibility:hidden;">&nbsp;</div>
+            <div class="meta-old">{{ change.old or '(empty)' }}</div>
+            <div></div>
+            <div class="meta-new" style="visibility:hidden;">&nbsp;</div>
+          </div>
+          {% endif %}
+        {% else %}
+        <div class="metadata-grid">
+          <div class="meta-field">{{ v1.version_number }}</div>
+          <div class="meta-old">{{ change.old or '(empty)' }}</div>
+          <div class="meta-field">{{ v2.version_number }}</div>
+          <div class="meta-field"></div>
+          <div></div>
+          <div class="meta-new" style="visibility:hidden;">&nbsp;</div>
+        </div>
+        {% endif %}
+      </div>
       {% endfor %}
     </div>
   </div>
-</div>
-{% endif %}
+  {% endif %}
+{% endmacro %}
+
+{{ render_metadata_diff() }}
 
 {% if diff.requirements %}
 <div class="diff-section">
@@ -330,10 +437,18 @@
     <span class="section-icon open">&rsaquo;</span>
   </div>
   <div class="diff-section-body open">
+    {% if diff.requirements.diff and diff.requirements.diff|length > 0 %}
+    <div class="unified-diff">
+      {% for dtype, dline in diff.requirements.diff %}
+      <div class="unified-diff-row {{ dtype }}">{{ ('+' if dtype == 'new_only' else '-' if dtype == 'old_only' else ' ') }}{{ dline }}</div>
+      {% endfor %}
+    </div>
+    {% else %}
     <div class="req-diff">
       <div class="req-panel old">{{ diff.requirements.old or '(none)' }}</div>
       <div class="req-panel new">{{ diff.requirements.new or '(none)' }}</div>
     </div>
+    {% endif %}
   </div>
 </div>
 {% endif %}
@@ -370,13 +485,46 @@
         <div class="diff-subsection-title modified">Modified ({{ section.modified|length }})</div>
         {% for item in section.modified %}
         <div class="diff-change-detail">
-          <div class="change-field">{{ item.name }}</div>
+          <div class="item-name">{{ item.name }}</div>
           {% for field, change in item.changes.items() %}
-          <div class="change-value">
-            <span class="old-val">{{ field }}: {{ change.old }}</span>
-            <br>&rarr;
-            <span class="new-val">{{ field }}: {{ change.new }}</span>
-          </div>
+          <div class="change-field">{{ field }}</div>
+          {% if change.diff is defined and change.diff|length > 0 %}
+            {# Show line-by-line diff #}
+            <div class="line-diff-container">
+              <div style="display:grid;grid-template-columns:1fr 1fr;">
+                <div style="padding:0.35rem 0.75rem;font-size:0.8rem;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;color:#475569;">{{ v1.version_number }}</div>
+                <div style="padding:0.35rem 0.75rem;font-size:0.8rem;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;color:#475569;">{{ v2.version_number }}</div>
+              </div>
+              <div class="line-diff">
+                {# Old side (left) #}
+                <div class="line-diff-col">
+                  {% for dtype, dline in change.diff %}
+                  <div class="line-diff-row {% if dtype == 'new_only' %}removed{% elif dtype == 'old_only' %}same{% else %}context{% endif %}">
+                    <div class="line-diff-cell old-cell">{{ dline }}</div>
+                    <div class="line-diff-cell" style="visibility:hidden;">&nbsp;</div>
+                  </div>
+                  {% endfor %}
+                </div>
+                {# New side (right) #}
+                <div class="line-diff-col">
+                  {% for dtype, dline in change.diff %}
+                  <div class="line-diff-row {% if dtype == 'old_only' %}added{% elif dtype == 'new_only' %}same{% else %}context{% endif %}">
+                    <div class="line-diff-cell" style="visibility:hidden;">&nbsp;</div>
+                    <div class="line-diff-cell new-cell">{{ dline }}</div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          {% elif change.old is defined and change.new is defined %}
+            {# Simple old/new comparison (no line diff) #}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.85rem;">
+              <div style="padding:0.5rem;background:#fef2f2;border-radius:4px;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">{{ change.old }}</div>
+              <div style="padding:0.5rem;background:#f0fdf4;border-radius:4px;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">{{ change.new }}</div>
+            </div>
+          {% else %}
+            <div style="font-size:0.85rem;color:#475569;padding:0.25rem 0;">{{ change }}</div>
+          {% endif %}
           {% endfor %}
         </div>
         {% endfor %}

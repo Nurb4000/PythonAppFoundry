@@ -154,6 +154,36 @@ def _compare_text_content(old_elem, new_elem, child_tag):
     return {}
 
 
+def _line_diff(old_text, new_text, context=3):
+    """Produce a unified diff between two strings, returning list of (type, line) tuples.
+    
+    type is one of: 'same', 'old_only', 'new_only'
+    Returns empty list if texts are identical.
+    """
+    old_lines = old_text.splitlines(keepends=True)
+    new_lines = new_text.splitlines(keepends=True)
+    
+    if old_lines == new_lines:
+        return []
+    
+    result = []
+    diff = difflib.unified_diff(
+        old_lines, new_lines,
+        lineterm='',
+        n=context,
+    )
+    for line in diff:
+        if line.startswith('---') or line.startswith('+++'):
+            continue
+        elif line.startswith('-'):
+            result.append(('old_only', line[1:]))
+        elif line.startswith('+'):
+            result.append(('new_only', line[1:]))
+        else:
+            result.append(('same', line))
+    return result
+
+
 def _diff_collection(old_root, new_root, collection_tag, name_attr, text_child=None, sub_elements=None):
     """
     Compare a named collection of elements between two module roots.
@@ -253,69 +283,237 @@ def structured_diff_versions(version_id_1, version_id_2):
             diff['metadata'][field] = {'old': old_val, 'new': new_val}
 
     # Description
-    desc_changes = _compare_text_content(root1, root2, 'description')
-    if desc_changes:
-        diff['metadata']['description'] = desc_changes
+    old_desc = (root1.findtext('description') or '').strip()
+    new_desc = (root2.findtext('description') or '').strip()
+    if old_desc != new_desc:
+        diff['metadata']['description'] = {
+            'old': old_desc,
+            'new': new_desc,
+            'diff': _line_diff(old_desc, new_desc),
+        }
 
     # Scripts (name attribute, source_code is text content)
-    diff['scripts'] = _diff_collection(root1, root2, 'scripts', 'script', text_child=None)
-    # For scripts, also compare source_code (stored as text of the script element)
+    diff['scripts'] = {'added': [], 'removed': [], 'modified': []}
     old_scripts_elem = root1.find('scripts')
     new_scripts_elem = root2.find('scripts')
     if old_scripts_elem is not None and new_scripts_elem is not None:
         old_script_map = {s.get('name'): s for s in old_scripts_elem.findall('script')}
         new_script_map = {s.get('name'): s for s in new_scripts_elem.findall('script')}
-        common_names = set(old_script_map.keys()) & set(new_script_map.keys())
-        # Rebuild modified list to include source_code comparison
-        source_changes = []
-        for name in common_names:
+        old_names = set(old_script_map.keys())
+        new_names = set(new_script_map.keys())
+        for name in new_names - old_names:
+            diff['scripts']['added'].append(name)
+        for name in old_names - new_names:
+            diff['scripts']['removed'].append(name)
+        for name in old_names & new_names:
             old_s = old_script_map[name]
             new_s = new_script_map[name]
             old_src = (old_s.text or '').strip()
             new_src = (new_s.text or '').strip()
-            if old_src != new_src:
-                source_changes.append({'name': name, 'changes': {'source_code': {'old': old_src[:200], 'new': new_src[:200]}}})
-        diff['scripts']['modified'] = source_changes
+            lang_changed = old_s.get('language', 'python') != new_s.get('language', 'python')
+            if old_src != new_src or lang_changed:
+                entry = {'name': name, 'changes': {}}
+                if lang_changed:
+                    entry['changes']['language'] = {
+                        'old': old_s.get('language', 'python'),
+                        'new': new_s.get('language', 'python'),
+                    }
+                if old_src != new_src:
+                    entry['changes']['source_code'] = {
+                        'old': old_src,
+                        'new': new_src,
+                        'diff': _line_diff(old_src, new_src),
+                    }
+                diff['scripts']['modified'].append(entry)
 
-    # Routes (slug attribute)
-    diff['routes'] = _diff_collection(root1, root2, 'routes', 'route')
+    # Routes (slug attribute) — also compare script/form references
+    diff['routes'] = {'added': [], 'removed': [], 'modified': []}
+    old_routes_elem = root1.find('routes')
+    new_routes_elem = root2.find('routes')
+    if old_routes_elem is not None and new_routes_elem is not None:
+        old_route_map = {r.get('slug', r.get('name', '')): r for r in old_routes_elem.findall('route')}
+        new_route_map = {r.get('slug', r.get('name', '')): r for r in new_routes_elem.findall('route')}
+        old_names = set(old_route_map.keys())
+        new_names = set(new_route_map.keys())
+        for name in new_names - old_names:
+            diff['routes']['added'].append(name)
+        for name in old_names - new_names:
+            diff['routes']['removed'].append(name)
+        for name in old_names & new_names:
+            old_r = old_route_map[name]
+            new_r = new_route_map[name]
+            attr_changes = _compare_attrs(old_r, new_r, 'slug')
+            if attr_changes:
+                diff['routes']['modified'].append({'name': name, 'changes': attr_changes})
 
     # Forms (name attribute, schema is text content)
+    diff['forms'] = {'added': [], 'removed': [], 'modified': []}
     old_forms_elem = root1.find('forms')
     new_forms_elem = root2.find('forms')
-    form_diff = _diff_collection(root1, root2, 'forms', 'form')
     if old_forms_elem is not None and new_forms_elem is not None:
         old_form_map = {f.get('name'): f for f in old_forms_elem.findall('form')}
         new_form_map = {f.get('name'): f for f in new_forms_elem.findall('form')}
-        common_names = set(old_form_map.keys()) & set(new_form_map.keys())
-        schema_changes = []
-        for name in common_names:
+        old_names = set(old_form_map.keys())
+        new_names = set(new_form_map.keys())
+        for name in new_names - old_names:
+            diff['forms']['added'].append(name)
+        for name in old_names - new_names:
+            diff['forms']['removed'].append(name)
+        for name in old_names & new_names:
             old_f = old_form_map[name]
             new_f = new_form_map[name]
             old_schema = (old_f.text or '').strip()
             new_schema = (new_f.text or '').strip()
             if old_schema != new_schema:
-                schema_changes.append({'name': name, 'changes': {'schema': {'old': old_schema[:200], 'new': new_schema[:200]}}})
-        form_diff['modified'] = schema_changes
-    diff['forms'] = form_diff
+                diff['forms']['modified'].append({
+                    'name': name,
+                    'changes': {
+                        'schema': {
+                            'old': old_schema,
+                            'new': new_schema,
+                            'diff': _line_diff(old_schema, new_schema),
+                        }
+                    }
+                })
 
     # Templates (name attribute, body is child element)
-    diff['templates'] = _diff_collection(root1, root2, 'templates', 'template')
+    diff['templates'] = {'added': [], 'removed': [], 'modified': []}
+    old_tpl_elem = root1.find('templates')
+    new_tpl_elem = root2.find('templates')
+    if old_tpl_elem is not None and new_tpl_elem is not None:
+        old_tpl_map = {t.get('name'): t for t in old_tpl_elem.findall('template')}
+        new_tpl_map = {t.get('name'): t for t in new_tpl_elem.findall('template')}
+        old_names = set(old_tpl_map.keys())
+        new_names = set(new_tpl_map.keys())
+        for name in new_names - old_names:
+            diff['templates']['added'].append(name)
+        for name in old_names - new_names:
+            diff['templates']['removed'].append(name)
+        for name in old_names & new_names:
+            old_t = old_tpl_map[name]
+            new_t = new_tpl_map[name]
+            old_body = (old_t.findtext('body') or '').strip()
+            new_body = (new_t.findtext('body') or '').strip()
+            content_type_changed = old_t.get('content_type', 'html') != new_t.get('content_type', 'html')
+            desc_changed = (old_t.get('description', '') or '') != (new_t.get('description', '') or '')
+            if old_body != new_body or content_type_changed or desc_changed:
+                entry = {'name': name, 'changes': {}}
+                if content_type_changed:
+                    entry['changes']['content_type'] = {
+                        'old': old_t.get('content_type', 'html'),
+                        'new': new_t.get('content_type', 'html'),
+                    }
+                if desc_changed:
+                    entry['changes']['description'] = {
+                        'old': old_t.get('description', ''),
+                        'new': new_t.get('description', ''),
+                    }
+                if old_body != new_body:
+                    entry['changes']['body'] = {
+                        'old': old_body,
+                        'new': new_body,
+                        'diff': _line_diff(old_body, new_body),
+                    }
+                diff['templates']['modified'].append(entry)
 
     # Scheduled tasks (name attribute)
-    diff['scheduled_tasks'] = _diff_collection(root1, root2, 'scheduled_tasks', 'task')
+    diff['scheduled_tasks'] = {'added': [], 'removed': [], 'modified': []}
+    old_tasks_elem = root1.find('scheduled_tasks')
+    new_tasks_elem = root2.find('scheduled_tasks')
+    if old_tasks_elem is not None and new_tasks_elem is not None:
+        old_task_map = {t.get('name'): t for t in old_tasks_elem.findall('task')}
+        new_task_map = {t.get('name'): t for t in new_tasks_elem.findall('task')}
+        old_names = set(old_task_map.keys())
+        new_names = set(new_task_map.keys())
+        for name in new_names - old_names:
+            diff['scheduled_tasks']['added'].append(name)
+        for name in old_names - new_names:
+            diff['scheduled_tasks']['removed'].append(name)
+        for name in old_names & new_names:
+            old_te = old_task_map[name]
+            new_te = new_task_map[name]
+            attr_changes = _compare_attrs(old_te, new_te, 'name')
+            if attr_changes:
+                diff['scheduled_tasks']['modified'].append({'name': name, 'changes': attr_changes})
 
     # Triggers (name attribute)
-    diff['triggers'] = _diff_collection(root1, root2, 'triggers', 'trigger')
+    diff['triggers'] = {'added': [], 'removed': [], 'modified': []}
+    old_trig_elem = root1.find('triggers')
+    new_trig_elem = root2.find('triggers')
+    if old_trig_elem is not None and new_trig_elem is not None:
+        old_trig_map = {t.get('name'): t for t in old_trig_elem.findall('trigger')}
+        new_trig_map = {t.get('name'): t for t in new_trig_elem.findall('trigger')}
+        old_names = set(old_trig_map.keys())
+        new_names = set(new_trig_map.keys())
+        for name in new_names - old_names:
+            diff['triggers']['added'].append(name)
+        for name in old_names - new_names:
+            diff['triggers']['removed'].append(name)
+        for name in old_names & new_names:
+            old_te = old_trig_map[name]
+            new_te = new_trig_map[name]
+            attr_changes = _compare_attrs(old_te, new_te, 'name')
+            if attr_changes:
+                diff['triggers']['modified'].append({'name': name, 'changes': attr_changes})
 
-    # Query reports (name attribute)
-    diff['query_reports'] = _diff_collection(root1, root2, 'query_reports', 'query_report')
+    # Query reports (name attribute, sql is child element)
+    diff['query_reports'] = {'added': [], 'removed': [], 'modified': []}
+    old_qr_elem = root1.find('query_reports')
+    new_qr_elem = root2.find('query_reports')
+    if old_qr_elem is not None and new_qr_elem is not None:
+        old_qr_map = {q.get('name'): q for q in old_qr_elem.findall('query_report')}
+        new_qr_map = {q.get('name'): q for q in new_qr_elem.findall('query_report')}
+        old_names = set(old_qr_map.keys())
+        new_names = set(new_qr_map.keys())
+        for name in new_names - old_names:
+            diff['query_reports']['added'].append(name)
+        for name in old_names - new_names:
+            diff['query_reports']['removed'].append(name)
+        for name in old_names & new_names:
+            old_q = old_qr_map[name]
+            new_q = new_qr_map[name]
+            old_sql = (old_q.findtext('sql') or '').strip()
+            new_sql = (new_q.findtext('sql') or '').strip()
+            old_desc = (old_q.findtext('description') or '').strip()
+            new_desc = (new_q.findtext('description') or '').strip()
+            sql_changed = old_sql != new_sql
+            desc_changed = old_desc != new_desc
+            attr_changes = _compare_attrs(old_q, new_q, 'name')
+            if sql_changed or desc_changed or attr_changes:
+                entry = {'name': name, 'changes': {}}
+                if sql_changed:
+                    entry['changes']['sql'] = {
+                        'old': old_sql,
+                        'new': new_sql,
+                        'diff': _line_diff(old_sql, new_sql),
+                    }
+                if desc_changed:
+                    entry['changes']['description'] = {
+                        'old': old_desc,
+                        'new': new_desc,
+                    }
+                entry['changes'].update(attr_changes)
+                diff['query_reports']['modified'].append(entry)
+
+    # Credentials (name attribute only — never compare values)
+    diff['credentials'] = {'added': [], 'removed': [], 'modified': []}
+    old_creds_elem = root1.find('credentials')
+    new_creds_elem = root2.find('credentials')
+    if old_creds_elem is not None and new_creds_elem is not None:
+        old_cred_map = {c.get('name'): c for c in old_creds_elem.findall('credential')}
+        new_cred_map = {c.get('name'): c for c in new_creds_elem.findall('credential')}
+        old_names = set(old_cred_map.keys())
+        new_names = set(new_cred_map.keys())
+        for name in new_names - old_names:
+            diff['credentials']['added'].append(name)
+        for name in old_names - new_names:
+            diff['credentials']['removed'].append(name)
 
     # Requirements (text content of <requirements> element)
     old_req = (root1.findtext('requirements') or '').strip()
     new_req = (root2.findtext('requirements') or '').strip()
     if old_req != new_req:
-        diff['requirements'] = {'old': old_req, 'new': new_req}
+        diff['requirements'] = {'old': old_req, 'new': new_req, 'diff': _line_diff(old_req, new_req)}
 
     return diff
 
