@@ -5,6 +5,7 @@ _sandbox_env = ImmutableSandboxedEnvironment(
     autoescape=True,
     undefined=jinja2.StrictUndefined,
 )
+_sandbox_env.filters['split'] = lambda s, sep=',': s.split(sep) if sep else s.split()
 
 
 def render_db_template(template_body, **context):
