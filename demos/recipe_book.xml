@@ -344,7 +344,7 @@ else:
   {% if recipes|length > 0 %}
   <div class="grid">
     {% for r in recipes %}
-    <a href="/recipe-book/recipe?id={{ r.id }}" class="card-link">
+    <a href="/recipe-book?id={{ r.id }}" class="card-link">
       <div class="card">
         <div class="card-img">
           <span class="emoji">
