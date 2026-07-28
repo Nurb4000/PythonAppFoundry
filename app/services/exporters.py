@@ -281,26 +281,22 @@ def _draw_pie_chart(canvas, chart_data, x, y, width, height):
         canvas.drawCentredString(x + width / 2, y + height - 0.3 * inch, chart_data['title'])
 
 
-def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_data=None):
-    """Export rows as a PDF response with formatted table and optional chart."""
+def _export_pdf(name_plural, columns, rows, has_module, metadata=None):
+    """Export rows as a PDF response with formatted table."""
     if not HAS_REPORTLAB:
         return Response('PDF export requires reportlab. Install with: pip install reportlab',
                         status=501, mimetype='text/plain')
 
     buf = io.BytesIO()
 
-    # Calculate needed height: metadata + chart + table
+    # Calculate needed height: metadata + table
     meta_height = 0
     if metadata:
         meta_height = len(metadata) * 0.15 * inch + 0.2 * inch
 
-    chart_height = 0
-    if chart_data and chart_data.get('datasets'):
-        chart_height = 2.5 * inch
-
     table_height = min((len(rows) + 1) * 0.2 * inch, 4 * inch)
 
-    total_height = meta_height + chart_height + table_height + 0.5 * inch
+    total_height = meta_height + table_height + 0.5 * inch
     page_height = max(letter[1], total_height + 1 * inch)
 
     pdf = SimpleDocTemplate(
@@ -350,69 +346,8 @@ def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_dat
 
     elements.append(Spacer(1, 0.25 * inch))
 
-    # Draw chart as a flowable
-    if chart_data and chart_data.get('datasets'):
-        from reportlab.graphics.charts.barcharts import BarChart, Drawing as RLDrawing
-
-        chart_type = chart_data.get('type', 'bar')
-        draw_width = letter[0] - inch
-        draw_height = 2 * inch
-
-        drawing = RLDrawing(width=draw_width, height=draw_height)
-
-        # Add chart title if present
-        if chart_data.get('title'):
-            from reportlab.platypus import Paragraph as RLParagraph
-            title_para = RLParagraph(chart_data['title'], styles['Heading2'])
-            drawing.add(title_para)
-
-        # Create a simple bar chart using reportlab's charting
-        from reportlab.charts import BarChart, PieChart
-        from reportlab.lib.colors import HexColor
-
-        if chart_type in ('pie', 'doughnut'):
-            from reportlab.graphics.charts.piecharts import AbstractPieChart
-            data = chart_data['datasets'][0]['data']
-            labels = chart_data.get('labels', [])
-            colors_list = [_hex_to_reportlab_color(ds.get('color', '#2563eb')) for ds in chart_data['datasets']]
-
-            pie = AbstractPieChart()
-            pie.width = draw_width
-            pie.height = draw_height - inch if chart_data.get('title') else draw_height
-            pie.x = 0
-            pie.y = 0
-            pie.data = [data]
-            pie.labels = labels
-            pie.slices = [{'fillcolor': c} for c in colors_list]
-
-            if chart_type == 'doughnut':
-                pie.slices['holeSize'] = 0.5
-
-            drawing.add(pie)
-        else:
-            # Bar chart
-            datasets = chart_data['datasets']
-            labels = chart_data.get('labels', [])
-
-            bar = BarChart()
-            bar.width = draw_width
-            bar.height = draw_height - 1.5 * inch if chart_data.get('title') else draw_height
-            bar.x = 0.5 * inch
-            bar.y = 0.5 * inch
-
-            # Set data
-            bar.data = [ds['data'] for ds in datasets]
-            bar.categoryAxis.categoryNames = labels[:10]  # Limit labels
-            bar.valueAxis.valueMin = 0
-
-            # Set colors
-            colors_list = [_hex_to_reportlab_color(ds.get('color', '#2563eb')) for ds in datasets]
-            bar.series = [{'fillColor': c} for c in colors_list]
-
-            drawing.add(bar)
-
-        elements.append(drawing)
-        elements.append(Spacer(1, 0.3 * inch))
+    # Note: Charts are not exported to PDF in this version
+    # Data is exported as tables only
 
     # Build table data
     headers = list(columns)

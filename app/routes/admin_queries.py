@@ -237,7 +237,7 @@ def export_query(id):
     elif fmt == 'xlsx':
         return _export_xlsx(q.name, columns, rows, False, metadata=metadata)
     elif fmt == 'pdf':
-        return _export_pdf(q.name, columns, rows, False, metadata=metadata, chart_data=chart_data)
+        return _export_pdf(q.name, columns, rows, False, metadata=metadata)
 
 
 @queries_bp.route('/describe_tables')
