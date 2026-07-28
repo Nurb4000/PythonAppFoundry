@@ -102,6 +102,8 @@
   <span id="graph-status" style="margin-left:auto;color:#666;font-size:0.9em;"></span>
 </div>
 
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
 <div id="legend" class="legend">
   <div class="legend-item"><div class="legend-color route"></div> Route reference</div>
   <div class="legend-item"><div class="legend-color script"></div> Script reference</div>
@@ -200,11 +202,16 @@ async function renderGraph() {
 
   try {
     if (typeof mermaid.render !== 'function') {
-      throw new Error('mermaid.render is not a function. Available methods: ' + Object.keys(mermaid).filter(k => typeof mermaid[k] === 'function').join(', '));
+      throw new Error('mermaid.render is not a function');
     }
-    const { svg } = await mermaid.render('mermaid-graph', definition);
-    container.innerHTML = svg;
-    statusEl.textContent = graphData.nodes.length + ' modules, ' + graphData.edges.length + ' dependencies';
+    const result = await mermaid.render('mermaid-graph', definition);
+    console.log('Render result:', result);
+    if (result && result.svg) {
+      container.innerHTML = result.svg;
+      statusEl.textContent = graphData.nodes.length + ' modules, ' + graphData.edges.length + ' dependencies';
+    } else {
+      container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Render returned no SVG</div>';
+    }
   } catch (e) {
     container.innerHTML = '<div style="color:#dc3545;padding:1rem;">Error rendering graph.<br><details open><summary>Show definition</summary><pre style="white-space:pre-wrap;font-size:0.8em;background:#f5f5f5;padding:1rem;border:1px solid #ddd;">' + definition.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></details><br>Details: ' + e.message + '</div>';
     statusEl.textContent = 'Render error';
@@ -260,7 +267,8 @@ window.rescanAll = async function() {
   statusEl.textContent = 'Scanning all modules...';
   
   try {
-    const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}';
+    const csrfInput = document.querySelector('input[name="csrf_token"]');
+    const csrfToken = csrfInput ? csrfInput.value : '';
     const response = await fetch('{{ url_for("admin.modules.scan_all_dependencies") }}', {
       method: 'POST',
       headers: { 
@@ -273,7 +281,7 @@ window.rescanAll = async function() {
       statusEl.textContent = 'Scan complete. Refreshing graph...';
       location.reload();
     } else {
-      statusEl.textContent = 'Scan failed.';
+      statusEl.textContent = 'Scan failed. Status: ' + response.status;
     }
   } catch (e) {
     statusEl.textContent = 'Scan error: ' + e.message;
