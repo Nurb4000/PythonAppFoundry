@@ -1,5 +1,6 @@
 <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
   <a href="{{ url_for('admin.queries.new_query') }}">+ New Query</a>
+  <a href="{{ url_for('admin.queries.query_builder') }}" style="padding:4px 12px;background:#6f42c1;color:#fff;border-radius:4px;text-decoration:none;font-size:0.9em;">AI SQL Builder</a>
     <form method="GET" style="display:inline;">
     <select name="module_id" onchange="this.form.submit()" style="padding:6px;border:1px solid #ccc;border-radius:4px;">
       <option value="">All modules</option>
