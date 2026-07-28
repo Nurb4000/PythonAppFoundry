@@ -1,5 +1,14 @@
 <script src="/static/chart.umd.min.js"></script>
 <div id="sqlBuilderApp">
+  <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;padding:0.75rem;background:#f8f9fa;border-radius:4px;border:1px solid #e0e0e0;flex-wrap:wrap;">
+    <label style="font-weight:600;font-size:0.9em;white-space:nowrap;">Import existing query:</label>
+    <select id="importQuerySelect" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;flex:1;min-width:200px;">
+      <option value="">-- Select a saved query --</option>
+    </select>
+    <button id="loadQueryBtn" disabled style="padding:6px 16px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.9em;">Load into Builder</button>
+    <span style="font-size:0.8em;color:#888;">Select a query, then use AI or visual tools to refine it.</span>
+  </div>
+
   <div style="display:flex;gap:0.5rem;margin-bottom:1rem;border-bottom:2px solid #ddd;">
     <button class="builder-tab active" data-tab="natural" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:0.95em;font-weight:600;border-bottom:3px solid #2563eb;margin-bottom:-2px;color:#2563eb;">Natural Language</button>
     <button class="builder-tab" data-tab="visual" style="padding:8px 20px;border:none;background:none;cursor:pointer;font-size:0.95em;font-weight:600;border-bottom:3px solid transparent;margin-bottom:-2px;color:#666;">Visual Builder</button>
@@ -121,6 +130,30 @@
         addConditionRow();
         addOrderRow();
       });
+
+    fetch('/__admin/queries/my_queries')
+      .then(function(r) { return r.json(); })
+      .then(function(queries) {
+        var sel = document.getElementById('importQuerySelect');
+        queries.forEach(function(q) {
+          var opt = document.createElement('option');
+          opt.value = q.id;
+          opt.textContent = q.name + (q.description ? ' — ' + q.description.substring(0, 60) : '');
+          opt.dataset.sql = q.sql;
+          sel.appendChild(opt);
+        });
+      });
+
+    document.getElementById('importQuerySelect').addEventListener('change', function() {
+      document.getElementById('loadQueryBtn').disabled = !this.value;
+    });
+
+    document.getElementById('loadQueryBtn').addEventListener('click', function() {
+      var sel = document.getElementById('importQuerySelect');
+      var opt = sel.options[sel.selectedIndex];
+      if (!opt || !opt.value) return;
+      setSqlOutput(opt.dataset.sql || '');
+    });
 
     document.querySelectorAll('.builder-tab').forEach(function(tab) {
       tab.addEventListener('click', function() {

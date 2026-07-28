@@ -267,7 +267,6 @@ def create_app(config_class=None):
                 <a href="/__admin/groups" style="color:#eee;text-decoration:none">Groups</a>
                 <a href="/__admin/data" style="color:#eee;text-decoration:none">Data</a>
                 <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
-                <a href="/__admin/queries/builder" style="color:#e94560;text-decoration:none;font-weight:600;">AI Builder</a>
                 <a href="/__admin/credentials" style="color:#eee;text-decoration:none">Credentials</a>
                 <a href="/__admin/incoming-emails" style="color:#eee;text-decoration:none">Incoming</a>
                 <a href="/__admin/packages" style="color:#eee;text-decoration:none">Packages</a>
@@ -296,7 +295,6 @@ def create_app(config_class=None):
                 <a href="/__admin/forms" style="color:#eee;text-decoration:none">Forms</a>
                 <a href="/__admin/templates" style="color:#eee;text-decoration:none">Templates</a>
                 <a href="/__admin/queries" style="color:#eee;text-decoration:none">Queries</a>
-                <a href="/__admin/queries/builder" style="color:#e94560;text-decoration:none;font-weight:600;">AI Builder</a>
                 <a href="/__admin/credentials" style="color:#eee;text-decoration:none">Credentials</a>
                 <a href="/__admin/incoming-emails" style="color:#eee;text-decoration:none">Incoming</a>
                 <a href="/__admin/packages" style="color:#eee;text-decoration:none">Packages</a>

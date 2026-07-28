@@ -268,6 +268,14 @@ def query_builder():
     return render_admin('SQL Builder', 'admin/queries/builder.html', modules=modules)
 
 
+@queries_bp.route('/my_queries')
+@developer_or_admin_required
+def my_queries():
+    """Return JSON list of saved query reports for the import dropdown."""
+    qrs = db.session.query(QueryReport.id, QueryReport.name, QueryReport.sql, QueryReport.description).order_by(QueryReport.name).all()
+    return jsonify([{'id': r.id, 'name': r.name, 'sql': r.sql, 'description': r.description or ''} for r in qrs])
+
+
 @queries_bp.route('/execute_sql', methods=['POST'])
 @developer_or_admin_required
 @csrf_protect
