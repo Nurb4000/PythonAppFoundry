@@ -1,5 +1,5 @@
 """Admin routes for module management."""
-from flask import Blueprint, request, redirect, url_for, render_template, flash
+from flask import Blueprint, request, redirect, url_for, render_template, flash, jsonify
 from app.services.csrf import csrf_protect
 from app.services.validation import validate_slug
 from app.services.admin_utils import developer_or_admin_required, admin_required, create_auto_version, render_admin
