@@ -352,7 +352,7 @@ def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_dat
 
     # Draw chart as a flowable
     if chart_data and chart_data.get('datasets'):
-        from reportlab.graphics import Drawing as RLDrawing
+        from reportlab.graphics.charts.barcharts import BarChart, Drawing as RLDrawing
 
         chart_type = chart_data.get('type', 'bar')
         draw_width = letter[0] - inch
@@ -371,11 +371,12 @@ def _export_pdf(name_plural, columns, rows, has_module, metadata=None, chart_dat
         from reportlab.lib.colors import HexColor
 
         if chart_type in ('pie', 'doughnut'):
+            from reportlab.graphics.charts.piecharts import AbstractPieChart
             data = chart_data['datasets'][0]['data']
             labels = chart_data.get('labels', [])
             colors_list = [_hex_to_reportlab_color(ds.get('color', '#2563eb')) for ds in chart_data['datasets']]
 
-            pie = PieChart()
+            pie = AbstractPieChart()
             pie.width = draw_width
             pie.height = draw_height - inch if chart_data.get('title') else draw_height
             pie.x = 0
