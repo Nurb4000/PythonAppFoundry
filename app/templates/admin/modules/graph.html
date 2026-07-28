@@ -166,11 +166,13 @@ function buildDiagram(data, filterSlug) {
   for (const edge of filteredEdges) {
     const srcSafe = escapeId(edge.source);
     const tgtSafe = escapeId(edge.target);
-    let arrow = '-->';
+    let line;
     if (edge.type === 'script_reference') {
-      arrow = '-.-';
+      line = srcSafe + ' -. ' + edge.type + ' .-> ' + tgtSafe;
+    } else {
+      line = srcSafe + ' -- ' + edge.type + ' --> ' + tgtSafe;
     }
-    definition += '  ' + srcSafe + ' ' + arrow + ' ' + tgtSafe + ' : ' + edge.type + '\n';
+    definition += '  ' + line + '\n';
   }
 
   return definition;
