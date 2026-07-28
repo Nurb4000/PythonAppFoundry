@@ -1,6 +1,12 @@
 <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
   <a href="{{ new_url }}">+ New</a>
-  <a href="?format=csv{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}" style="margin-left:auto;">Export CSV</a>
+  <select onchange="if(this.value)window.location.href=this.value" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.9em;margin-left:auto;">
+    <option value="">Export&hellip;</option>
+    <option value="?format=csv{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}">CSV</option>
+    <option value="?format=json{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}">JSON</option>
+    <option value="?format=xlsx{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}">Excel (.xlsx)</option>
+    <option value="?format=pdf{% if sort_col %}&sort={{ sort_col }}&order={{ sort_order }}{% endif %}">PDF</option>
+  </select>
 </div>
 <div class="table-wrap">
 <table>

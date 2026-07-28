@@ -4,7 +4,13 @@
     <button type="submit" style="padding:6px 12px;">Search</button>
     {% if search %}<a href="{{ url_for('admin.incoming_email.list_incoming_emails') }}" style="color:#007bff;text-decoration:none;">Clear</a>{% endif %}
   </form>
-  <a href="?format=csv{% if search %}&search={{ search }}{% endif %}" style="margin-left:auto;">Export CSV</a>
+  <select onchange="if(this.value)window.location.href=this.value" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.9em;margin-left:auto;">
+    <option value="">Export&hellip;</option>
+    <option value="?format=csv{% if search %}&search={{ search }}{% endif %}">CSV</option>
+    <option value="?format=json{% if search %}&search={{ search }}{% endif %}">JSON</option>
+    <option value="?format=xlsx{% if search %}&search={{ search }}{% endif %}">Excel (.xlsx)</option>
+    <option value="?format=pdf{% if search %}&search={{ search }}{% endif %}">PDF</option>
+  </select>
 </div>
 <div class="table-wrap">
 <table>
