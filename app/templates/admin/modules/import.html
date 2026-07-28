@@ -2,8 +2,7 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="update_existing" id="updateExisting" value="false">
   <input type="hidden" name="version_comment" id="versionCommentHidden" value="">
-  <label style="display:block;margin-bottom:0.5rem;">XML file <input name="file" type="file" accept=".xml" id="xmlFileInput" required></label>
-  <button type="button" onclick="previewImport()">Preview</button>
+  <label style="display:block;margin-bottom:0.5rem;">XML file <input name="file" type="file" accept=".xml" id="xmlFileInput" required onchange="if(this.files[0]) previewImport()"></label>
 </form>
 
 <div id="importPreview" style="margin-top:1rem;display:none;">
