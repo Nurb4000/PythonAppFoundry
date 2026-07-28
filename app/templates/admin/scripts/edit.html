@@ -13,6 +13,7 @@
   <button style="margin-top:12px;padding:6px 16px;">Save</button>
   <button type="button" onclick="testScript({{ s.id }})" style="margin-left:0.5rem;padding:6px 16px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;">Test Script</button>
   <a href="{{ url_for('admin.scripts.debug_script', id=s.id) }}" style="margin-left:0.5rem;padding:6px 16px;background:#f0f0f0;color:#333;text-decoration:none;border:1px solid #ccc;border-radius:4px;display:inline-block;">Run Debug</a>
+  <button type="button" onclick="openEnhanceAI()" style="margin-left:0.5rem;padding:6px 16px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;">AI Enhance</button>
 </form>
 
 <div id="testModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;">
@@ -32,6 +33,21 @@
       <button onclick="document.getElementById('aiDebugModal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
     </div>
     <div id="aiDebugResult"></div>
+  </div>
+</div>
+
+<div id="enhanceModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10002;">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:8px;padding:1.5rem;max-width:800px;width:90%;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;">AI Script Enhancement</h3>
+      <button onclick="document.getElementById('enhanceModal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="display:block;margin-bottom:0.5rem;font-weight:600;">What would you like to improve?</label>
+      <textarea id="enhanceInstructions" rows="3" style="width:100%;font-family:monospace;padding:8px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g., Add error handling, improve documentation, optimize performance..."></textarea>
+      <button onclick="enhanceAI()" style="margin-top:0.5rem;padding:6px 16px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;">Send to AI</button>
+    </div>
+    <div id="enhanceResult"></div>
   </div>
 </div>
 
@@ -124,5 +140,98 @@ function formatAIResponse(text) {
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\n/g, '<br>');
   return html;
+}
+
+function openEnhanceAI() {
+  document.getElementById('enhanceInstructions').value = '';
+  document.getElementById('enhanceResult').innerHTML = '';
+  document.getElementById('enhanceModal').style.display = 'block';
+}
+
+function renderDiff(diffLines, type) {
+  var html = '<div style="margin-top:1rem;">';
+  html += '<div style="background:#f8f9fa;padding:8px 12px;border-bottom:1px solid #ddd;font-weight:600;font-size:0.9em;">Diff Preview</div>';
+  html += '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.8em;line-height:1.4;max-height:300px;overflow-y:auto;border:1px solid #ddd;margin:0;">';
+  
+  for (var i = 0; i < diffLines.length; i++) {
+    var line = diffLines[i];
+    var cssStyle = '';
+    if (line.type === 'added') {
+      cssStyle = 'style="background:#d4edda;color:#155724;"';
+    } else if (line.type === 'removed') {
+      cssStyle = 'style="background:#f8d7da;color:#721c24;"';
+    } else {
+      cssStyle = 'style="color:#666;"';
+    }
+    
+    var prefix = '';
+    if (line.type === 'added') prefix = '+ ';
+    else if (line.type === 'removed') prefix = '- ';
+    else prefix = '  ';
+    
+    html += '<div ' + cssStyle + '>' + prefix + escapeHtml(line.value) + '</div>';
+  }
+  
+  html += '</pre></div>';
+  return html;
+}
+
+function enhanceAI() {
+  var instructions = document.getElementById('enhanceInstructions').value.trim();
+  var sourceCode = document.getElementById('source_code').value;
+  var resultDiv = document.getElementById('enhanceResult');
+  
+  if (!sourceCode) {
+    resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> No script source to enhance</div>';
+    return;
+  }
+  
+  resultDiv.innerHTML = '<p style="color:#888;">Enhancing script...</p>';
+  
+  fetch('/__admin/scripts/enhance-ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    body: JSON.stringify({ source_code: sourceCode, script_name: '{{ s.name }}', instructions: instructions })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.success) {
+      resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> ' + escapeHtml(data.error) + '</div>';
+      return;
+    }
+    
+    var html = '<div style="line-height:1.6;margin-bottom:1rem;">' + formatAIResponse(data.reply) + '</div>';
+    
+    if (data.enhanced_code) {
+      html += '<div style="margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap;">';
+      html += '<button onclick="applyEnhancement(\'' + btoa(unescape(encodeURIComponent(data.enhanced_code))) + '\')" style="padding:6px 14px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.85em;">Apply Enhancement</button>';
+      html += '<button onclick="copyEnhanced(\'' + btoa(unescape(encodeURIComponent(data.enhanced_code))) + '\')" style="padding:6px 14px;background:#f0f0f0;color:#333;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">Copy to Clipboard</button>';
+      html += '</div>';
+    }
+    
+    if (data.diff && data.diff.length > 0) {
+      html += renderDiff(data.diff, 'script');
+    }
+    
+    resultDiv.innerHTML = html;
+  })
+  .catch(function(err) {
+    resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Request failed:</strong> ' + err.message + '</div>';
+  });
+}
+
+function applyEnhancement(encodedCode) {
+  var code = decodeURIComponent(escape(atob(encodedCode)));
+  document.getElementById('source_code').value = code;
+  document.getElementById('enhanceModal').style.display = 'none';
+}
+
+function copyEnhanced(encodedCode) {
+  var code = decodeURIComponent(escape(atob(encodedCode)));
+  navigator.clipboard.writeText(code).then(function() {
+    var btn = event.target;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy to Clipboard'; }, 2000);
+  });
 }
 </script>

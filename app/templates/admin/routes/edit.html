@@ -11,4 +11,106 @@
 <div style="margin:0.5rem 0 0 1rem;">{% for g in groups %}<label style="display:block;font-weight:normal;font-size:0.9em;"><input name="allowed_groups" type="checkbox" value="{{ g.id }}" {% if g.id|string in allowed_ids %}checked{% endif %}> {{ g.name }}</label>{% endfor %}{% if not groups %}<span style="color:#888;font-size:0.85em;">No groups defined</span>{% endif %}</div>
 </details>
 <button>Save</button>
+<button type="button" onclick="openRouteAI()" style="margin-left:0.5rem;padding:6px 16px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;">AI Configure</button>
 </form>
+
+<div id="routeAIModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10005;">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:8px;padding:1.5rem;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;">AI Route Configuration</h3>
+      <button onclick="document.getElementById('routeAIModal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="display:block;margin-bottom:0.5rem;font-weight:600;">Describe what this route should do:</label>
+      <textarea id="routeAIDescription" rows="4" style="width:100%;font-family:monospace;padding:8px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g., A public API endpoint that returns user data as JSON..."></textarea>
+      <button onclick="suggestRouteConfig()" style="margin-top:0.5rem;padding:6px 14px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;">Suggest Configuration</button>
+    </div>
+    <div id="routeAIResult"></div>
+  </div>
+</div>
+
+<script>
+function openRouteAI() {
+  document.getElementById('routeAIDescription').value = '';
+  document.getElementById('routeAIResult').innerHTML = '';
+  document.getElementById('routeAIModal').style.display = 'block';
+}
+
+function suggestRouteConfig() {
+  var description = document.getElementById('routeAIDescription').value.trim();
+  var resultDiv = document.getElementById('routeAIResult');
+  
+  if (!description) {
+    resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> Please describe the route</div>';
+    return;
+  }
+  
+  resultDiv.innerHTML = '<p style="color:#888;">Suggesting configuration...</p>';
+  
+  var csrfToken = document.querySelector('[name=csrf_token]').value;
+  var existingSlug = document.querySelector('[name=slug]').value;
+  
+  fetch('/__admin/routes/ask-ai', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json', 
+      'X-CSRFToken': csrfToken 
+    },
+    body: JSON.stringify({ 
+      description: description,
+      existing_slug: existingSlug
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.success) {
+      resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> ' + escapeHtml(data.error) + '</div>';
+      return;
+    }
+    
+    var html = '<div style="line-height:1.6;margin-bottom:1rem;">' + escapeHtml(data.reply) + '</div>';
+    
+    if (data.config) {
+      html += '<div style="margin-top:1rem;padding:1rem;background:#f8f9fa;border-radius:4px;border:1px solid #ddd;">';
+      html += '<strong>Suggested Configuration:</strong><br><br>';
+      html += '<div style="margin-bottom:0.5rem;"><label>Slug: <input name="_ai_slug" value="' + escapeHtml(data.config.slug || '') + '" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;"></label></div>';
+      html += '<div style="margin-bottom:0.5rem;"><label>Methods: <input name="_ai_methods" value="' + escapeHtml(data.config.methods || 'GET') + '" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;"></label></div>';
+      html += '<div style="margin-bottom:0.5rem;"><label><input type="checkbox" name="_ai_auth" ' + (data.config.auth_required ? 'checked' : '') + '> Auth Required</label></div>';
+      html += '<div style="margin-bottom:0.5rem;"><label>Title: <input name="_ai_title" value="' + escapeHtml(data.config.title || '') + '" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;"></label></div>';
+      if (data.config.notes) {
+        html += '<div style="margin-top:0.5rem;font-size:0.9em;color:#666;"><em>' + escapeHtml(data.config.notes) + '</em></div>';
+      }
+      html += '<button onclick="applyRouteConfig()" style="margin-top:1rem;padding:6px 14px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;">Apply Configuration</button>';
+      html += '</div>';
+    }
+    
+    resultDiv.innerHTML = html;
+  })
+  .catch(function(err) {
+    resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Request failed:</strong> ' + err.message + '</div>';
+  });
+}
+
+function applyRouteConfig() {
+  var slugInput = document.querySelector('[name="_ai_slug"]');
+  var methodsInput = document.querySelector('[name="_ai_methods"]');
+  var authInput = document.querySelector('[name="_ai_auth"]');
+  var titleInput = document.querySelector('[name="_ai_title"]');
+  
+  if (slugInput) document.querySelector('[name="slug"]').value = slugInput.value;
+  if (methodsInput) document.querySelector('[name="methods"]').value = methodsInput.value;
+  if (authInput) {
+    var authCheckbox = document.querySelector('[name="auth_required"]');
+    if (authCheckbox) authCheckbox.checked = authInput.checked;
+  }
+  if (titleInput) document.querySelector('[name="title"]').value = titleInput.value;
+  
+  document.getElementById('routeAIModal').style.display = 'none';
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+</script>

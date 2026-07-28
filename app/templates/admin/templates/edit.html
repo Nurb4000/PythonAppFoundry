@@ -45,6 +45,7 @@
 </div>
 <div style="margin-top:1rem;">
 <button>Save</button>
+<button type="button" onclick="openTemplateAI()" style="margin-left:0.5rem;padding:6px 16px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;">AI Improve</button>
 </div>
 </form>
 <script>
@@ -95,4 +96,139 @@
     });
   });
 })();
+</script>
+
+<div id="templateAIModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10004;">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:8px;padding:1.5rem;max-width:800px;width:90%;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;">AI Template Improvement</h3>
+      <button onclick="document.getElementById('templateAIModal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="display:block;margin-bottom:0.5rem;font-weight:600;">What would you like to improve?</label>
+      <textarea id="templateAIInstructions" rows="3" style="width:100%;font-family:monospace;padding:8px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g., Fix HTML structure, improve accessibility, add responsive design..."></textarea>
+      <button onclick="improveTemplate()" style="margin-top:0.5rem;padding:6px 16px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;">Send to AI</button>
+    </div>
+    <div id="templateAIResult"></div>
+  </div>
+</div>
+
+<script>
+function openTemplateAI() {
+  document.getElementById('templateAIInstructions').value = '';
+  document.getElementById('templateAIResult').innerHTML = '';
+  document.getElementById('templateAIModal').style.display = 'block';
+}
+
+function improveTemplate() {
+  var instructions = document.getElementById('templateAIInstructions').value.trim();
+  var body = document.getElementById('templateEditor').value;
+  var resultDiv = document.getElementById('templateAIResult');
+  
+  if (!body) {
+    resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> No template body to improve</div>';
+    return;
+  }
+  
+  resultDiv.innerHTML = '<p style="color:#888;">Improving template...</p>';
+  
+  var csrfToken = document.querySelector('[name=csrf_token]').value;
+  var contentType = '{{ t.content_type }}';
+  
+  fetch('/__admin/templates/ask-ai', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json', 
+      'X-CSRFToken': csrfToken 
+    },
+    body: JSON.stringify({ 
+      body: body,
+      content_type: contentType,
+      instructions: instructions
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.success) {
+      resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> ' + escapeHtml(data.error) + '</div>';
+      return;
+    }
+    
+    var html = '<div style="line-height:1.6;margin-bottom:1rem;">' + formatAIResponse(data.reply) + '</div>';
+    
+    if (data.improved_body) {
+      html += '<div style="margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap;">';
+      html += '<button onclick="applyTemplate(\'' + btoa(unescape(encodeURIComponent(data.improved_body))) + '\')" style="padding:6px 14px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.85em;">Apply Improvement</button>';
+      html += '<button onclick="copyTemplate(\'' + btoa(unescape(encodeURIComponent(data.improved_body))) + '\')" style="padding:6px 14px;background:#f0f0f0;color:#333;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">Copy to Clipboard</button>';
+      html += '</div>';
+    }
+    
+    if (data.diff && data.diff.length > 0) {
+      html += renderDiff(data.diff, 'template');
+    }
+    
+    resultDiv.innerHTML = html;
+  })
+  .catch(function(err) {
+    resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Request failed:</strong> ' + err.message + '</div>';
+  });
+}
+
+function applyTemplate(encodedBody) {
+  var body = decodeURIComponent(escape(atob(encodedBody)));
+  document.getElementById('templateEditor').value = body;
+  document.getElementById('templateAIModal').style.display = 'none';
+}
+
+function copyTemplate(encodedBody) {
+  var body = decodeURIComponent(escape(atob(encodedBody)));
+  navigator.clipboard.writeText(body).then(function() {
+    var btn = event.target;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy to Clipboard'; }, 2000);
+  });
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function formatAIResponse(text) {
+  var html = escapeHtml(text);
+  html = html.replace(/```html\s*\n([\s\S]*?)\n```/g, '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85em;border:1px solid #ddd;margin:0.5rem 0;">$1</pre>');
+  html = html.replace(/```\s*\n([\s\S]*?)\n```/g, '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85em;border:1px solid #ddd;margin:0.5rem 0;">$1</pre>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+function renderDiff(diffLines, type) {
+  var html = '<div style="margin-top:1rem;">';
+  html += '<div style="background:#f8f9fa;padding:8px 12px;border-bottom:1px solid #ddd;font-weight:600;font-size:0.9em;">Diff Preview</div>';
+  html += '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.8em;line-height:1.4;max-height:300px;overflow-y:auto;border:1px solid #ddd;margin:0;">';
+  
+  for (var i = 0; i < diffLines.length; i++) {
+    var line = diffLines[i];
+    var cssStyle = '';
+    if (line.type === 'added') {
+      cssStyle = 'style="background:#d4edda;color:#155724;"';
+    } else if (line.type === 'removed') {
+      cssStyle = 'style="background:#f8d7da;color:#721c24;"';
+    } else {
+      cssStyle = 'style="color:#666;"';
+    }
+    
+    var prefix = '';
+    if (line.type === 'added') prefix = '+ ';
+    else if (line.type === 'removed') prefix = '- ';
+    else prefix = '  ';
+    
+    html += '<div ' + cssStyle + '>' + prefix + escapeHtml(line.value) + '</div>';
+  }
+  
+  html += '</pre></div>';
+  return html;
+}
 </script>

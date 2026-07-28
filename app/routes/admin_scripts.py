@@ -126,3 +126,38 @@ def ask_ai_debug():
         'reply': result['reply'],
         'fix_code': result.get('fix_code'),
     })
+
+
+@scripts_bp.route('/enhance-ai', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def enhance_ai():
+    """Send a script to the LLM for proactive enhancement."""
+    from app.services.ai_assistant import enhance_script, compute_diff
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+    source_code = (data.get('source_code') or '').strip()
+    script_name = (data.get('script_name') or '').strip()
+    instructions = (data.get('instructions') or '').strip()
+
+    if not source_code:
+        return jsonify({'success': False, 'error': 'No script source provided'}), 400
+
+    result = enhance_script(source_code, script_name, instructions)
+
+    if result.get('error'):
+        return jsonify({'success': False, 'error': result['error']})
+
+    enhanced_code = result.get('enhanced_code')
+    diff_lines = None
+    if enhanced_code:
+        diff_lines = compute_diff(source_code, enhanced_code)
+
+    return jsonify({
+        'success': True,
+        'reply': result['reply'],
+        'enhanced_code': enhanced_code,
+        'diff': diff_lines,
+    })

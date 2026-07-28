@@ -28,6 +28,7 @@
 </div>
 <div style="margin-top:1rem;">
 <button>Save</button>
+<button type="button" onclick="openFormAI()" style="margin-left:0.5rem;padding:6px 16px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;">AI Design Form</button>
 </div>
 </form>
 <script>
@@ -108,4 +109,129 @@
   
   renderPreview();
 })();
+</script>
+
+<div id="formAIModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10003;">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:8px;padding:1.5rem;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;">AI Form Designer</h3>
+      <button onclick="document.getElementById('formAIModal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="display:block;margin-bottom:0.5rem;font-weight:600;">Describe the form you want to create:</label>
+      <textarea id="formAIDescription" rows="4" style="width:100%;font-family:monospace;padding:8px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g., Contact form with name, email, phone number, and message fields..."></textarea>
+      <button onclick="generateFormSchema()" style="margin-top:0.5rem;padding:6px 16px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;">Generate Schema</button>
+    </div>
+    <div id="formAIResult"></div>
+  </div>
+</div>
+
+<script>
+function openFormAI() {
+  document.getElementById('formAIDescription').value = '';
+  document.getElementById('formAIResult').innerHTML = '';
+  document.getElementById('formAIModal').style.display = 'block';
+}
+
+function generateFormSchema() {
+  var description = document.getElementById('formAIDescription').value.trim();
+  var resultDiv = document.getElementById('formAIResult');
+  
+  if (!description) {
+    resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> Please describe the form you want</div>';
+    return;
+  }
+  
+  resultDiv.innerHTML = '<p style="color:#888;">Generating form schema...</p>';
+  
+  var csrfToken = document.querySelector('[name=csrf_token]').value;
+  var existingSchema = document.getElementById('schemaEditor').value;
+  
+  fetch('/__admin/forms/ask-ai', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json', 
+      'X-CSRFToken': csrfToken 
+    },
+    body: JSON.stringify({ 
+      description: description,
+      existing_schema: existingSchema
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.success) {
+      resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Error:</strong> ' + escapeHtml(data.error) + '</div>';
+      return;
+    }
+    
+    var html = '<div style="line-height:1.6;margin-bottom:1rem;">' + escapeHtml(data.reply) + '</div>';
+    
+    if (data.schema_json) {
+      html += '<div style="margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap;">';
+      html += '<button onclick="applySchema(\'' + btoa(unescape(encodeURIComponent(data.schema_json))) + '\')" style="padding:6px 14px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.85em;">Apply Schema</button>';
+      html += '<button onclick="copySchema(\'' + btoa(unescape(encodeURIComponent(data.schema_json))) + '\')" style="padding:6px 14px;background:#f0f0f0;color:#333;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:0.85em;">Copy to Clipboard</button>';
+      html += '</div>';
+    }
+    
+    if (data.diff && data.diff.length > 0) {
+      html += renderDiff(data.diff, 'form');
+    }
+    
+    resultDiv.innerHTML = html;
+  })
+  .catch(function(err) {
+    resultDiv.innerHTML = '<div style="background:#fee;border:1px solid #fcc;padding:1rem;border-radius:4px;"><strong style="color:#c00;">Request failed:</strong> ' + err.message + '</div>';
+  });
+}
+
+function applySchema(encodedSchema) {
+  var schema = decodeURIComponent(escape(atob(encodedSchema)));
+  document.getElementById('schemaEditor').value = schema;
+  document.getElementById('formAIModal').style.display = 'none';
+  renderPreview();
+}
+
+function copySchema(encodedSchema) {
+  var schema = decodeURIComponent(escape(atob(encodedSchema)));
+  navigator.clipboard.writeText(schema).then(function() {
+    var btn = event.target;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy to Clipboard'; }, 2000);
+  });
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function renderDiff(diffLines, type) {
+  var html = '<div style="margin-top:1rem;">';
+  html += '<div style="background:#f8f9fa;padding:8px 12px;border-bottom:1px solid #ddd;font-weight:600;font-size:0.9em;">Schema Diff</div>';
+  html += '<pre style="background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.8em;line-height:1.4;max-height:300px;overflow-y:auto;border:1px solid #ddd;margin:0;">';
+  
+  for (var i = 0; i < diffLines.length; i++) {
+    var line = diffLines[i];
+    var cssStyle = '';
+    if (line.type === 'added') {
+      cssStyle = 'style="background:#d4edda;color:#155724;"';
+    } else if (line.type === 'removed') {
+      cssStyle = 'style="background:#f8d7da;color:#721c24;"';
+    } else {
+      cssStyle = 'style="color:#666;"';
+    }
+    
+    var prefix = '';
+    if (line.type === 'added') prefix = '+ ';
+    else if (line.type === 'removed') prefix = '- ';
+    else prefix = '  ';
+    
+    html += '<div ' + cssStyle + '>' + prefix + escapeHtml(line.value) + '</div>';
+  }
+  
+  html += '</pre></div>';
+  return html;
+}
 </script>

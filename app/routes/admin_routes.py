@@ -77,3 +77,41 @@ def edit_route(id):
         return redirect(url_for('admin.routes.list_routes'))
     allowed_ids = set(r.allowed_groups.split(',') if r.allowed_groups else [])
     return render_admin('Edit Route', 'admin/routes/edit.html', r=r, modules=modules, scripts=scripts, forms=forms, groups=groups, allowed_ids=allowed_ids)
+
+
+@routes_bp.route('/ask-ai', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def ask_ai_route():
+    """Suggest route configuration from natural language description."""
+    from app.services.ai_assistant import suggest_route_config
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+    description = (data.get('description') or '').strip()
+    existing_slug = (data.get('existing_slug') or '').strip()
+
+    if not description:
+        return jsonify({'success': False, 'error': 'No description provided'}), 400
+
+    result = suggest_route_config(description, existing_slug)
+
+    if result.get('error'):
+        return jsonify({'success': False, 'error': result['error']})
+
+    config_json = result.get('config_json')
+    config = None
+    if config_json:
+        try:
+            import json
+            config = json.loads(config_json)
+        except Exception:
+            pass
+
+    return jsonify({
+        'success': True,
+        'reply': result['reply'],
+        'config': config,
+        'config_json': config_json,
+    })

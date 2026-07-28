@@ -70,3 +70,38 @@ def preview_template():
         return jsonify({'success': True, 'rendered': rendered})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@templates_bp.route('/ask-ai', methods=['POST'])
+@developer_or_admin_required
+@csrf_protect
+def ask_ai_template():
+    """Improve a template using the LLM."""
+    from app.services.ai_assistant import improve_template, compute_diff
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'success': False, 'error': 'Invalid request'}), 400
+
+    body = (data.get('body') or '').strip()
+    content_type = (data.get('content_type') or 'html').strip()
+    instructions = (data.get('instructions') or '').strip()
+
+    if not body:
+        return jsonify({'success': False, 'error': 'No template body provided'}), 400
+
+    result = improve_template(body, content_type, instructions)
+
+    if result.get('error'):
+        return jsonify({'success': False, 'error': result['error']})
+
+    improved_body = result.get('improved_body')
+    diff_lines = None
+    if improved_body:
+        diff_lines = compute_diff(body, improved_body)
+
+    return jsonify({
+        'success': True,
+        'reply': result['reply'],
+        'improved_body': improved_body,
+        'diff': diff_lines,
+    })
