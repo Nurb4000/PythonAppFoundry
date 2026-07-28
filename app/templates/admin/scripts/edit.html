@@ -190,7 +190,7 @@ function enhanceAI() {
   
   fetch('/__admin/scripts/enhance-ai', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify({ source_code: sourceCode, script_name: '{{ s.name }}', instructions: instructions })
   })
   .then(function(r) {

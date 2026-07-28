@@ -151,7 +151,7 @@ function generateFormSchema() {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json', 
-      'X-CSRFToken': csrfToken 
+      'X-CSRF-Token': csrfToken 
     },
     body: JSON.stringify({ 
       description: description,
