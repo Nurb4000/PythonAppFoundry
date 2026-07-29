@@ -336,10 +336,28 @@ Current state → [Manual edits] → Current state (unsaved to version history)
 **Accessing version history:**
 
 1. Go to **Modules** → click **Edit** on any module
-2. Click the **Versions** link in the top navigation
+2. Click the **Versions** button in the action bar (next to Execution History)
 3. View all versions with timestamps, comments, and version numbers
-4. Click **Restore** to rollback to any version (creates a new current state)
-5. Click **Diff** to compare two versions side-by-side
+
+**Comparing versions:**
+
+At the top of the versions list there is a **Compare:** dropdown. Select any two versions and click **Compare** to see a structured side-by-side diff. The comparison shows:
+
+- **Summary cards** — how many scripts/routes/forms/templates/etc. were added, removed, or modified
+- **Per-section diffs** — collapsible sections for Scripts, Routes, Forms, Templates, Scheduled Tasks, Triggers, Query Reports, and Credentials
+- **Line-by-line diff** — for any modified item (script source code, form schema, template body, SQL, etc.) you see the exact lines that changed in a side-by-side view with the older version on the left and newer on the right. Added lines are highlighted green, removed lines red, context lines in gray
+- **Attribute changes** — for items where only metadata changed (route method, task schedule, etc.) you see old vs new values
+
+You can also click **Diff** next to any version row to compare it against its immediate predecessor (the original raw XML diff).
+
+**Restoring a version:**
+
+1. Click **Restore** next to any past version
+2. A modal opens and automatically checks for dependency issues — it scans the version's scripts for references to other modules that may no longer exist
+3. If warnings are found (e.g., a script references a module slug that is not installed), you can choose **Restore Anyway (Force)** to proceed or **Cancel**
+4. If no issues are detected, click **Restore This Version** to rollback
+
+Restoring replaces the current module state with the snapshot from that version and creates a new version entry to track the restore action in the audit log.
 
 ## LLM / AI Configuration
 
