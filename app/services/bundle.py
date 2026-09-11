@@ -1,3 +1,4 @@
+import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
@@ -5,6 +6,23 @@ from slugify import slugify
 
 from app import db
 from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport, Template, Credential
+
+# Setting keys a bundle is never permitted to seed on a fresh instance. Matching
+# is case-insensitive and covers secrets plus access-control / platform flags.
+_SENSITIVE_SETTING_PATTERNS = (
+    'password', 'secret', 'token', 'api_key', 'apikey', 'llm_api_key',
+    'smtp_password', 'imap_password', 'private_key',
+    'registration_disabled', 'registration_require_approval',
+    'csrf_enabled', 'session_', 'admin_', 'debug',
+)
+
+
+def _is_sensitive_setting_key(key):
+    """Return True if a setting key is sensitive and must not be bundle-imported."""
+    if not key:
+        return False
+    low = key.lower()
+    return any(pattern in low for pattern in _SENSITIVE_SETTING_PATTERNS)
 
 
 def export_module(module):
@@ -309,6 +327,14 @@ def import_module(xml_str, update_existing=False, module_id=None):
             key = se.get('key', '').strip()
             value = se.get('value', '')
             if not key:
+                continue
+            # Never let a bundle seed sensitive platform settings (secrets or
+            # access-control flags) on a fresh instance. A malicious import could
+            # otherwise pre-populate passwords or disable registration approval.
+            if _is_sensitive_setting_key(key):
+                logging.getLogger(__name__).warning(
+                    'Skipping sensitive setting "%s" from bundle import', key
+                )
                 continue
             existingSetting = db.session.query(Setting).filter_by(key=key).first()
             if not existingSetting:

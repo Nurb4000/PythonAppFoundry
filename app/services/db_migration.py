@@ -15,6 +15,39 @@ from app import db
 logger = logging.getLogger(__name__)
 
 
+def _map_column_type(source_type):
+    """Map a source column type string to an appropriate target type.
+
+    Handles the common SQLite/PostgreSQL type names (case-insensitive) and
+    falls back to TEXT for unknown types. This preserves data semantics across
+    a migration instead of collapsing every column to TEXT.
+    """
+    if not source_type:
+        return 'TEXT'
+    t = source_type.upper()
+
+    # Strip length/precision qualifiers we don't need for the mapping decision.
+    base = t.split('(')[0].strip()
+
+    if base in ('INTEGER', 'INT', 'INT4', 'INT8', 'BIGINT', 'SMALLINT', 'TINYINT'):
+        return 'BIGINT'
+    if base in ('REAL', 'FLOAT', 'DOUBLE', 'NUMERIC', 'DECIMAL', 'FLOAT8', 'DOUBLE PRECISION'):
+        return 'DOUBLE PRECISION'
+    if base in ('BOOLEAN', 'BOOL', 'BIT'):
+        return 'BOOLEAN'
+    if base in ('DATE',):
+        return 'DATE'
+    if base in ('TIME', 'DATETIME', 'TIMESTAMP', 'TIMESTAMPTZ', 'DATETIME2'):
+        return 'TIMESTAMP'
+    if base in ('BLOB', 'BYTEA', 'LARGEBYTEA', 'BINARY'):
+        return 'BYTEA'
+    if base in ('JSON', 'JSONB', 'JSONB', 'JSONB'):
+        return 'JSONB'
+
+    # Default to TEXT for VARCHAR/CHAR/text-like types.
+    return 'TEXT'
+
+
 def export_database(session):
     """Export all data from the current database.
     
@@ -79,9 +112,20 @@ class DatabaseExporter:
                 result = self.session.execute(text(f'SELECT * FROM "{table_name}"'))
                 columns = result.keys()
                 data = result.fetchall()
-                
+
+                # Capture source column types so the importer can recreate the
+                # schema with correct (not all-TEXT) types, preserving data
+                # semantics (integers stay integers, dates stay dates, etc.).
+                col_types = {}
+                try:
+                    for col in inspector.get_columns(table_name):
+                        col_types[col['name']] = str(col['type'])
+                except Exception:
+                    col_types = {}
+
                 exported['tables'][table_name] = {
                     'columns': list(columns),
+                    'types': col_types,
                     'rows': [list(row) for row in data],
                     'row_count': len(data),
                 }
@@ -146,10 +190,11 @@ class DatabaseImporter:
         """Import a single table."""
         columns = table_data['columns']
         rows = table_data['rows']
-        
+        col_types = table_data.get('types', {})
+
         # Create table if it doesn't exist
         if not self._table_exists(table_name):
-            self._create_table(table_name, columns)
+            self._create_table(table_name, columns, col_types)
         
         # Insert data
         if rows:
@@ -161,17 +206,23 @@ class DatabaseImporter:
         inspector = inspect(self.engine)
         return table_name in inspector.get_table_names()
     
-    def _create_table(self, table_name, columns):
-        """Create a table with appropriate PostgreSQL types."""
+    def _create_table(self, table_name, columns, col_types=None):
+        """Create a table, mapping source column types to the target dialect.
+
+        Preserves column data types across the migration instead of collapsing
+        everything to TEXT, so integers, floats, dates, and booleans keep their
+        semantics in the destination database.
+        """
+        col_types = col_types or {}
         column_defs = []
         for i, col_name in enumerate(columns):
             # First column is usually 'id' - make it primary key
             if i == 0 and col_name.lower() == 'id':
                 column_defs.append(f'"id" BIGINT PRIMARY KEY')
-            else:
-                # Use TEXT as default for simplicity
-                column_defs.append(f'"{col_name}" TEXT')
-        
+                continue
+            mapped = _map_column_type(col_types.get(col_name, ''))
+            column_defs.append(f'"{col_name}" {mapped}')
+
         create_sql = f'CREATE TABLE "{table_name}" ({", ".join(column_defs)})'
         with self.engine.connect() as conn:
             conn.execute(text(create_sql))
