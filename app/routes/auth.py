@@ -7,6 +7,7 @@ import bcrypt
 from app import db
 from app.models import User, Route, Setting
 from app.services.rate_limiter import _rate_limiter
+from app.services.csrf import csrf_protect
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/__auth')
 
@@ -21,6 +22,7 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/__auth')
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
+@csrf_protect
 def register():
     disabled = Setting.get('registration_disabled', 'false') == 'true'
     require_approval = Setting.get('registration_require_approval', 'false') == 'true'
@@ -81,6 +83,7 @@ def _is_safe_url(target):
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@csrf_protect
 def login():
     registration_disabled = Setting.get('registration_disabled', 'false') == 'true'
     if request.method == 'POST':
@@ -126,6 +129,7 @@ def logout():
 
 
 @auth_bp.route('/setup', methods=['GET', 'POST'])
+@csrf_protect
 def setup():
     if db.session.query(User).count() > 0:
         return render_template('auth/setup.html',

@@ -12,6 +12,7 @@ h2 { margin-top: 0; }</style></head>
 <h2>Log In</h2>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Username <input name="username" required autofocus></label>
 <label>Password <input name="password" type="password" required></label>
 <button>Log In</button>

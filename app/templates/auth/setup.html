@@ -15,8 +15,9 @@ h2 { margin-top: 0; }</style></head>
 <a href="{{ url_for('auth.login') }}">Proceed to Login</a>
 {% else %}
 <form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Username <input name="username" value="{{ username }}" required></label>
-<label>Password <input name="password" type="password" required minlength="4"></label>
+<label>Password <input name="password" type="password" required minlength="8"></label>
 <label>Confirm <input name="confirm" type="password" required></label>
 <button>Create Admin User</button>
 </form>
