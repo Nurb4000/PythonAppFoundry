@@ -1,3 +1,4 @@
+import re
 import json
 import signal
 import sys
@@ -8,12 +9,61 @@ import smtplib
 from email.mime.text import MIMEText
 from io import StringIO
 
-from flask import request, redirect, url_for, flash, get_flashed_messages, render_template_string, jsonify as flask_jsonify
+from sqlalchemy import event as _sql_event
+
+
+# Thread-local flag used to gate the sensitive-table read guard so it only
+# activates while a sandboxed script is actually executing (never for normal
+# admin/request code that legitimately reads settings).
+_local = threading.local()
+
+_SENSITIVE_TABLES = ('settings', 'credentials')
+_guard_installed = False
+
+
+def _is_script_executing():
+    return getattr(_local, 'executing', False)
+
+
+def _install_sensitive_read_guard():
+    """Block scripts from reading the settings/credentials tables directly.
+
+    ``get_setting()`` already redacts sensitive keys, but a script with raw
+    ``db.session.query(Setting)`` access could bypass that. This cursor-level
+    guard raises if a script query targets those platform tables by name.
+    """
+    global _guard_installed
+    if _guard_installed:
+        return
+    def _before_cursor_execute(conn, cursor, statement, params, context, executemany):
+        if not _is_script_executing():
+            return
+        stmt = statement.upper()
+        for tbl in _SENSITIVE_TABLES:
+            # Word-boundary match so dynamic tables like "user_settings" are
+            # not caught, only the standalone platform tables. Compare against
+            # the upper-cased SQL, so upper-case the table name too.
+            if re.search(r'\b' + tbl.upper() + r'\b', stmt):
+                raise PermissionError(
+                    f'Scripts are not permitted to read the "{tbl}" table. '
+                    'Use the sanctioned helpers where allowed.'
+                )
+
+    _sql_event.listen(_get_engine(), 'before_cursor_execute', _before_cursor_execute)
+    _guard_installed = True
+
+
+def _get_engine():
+    """Return the bound SQLAlchemy engine (requires an app context)."""
+    return db.engine
+
+
+from flask import request, redirect, url_for, flash, get_flashed_messages, jsonify as flask_jsonify
 from flask_login import current_user
 from datetime import datetime, timezone
 from sqlalchemy import Integer, String, DateTime, Text, Boolean, Float, Column
 from app.models import DynamicModel
-from app.services.template_renderer import render_db_template
+from app.services.template_renderer import render_db_template, render_script_template
 
 from app import db
 from app.models import Setting, ExecutionLog
@@ -219,6 +269,13 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
     if source_name is None:
         source_name = script.name
 
+    # Guard must be installed while an app context is active (execute_script is
+    # always called from within one). Idempotent via _guard_installed.
+    try:
+        _install_sensitive_read_guard()
+    except Exception:
+        pass
+
     t0 = time.time()
 
     timeout = int(Setting.get('script_timeout', '30'))
@@ -279,10 +336,9 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'round': round,
         'isinstance': isinstance,
         'type': type,
-        'hasattr': hasattr,
-        'getattr': getattr,
-        'setattr': setattr,
-        'dir': dir,
+        # NOTE: getattr/setattr/hasattr/dir were intentionally removed.
+        # They allow dunder attribute traversal (e.g. __class__/__mro__/
+        # __subclasses__) which is a well-known Python sandbox-escape vector.
         'print': print,
         'ValueError': ValueError,
         'TypeError': TypeError,
@@ -304,7 +360,7 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
         'url_for': url_for,
         'flash': flash,
         'get_flashed_messages': get_flashed_messages,
-        'render': render_template_string,
+        'render': render_script_template,
         'jsonify': flask_jsonify,
         'send_email': _send_email,
         'render_chart': render_chart,
@@ -349,7 +405,11 @@ def execute_script(script, route=None, extra_globals=None, source_type='route', 
             else:
                 raise
 
-        exec(compiled, safe_globals)
+        _local.executing = True
+        try:
+            exec(compiled, safe_globals)
+        finally:
+            _local.executing = False
 
         # If we wrapped in a function, call it and use its return value
         if '_script' in safe_globals:

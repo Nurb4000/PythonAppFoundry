@@ -138,6 +138,49 @@ def _extract_sql(text):
     return None
 
 
+def validate_read_only(sql):
+    """Enforce that a SQL string is a single read-only SELECT/WITH statement.
+
+    Rejects multiple statements (embedded semicolons), DML/DDL (INSERT/UPDATE/
+    DELETE/CREATE/ALTER/DROP/etc.), PRAGMA, and other write or side-effecting
+    statements. Used to guard query-execution paths against arbitrary database
+    mutation.
+
+    Args:
+        sql: The SQL string to validate.
+
+    Returns:
+        The sanitized SQL string if it is safe and read-only.
+
+    Raises:
+        ValueError: If the statement is empty, multi-statement, or not read-only.
+    """
+    if not sql or not sql.strip():
+        raise ValueError('SQL query is empty.')
+
+    stripped = sql.strip()
+
+    # Reject embedded statement separators so only a single statement runs.
+    if ';' in stripped:
+        raise ValueError('Multiple SQL statements are not allowed.')
+
+    # Strip a single trailing semicolon if present after trimming.
+    if stripped.endswith(';'):
+        stripped = stripped[:-1].strip()
+    if not stripped:
+        raise ValueError('SQL query is empty.')
+
+    first_token = stripped.split(None, 1)[0].upper()
+
+    ALLOWED = {'SELECT', 'WITH'}
+    if first_token not in ALLOWED:
+        raise ValueError(
+            f'Only SELECT/WITH (read-only) queries are allowed; got "{first_token}".'
+        )
+
+    return stripped
+
+
 def validate_sql(sql):
     """Validate SQL by attempting to parse it.
 

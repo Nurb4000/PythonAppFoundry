@@ -138,7 +138,7 @@ def api_run_query(id):
     chart_labels = []
     chart_datasets = []
     try:
-        sql = request.form.get('sql', q.sql)
+        sql = validate_read_only(request.form.get('sql', q.sql))
         result = db.session.execute(db.text(sql))
         if result.returns_rows:
             columns = list(result.keys())

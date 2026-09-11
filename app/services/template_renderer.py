@@ -1,9 +1,18 @@
-from jinja2.sandbox import ImmutableSandboxedEnvironment
+from jinja2.sandbox import ImmutableSandboxedEnvironment, SandboxedEnvironment
 import jinja2
 
 _sandbox_env = ImmutableSandboxedEnvironment(
     autoescape=True,
     undefined=jinja2.StrictUndefined,
+)
+
+# A dedicated sandbox for rendering *script-supplied* template strings.
+# It uses a lenient (non-strict) Undefined so partial-context rendering keeps
+# working, while still blocking dunder attribute access and unsafe calls that
+# are used in Jinja2 SSTI escape chains.
+_script_render_env = SandboxedEnvironment(
+    autoescape=True,
+    undefined=jinja2.Undefined,
 )
 
 # Add commonly used filters that may not be in the sandbox by default
@@ -32,4 +41,16 @@ def render_db_template(template_body, **context):
     rendering as empty strings.
     """
     tmpl = _sandbox_env.from_string(template_body)
+    return tmpl.render(**context)
+
+
+def render_script_template(template_body, **context):
+    """Render a script-supplied template string in a sandbox.
+
+    This is the safe replacement for Flask's ``render_template_string``: it
+    uses a sandboxed Jinja2 environment so template source coming from
+    untrusted scripts/imports cannot traverse dunders (``__class__``,
+    ``__subclasses__``) to reach arbitrary Python objects.
+    """
+    tmpl = _script_render_env.from_string(template_body)
     return tmpl.render(**context)
