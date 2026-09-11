@@ -87,39 +87,15 @@ def _run_script_in_app_context(app, script, name):
         execute_script(script, source_type='task', source_name=name)
 
 
-def _cron_matches(expression, dt):
-    """Simple cron matcher for 5-field expressions. Checks at minute granularity."""
-    try:
-        parts = expression.strip().split()
-        if len(parts) != 5:
-            return False
-        minute, hour, day, month, dow = parts
-        def _match(field, value):
-            if field == '*':
-                return True
-            for part in field.split(','):
-                if '-' in part:
-                    a, b = part.split('-', 1)
-                    if a.isdigit() and b.isdigit() and int(a) <= value <= int(b):
-                        return True
-                elif part.isdigit() and int(part) == value:
-                    return True
-                elif part == '*/1' or part == '*':
-                    return True
-                elif part.startswith('*/') and part[2:].isdigit():
-                    step = int(part[2:])
-                    if step > 0 and value % step == 0:
-                        return True
-            return False
-        return (_match(minute, dt.minute) and _match(hour, dt.hour)
-                and _match(day, dt.day) and _match(month, dt.month)
-                and _match(dow, dt.weekday()))
-    except Exception:
-        return False
-
-
 def _check_query_reports():
-    """Check and execute scheduled query reports."""
+    """Check and execute scheduled query reports.
+
+    Cron matching is delegated to APScheduler's ``CronTrigger.matches()`` (the
+    same engine used for scheduled tasks) so that full cron syntax — named
+    days/months, ranges with steps, day-of-week aliases, etc. — is evaluated
+    correctly instead of the old hand-rolled matcher.
+    """
+    from apscheduler.triggers.cron import CronTrigger
     from app.models import QueryReport
     now = datetime.now(timezone.utc)
     queries = db.session.query(QueryReport).filter(
@@ -128,7 +104,23 @@ def _check_query_reports():
     ).all()
     for q in queries:
         try:
-            if not _cron_matches(q.schedule_cron, now):
+            parts = q.schedule_cron.strip().split()
+            if len(parts) != 5:
+                continue
+            # Pin the trigger to UTC so its fire times are comparable with `now`
+            # (which is UTC-aware). APScheduler's CronTrigger handles full cron
+            # syntax (named days/months, ranges with steps, DOW aliases).
+            trigger = CronTrigger(
+                minute=parts[0], hour=parts[1], day=parts[2],
+                month=parts[3], day_of_week=parts[4], timezone=timezone.utc,
+            )
+            # The cron fires once per matching minute (at second 0). Determine a
+            # match for the current minute by asking whether the next fire time
+            # falls inside [minute_start - 1s, minute_start + 59s].
+            minute_start = now.replace(second=0, microsecond=0)
+            window_end = minute_start + timedelta(seconds=59)
+            next_fire = trigger.get_next_fire_time(minute_start - timedelta(seconds=1), window_end)
+            if next_fire is None or next_fire > window_end:
                 continue
             # Guard: skip if this query ran within the last 60 seconds
             if q.last_run and (now - q.last_run).total_seconds() < 60:

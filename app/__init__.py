@@ -256,8 +256,12 @@ def create_app(config_class=None):
             # Skip API responses and non-HTML content types
             if 'application/json' in response.content_type:
                 return response
+            import html as _html
             from app.models import Setting
             site_name = Setting.get('site_name', '')
+            # Escape user-controlled values before splicing into HTML to prevent
+            # stored XSS via a malicious site_name or username.
+            site_name = _html.escape(str(site_name))
             body = response.get_data(as_text=True)
 
             if site_name:
@@ -329,7 +333,7 @@ def create_app(config_class=None):
                     bar = f'''<div id="admin-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1a2e;color:#eee;padding:6px 16px;font:13px system-ui;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #e94560">
                 <a href="/__auth/profile" style="color:#eee;text-decoration:none">Profile</a>
                 <span style="flex:1"></span>
-                <span>{current_user.username}</span>
+                <span>{_html.escape(str(current_user.username))}</span>
                 <a href="/" style="color:#eee;text-decoration:none">View Site</a>
                 <a href="/__auth/logout" style="color:#e94560;text-decoration:none">Logout</a>
             </div>'''
