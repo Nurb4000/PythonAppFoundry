@@ -40,6 +40,16 @@ def edit_settings():
         Setting.set('smtp_user', request.form.get('smtp_user', ''))
         Setting.set('smtp_password', request.form.get('smtp_password', ''))
         Setting.set('smtp_from', request.form.get('smtp_from', 'noreply@example.com'))
+
+        # Enforce a sane floor/ceiling on the script execution timeout so an
+        # admin cannot accidentally (or maliciously) disable the only guard
+        # against a hung/hanging script (see script_runner.execute_script).
+        try:
+            st = int(request.form.get('script_timeout', '30'))
+        except (ValueError, TypeError):
+            st = 30
+        st = max(1, min(st, 300))
+        Setting.set('script_timeout', str(st))
         Setting.set('smtp_tls', 'true' if 'smtp_tls' in request.form else 'false')
         Setting.set('log_retention_days', request.form.get('log_retention_days', '0'))
         Setting.set('async_workers', request.form.get('async_workers', '4'))

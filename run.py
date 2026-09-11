@@ -6,5 +6,7 @@ app = create_app()
 
 if __name__ == '__main__':
     port = int(os.environ.get('APP_PORT', '5000'))
-    debug = os.environ.get('APP_DEBUG', 'true').lower() in ('1', 'true', 'yes')
+    # Debug defaults OFF. The Werkzeug interactive debugger allows remote code
+    # execution once its PIN is known; never enable it by default.
+    debug = os.environ.get('APP_DEBUG', 'false').lower() in ('1', 'true', 'yes')
     app.run(host='0.0.0.0', port=port, debug=debug)

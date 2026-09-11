@@ -47,9 +47,9 @@ def register():
         if password != confirm:
             return render_template('auth/register.html',
                 error='Passwords do not match.', success=None)
-        if len(password) < 4:
+        if len(password) < 8:
             return render_template('auth/register.html',
-                error='Password must be at least 4 characters.', success=None)
+                error='Password must be at least 8 characters.', success=None)
         existing = db.session.query(User).filter_by(username=username).first()
         if existing:
             return render_template('auth/register.html',
@@ -144,9 +144,9 @@ def setup():
             return render_template('auth/setup.html',
                 error='Passwords do not match.',
                 success=None, username=username)
-        if len(password) < 4:
+        if len(password) < 8:
             return render_template('auth/setup.html',
-                error='Password must be at least 4 characters.',
+                error='Password must be at least 8 characters.',
                 success=None, username=username)
         pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         user = User(username=username, password_hash=pw_hash, role='admin')

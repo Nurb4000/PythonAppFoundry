@@ -74,6 +74,24 @@ def create_app(config_class=None):
     def inject_csrf():
         return dict(csrf_token=generate_csrf_token)
 
+    @app.after_request
+    def set_security_headers(response):
+        """Stamp defensive response headers on every HTML response."""
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # Minimal CSP: everything is vendored locally (no CDN), so restrict to
+        # same-origin. Inline scripts/styles are used throughout the templates,
+        # so 'unsafe-inline' is required there too; the meaningful protection
+        # this adds is blocking remote/authorized script & resource injection.
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "frame-ancestors 'none'"
+        )
+        return response
+
     from datetime import datetime as _datetime, timezone as _tz
 
     @app.template_filter('localtime')

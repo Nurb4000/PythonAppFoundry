@@ -36,6 +36,11 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    # Secure flag: cookies only sent over HTTPS. Off by default so the app is
+    # usable over plain HTTP in local dev; set SESSION_COOKIE_SECURE=true in
+    # production (or behind a TLS-terminating proxy) to enforce HTTPS-only
+    # session cookies.
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
     LLAMA_CPP_URL = os.environ.get('LLAMA_CPP_URL', 'http://localhost:8080')
     LLAMA_CPP_MODEL = os.environ.get('LLAMA_CPP_MODEL', '')
     AI_MAX_TOKENS = int(os.environ.get('AI_MAX_TOKENS', '4096'))
