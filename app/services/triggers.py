@@ -3,15 +3,10 @@ import time
 from datetime import datetime, timezone
 
 from app import db
-from app.models import Trigger, ExecutionLog
+from app.models import Trigger, ExecutionLog, DeadLetterEntry
 from app.services.script_runner import execute_script
 
 logger = logging.getLogger(__name__)
-
-# Dead letter queue for failed webhook executions
-_dead_letter_queue = []
-MAX_RETRIES = 3
-RETRY_DELAY_SECONDS = 5
 
 
 def fire_triggers(event_type, target_table, context=None):
@@ -36,7 +31,8 @@ def fire_triggers(event_type, target_table, context=None):
             })
         except Exception as e:
             logger.error(f'Trigger {trigger.name} failed: {e}')
-            _add_to_dead_letter(trigger.name, event_type, target_table, str(e))
+            _add_to_dead_letter(trigger.name, event_type, target_table, str(e),
+                                  module_id=trigger.module_id, script_id=trigger.script_id)
 
 
 def fire_webhook(webhook_slug, payload=None, provided_token=None):
@@ -84,7 +80,8 @@ def fire_webhook(webhook_slug, payload=None, provided_token=None):
             db.session.commit()
         except Exception as e:
             logger.error(f'Webhook trigger {trigger.name} failed: {e}')
-            _add_to_dead_letter(trigger.name, 'webhook', webhook_slug, str(e))
+            _add_to_dead_letter(trigger.name, 'webhook', webhook_slug, str(e),
+                                  module_id=trigger.module_id, script_id=trigger.script_id)
 
 
 def fire_webhook_async(webhook_slug, payload=None, provided_token=None):
@@ -128,35 +125,150 @@ def fire_webhook_async(webhook_slug, payload=None, provided_token=None):
     return execution_ids
 
 
-def _add_to_dead_letter(trigger_name, event_type, target, error_msg):
-    """Add a failed execution to the dead letter queue."""
-    entry = {
-        'trigger_name': trigger_name,
-        'event_type': event_type,
-        'target': target,
-        'error': error_msg,
-        'timestamp': datetime.now(timezone.utc).isoformat(),
-    }
-    _dead_letter_queue.append(entry)
-    
+def _add_to_dead_letter(trigger_name, event_type, target, error_msg, module_id=None, script_id=None):
+    """Persist a failed execution to the durable dead-letter store.
+
+    Entries are stored in the database (DeadLetterEntry) so they survive a
+    restart and are shared across worker processes, unlike the previous
+    in-memory list.
+    """
+    entry = DeadLetterEntry(
+        trigger_name=trigger_name,
+        event_type=event_type,
+        target=target,
+        error_message=error_msg[:4000],
+        module_id=module_id,
+        script_id=script_id,
+        status='failed',
+        retry_count=0,
+    )
+    db.session.add(entry)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception('Failed to persist dead-letter entry for %s', trigger_name)
+
     dl_logger = logging.getLogger('platform.dead_letter')
     dl_logger.warning(f'Dead letter: {trigger_name} - {error_msg[:200]}')
+    return getattr(entry, 'id', None)
 
 
 def get_dead_letter_queue():
-    """Get the current dead letter queue."""
-    return list(_dead_letter_queue)
+    """Return dead-letter entries as a list of dicts.
+
+    Kept dict-shaped for backwards compatibility with callers (health check)
+    that only inspect the queue length; the admin UI uses get_dead_letter_entries().
+    """
+    rows = DeadLetterEntry.query.order_by(DeadLetterEntry.created_at.desc()).all()
+    return [
+        {
+            'id': r.id,
+            'trigger_name': r.trigger_name,
+            'event_type': r.event_type,
+            'target': r.target,
+            'error': r.error_message,
+            'timestamp': r.created_at.isoformat() if r.created_at else '',
+            'retry_count': r.retry_count or 0,
+        }
+        for r in rows
+    ]
 
 
-def clear_dead_letter_queue():
-    """Clear the dead letter queue."""
-    _dead_letter_queue.clear()
+def get_dead_letter_entries():
+    """Return raw DeadLetterEntry ORM objects (ordered newest first) for the admin UI."""
+    return DeadLetterEntry.query.order_by(DeadLetterEntry.created_at.desc()).all()
 
 
-def retry_dead_letter(index=0):
-    """Retry a specific dead letter entry (by index)."""
-    if 0 <= index < len(_dead_letter_queue):
-        entry = _dead_letter_queue.pop(index)
-        logger.info(f'Retrying dead letter: {entry["trigger_name"]} - {entry["target"]}')
-        return True
-    return False
+def dead_letter_count(status=None):
+    """Return the number of dead-letter entries, optionally filtered by status."""
+    q = DeadLetterEntry.query
+    if status is not None:
+        q = q.filter(DeadLetterEntry.status == status)
+    return q.count()
+
+
+def clear_dead_letter_queue(status=None):
+    """Delete dead-letter entries. Returns the number removed.
+
+    Defaults to clearing only successfully-retried/processed entries; pass
+    status='failed' (or a specific status) to remove those.
+    """
+    q = DeadLetterEntry.query
+    if status is not None:
+        q = q.filter(DeadLetterEntry.status == status)
+    count = q.count()
+    q.delete()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception('Failed to clear dead-letter entries')
+    return count
+
+
+def delete_dead_letter_entry(entry_id):
+    """Delete a single dead-letter entry by id. Returns True if one was removed."""
+    entry = DeadLetterEntry.query.get(entry_id)
+    if entry is None:
+        return False
+    db.session.delete(entry)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.exception('Failed to delete dead-letter entry %s', entry_id)
+    return True
+
+
+def _refire_trigger(entry):
+    """Re-execute the script behind a dead-letter entry (best effort)."""
+    from app.models import Trigger
+    trigger = Trigger.query.filter_by(
+        name=entry.trigger_name, event_type=entry.event_type,
+    ).first()
+    if not trigger or not trigger.script:
+        raise RuntimeError('trigger no longer exists')
+    if entry.event_type == 'webhook':
+        extra_globals = {
+            'webhook_slug': entry.target,
+            'webhook_payload': {},
+            'webhook_request': None,
+        }
+    else:
+        extra_globals = {'trigger_context': {}}
+    execute_script(trigger.script, source_type=entry.event_type,
+                   source_name=trigger.name, extra_globals=extra_globals)
+
+
+def retry_dead_letter(entry_id):
+    """Re-attempt a failed dead-letter execution.
+
+    Increments retry_count and flips the entry status based on the re-run.
+    Returns True if the entry existed and was retried.
+    """
+    entry = DeadLetterEntry.query.get(entry_id)
+    if entry is None:
+        return False
+
+    entry.retry_count = (entry.retry_count or 0) + 1
+    entry.status = 'retrying'
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        _refire_trigger(entry)
+        entry.status = 'succeeded'
+    except Exception as e:
+        entry.status = 'failed'
+        logger.error(f'Retry of dead-letter entry {entry_id} failed: {e}')
+    finally:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    logger.info(f'Retried dead-letter entry {entry_id} (attempt {entry.retry_count}): status={entry.status}')
+    return True

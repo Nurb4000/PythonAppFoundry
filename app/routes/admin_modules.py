@@ -38,7 +38,8 @@ def import_module_page():
 
         try:
             xml_str = xml_file.read().decode('utf-8')
-            root = ET.fromstring(xml_str)
+            from app.services.xml_utils import safe_fromstring
+            root = safe_fromstring(xml_str)
             slug = root.get('slug', '')
 
             existing = db.session.query(Module).filter_by(slug=slug).first()
@@ -308,7 +309,8 @@ def clone_module(id):
     from app.services.bundle import export_module, import_module
     import xml.etree.ElementTree as ET
     xml_str = export_module(m)
-    root = ET.fromstring(xml_str)
+    from app.services.xml_utils import safe_fromstring
+    root = safe_fromstring(xml_str)
     root.set('name', m.name + ' (copy)')
     root.set('slug', m.slug + '-copy')
     try:

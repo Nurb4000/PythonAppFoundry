@@ -170,8 +170,8 @@ def refine_module(id):
 
 def _guess_title(xml_str):
     try:
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(xml_str)
+        from app.services.xml_utils import safe_fromstring
+        root = safe_fromstring(xml_str)
         return root.get('name')
     except Exception:
         return None

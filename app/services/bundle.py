@@ -119,7 +119,8 @@ def export_module(module):
 
 
 def import_module(xml_str, update_existing=False, module_id=None):
-    root = ET.fromstring(xml_str)
+    from app.services.xml_utils import safe_fromstring
+    root = safe_fromstring(xml_str)
 
     if root.tag != 'module':
         raise ValueError('Root element must be <module>')

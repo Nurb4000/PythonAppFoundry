@@ -542,6 +542,32 @@ class ScriptExecution(db.Model):
         return f'<ScriptExecution {self.source_type}:{self.source_name} {self.status}>'
 
 
+class DeadLetterEntry(db.Model):
+    """Durable store for failed trigger/webhook executions.
+
+    Replaces the previous in-memory list so that failed executions survive a
+    restart and are shared across workers/gunicorn instances. The admin UI at
+    /__admin/dead-letter can review, retry, and clear these entries.
+    """
+    __tablename__ = 'dead_letter_entries'
+
+    id = db.Column(db.Integer, primary_key=True)
+    trigger_name = db.Column(db.String(200), nullable=False)
+    event_type = db.Column(db.String(50), nullable=False)
+    target = db.Column(db.String(200), default='')
+    error_message = db.Column(db.Text, nullable=False)
+    module_id = db.Column(db.Integer, nullable=True)
+    script_id = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(20), default='failed')  # failed | retrying | succeeded
+    retry_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f'<DeadLetterEntry {self.trigger_name} {self.event_type}>'
+
+
 class DynamicTableRegistry(db.Model):
     __tablename__ = 'dynamic_table_registry'
 

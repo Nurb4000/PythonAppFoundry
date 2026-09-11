@@ -25,8 +25,8 @@ def import_preview():
         xml_str = xml_file.read().decode('utf-8')
         
         # Parse XML to extract preview info without importing
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(xml_str)
+        from app.services.xml_utils import safe_fromstring
+        root = safe_fromstring(xml_str)
         
         if root.tag != 'module':
             return jsonify({'error': 'Root element must be <module>'}), 400
