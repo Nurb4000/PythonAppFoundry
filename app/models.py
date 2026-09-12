@@ -97,8 +97,14 @@ class DynamicModel:
         table = Table(table_name, db.metadata, *cols, extend_existing=True)
         try:
             table.create(engine, checkfirst=True)
-        except Exception:
-            pass
+        except Exception as e:
+            # Surface creation failures loudly instead of silently registering a
+            # model for a table that may not exist (which later surfaces as a
+            # confusing NoSuchTableError). A held/uncommitted write transaction on
+            # the same connection can block CREATE TABLE on SQLite; callers that
+            # hold writes should commit/flush before calling get_or_create.
+            logger.warning('Failed to create dynamic table %s: %s', table_name, e, exc_info=True)
+            raise RuntimeError(f'Failed to create dynamic table "{table_name}": {e}') from e
 
         # Evolve schema: add any missing columns via ALTER TABLE
         try:
@@ -163,46 +169,46 @@ class DynamicModel:
 
 
 def _ensure_indexes(engine, table_name, index_columns):
-    """Ensure indexes exist for the specified columns.
-    
-    Args:
-        engine: Database engine
-        table_name: Name of the table
-        index_columns: List of column names to index
-    """
-    from sqlalchemy import text, inspect as sa_inspect
-    
-    try:
-        inspector = sa_inspect(engine)
-        existing_indexes = {idx['name'] for idx in inspector.get_indexes(table_name)}
-        
-        for col_name in index_columns:
-            # Skip if column doesn't exist
-            actual_cols = {c['name'] for c in inspector.get_columns(table_name)}
-            if col_name not in actual_cols:
-                logger.warning(f'Cannot create index on {table_name}.{col_name}: column does not exist')
-                continue
-            
-            # Generate index name (max 63 chars for PostgreSQL)
-            index_name = f"idx_{table_name}_{col_name}"[:63]
-            
-            # Skip if index already exists
-            if index_name in existing_indexes:
-                continue
-            
-            # Create index
-            create_sql = f'CREATE INDEX "{index_name}" ON "{table_name}" ("{col_name}")'
-            logger.info(f'Creating index: {create_sql}')
-            with engine.connect() as conn:
-                conn.execute(text(create_sql))
-                conn.commit()
-            
-    except Exception as e:
-        logger.warning(f'Failed to create indexes for {table_name}: {e}')
+        """Ensure indexes exist for the specified columns.
+
+        Args:
+            engine: Database engine (unused for connection; kept for API parity)
+            table_name: Name of the table
+            index_columns: List of column names to index
+        """
+        from sqlalchemy import text, inspect as sa_inspect
+
         try:
+            inspector = sa_inspect(db.session.get_bind())
+            existing_indexes = {idx['name'] for idx in inspector.get_indexes(table_name)}
+
+            for col_name in index_columns:
+                # Skip if column doesn't exist
+                actual_cols = {c['name'] for c in inspector.get_columns(table_name)}
+                if col_name not in actual_cols:
+                    logger.warning(f'Cannot create index on {table_name}.{col_name}: column does not exist')
+                    continue
+
+                # Generate index name (max 63 chars for PostgreSQL)
+                index_name = f"idx_{table_name}_{col_name}"[:63]
+
+                # Skip if index already exists
+                if index_name in existing_indexes:
+                    continue
+
+                # Create index. Execute through db.session (the same connection
+                # the caller's transaction is using) rather than opening a new
+                # engine.connect(). A separate connection cannot acquire the lock
+                # needed to CREATE INDEX while db.session holds an open write
+                # transaction on SQLite, which raised "database is locked".
+                create_sql = f'CREATE INDEX "{index_name}" ON "{table_name}" ("{col_name}")'
+                logger.info(f'Creating index: {create_sql}')
+                db.session.execute(text(create_sql))
+                db.session.commit()
+
+        except Exception as e:
+            logger.warning(f'Failed to create indexes for {table_name}: {e}')
             db.session.rollback()
-        except:
-            pass
 
 
 class User(UserMixin, db.Model):
@@ -540,6 +546,32 @@ class ScriptExecution(db.Model):
 
     def __repr__(self):
         return f'<ScriptExecution {self.source_type}:{self.source_name} {self.status}>'
+
+
+class ImportJob(db.Model):
+    """Tracks a module import that runs in the background (async_executor).
+
+    Large XML imports can take long enough to risk timing out the HTTP request
+    that triggered them. Admin upload imports are queued here and executed on
+    the shared thread pool; callers poll this table for completion instead of
+    blocking. See async_executor.submit_import().
+    """
+    __tablename__ = 'import_jobs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+    status = db.Column(db.String(20), default='queued')  # queued | completed | failed
+    source = db.Column(db.String(50), default='upload')  # upload | clone | marketplace | ...
+    module_id = db.Column(db.Integer, nullable=True)
+    update_existing = db.Column(db.Boolean, default=False)
+    version_comment = db.Column(db.Text, default='')
+    created_by_user_id = db.Column(db.Integer, nullable=True)
+    result_summary = db.Column(db.Text, default='')
+
+    def __repr__(self):
+        return f'<ImportJob #{self.id} {self.status}>'
 
 
 class DeadLetterEntry(db.Model):

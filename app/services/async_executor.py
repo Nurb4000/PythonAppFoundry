@@ -127,6 +127,81 @@ def _run_script(app, execution_id, script, extra_globals):
         logger.info(f'Async execution {execution_id} completed: {execution.status}')
 
 
+def submit_import(xml_str, update_existing=False, module_id=None, version_comment='',
+                  source='upload', created_by_user_id=None):
+    """Queue a module import to run on the background thread pool.
+
+    Large XML imports can take long enough to risk timing out the HTTP request
+    that triggered them. This offloads the work so the caller can redirect to a
+    status page and poll for completion instead of blocking. Returns the
+    ImportJob.id.
+    """
+    from app.models import ImportJob
+    job = ImportJob(
+        source=source,
+        status='queued',
+        # update_existing only makes sense when we have a concrete module to
+        # update; normalise so a bare new-import stays a new-import.
+        update_existing=bool(update_existing and module_id is not None),
+        version_comment=(version_comment or ''),
+        created_by_user_id=created_by_user_id,
+        result_summary='Queued for import.',
+    )
+    if module_id is not None:
+        job.module_id = module_id
+    db.session.add(job)
+    db.session.commit()
+
+    job_id = job.id
+    # Capture the app object so the background thread can push its own context.
+    app = current_app._get_current_object()
+    _get_pool().submit(_run_import, app, job_id, xml_str, update_existing,
+                       module_id, version_comment, source)
+    logger.info(f'Queued async import {job_id} (source={source})')
+    return job_id
+
+
+def _run_import(app, job_id, xml_str, update_existing, module_id, version_comment, source):
+    """Background worker: run a queued module import and record the result."""
+    from app.models import ImportJob
+    from app.services.bundle import import_module
+    with app.app_context():
+        job = db.session.get(ImportJob, job_id)
+        if job is None:
+            return
+        try:
+            m = import_module(xml_str, update_existing=update_existing, module_id=module_id)
+            job.status = 'completed'
+            job.module_id = m.id
+            summary = f'Imported "{m.name}" (module #{m.id})'
+            # Replicate the admin "create a version snapshot on update" behaviour,
+            # but call create_version directly (current_user is unavailable in a
+            # worker thread).
+            if update_existing and module_id and version_comment:
+                try:
+                    from app.services.versioning import create_version
+                    create_version(module_id, comment=version_comment, user_id=job.created_by_user_id)
+                    summary += '; version snapshot created'
+                except Exception as ve:
+                    summary += f'; version skip: {ve}'
+            job.result_summary = summary
+        except Exception as e:
+            job.status = 'failed'
+            job.result_summary = str(e)[:4000]
+            logger.error(f'Async import {job_id} failed: {e}')
+        finally:
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+
+def get_import_job(job_id):
+    """Return an ImportJob ORM object (or None)."""
+    from app.models import ImportJob
+    return db.session.get(ImportJob, job_id)
+
+
 def get_status(execution_id):
     """Get execution status as a dict."""
     db.session.expire_all()

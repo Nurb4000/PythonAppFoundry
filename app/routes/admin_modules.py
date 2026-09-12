@@ -1,5 +1,6 @@
 """Admin routes for module management."""
 from flask import Blueprint, request, redirect, url_for, render_template, flash, jsonify
+from flask_login import current_user
 from app.services.csrf import csrf_protect
 from app.services.validation import validate_slug
 from app.services.admin_utils import developer_or_admin_required, admin_required, create_auto_version, render_admin
@@ -7,6 +8,7 @@ from app.services.scheduler import refresh_tasks
 from app import db
 from app.models import Module, Route, Script, Form, ScheduledTask, Trigger, QueryReport
 from app.services.audit import log_audit
+from app.services.async_executor import submit_import, get_import_job
 
 modules_bp = Blueprint('modules', __name__)
 
@@ -33,37 +35,43 @@ def import_module_page():
             flash('Empty filename', 'error')
             return redirect(url_for('admin.modules.import_module_page'))
 
-        from app.services.bundle import import_module
-        import xml.etree.ElementTree as ET
-
+        # Validate the XML up-front (fail fast, before queuing) using the same
+        # entity-safe parser used everywhere else.
+        from app.services.xml_utils import safe_fromstring
         try:
             xml_str = xml_file.read().decode('utf-8')
-            from app.services.xml_utils import safe_fromstring
             root = safe_fromstring(xml_str)
+            if root.tag != 'module':
+                raise ValueError('Root element must be <module>')
             slug = root.get('slug', '')
-
-            existing = db.session.query(Module).filter_by(slug=slug).first()
-            update_existing = request.form.get('update_existing') == 'true'
-
-            if existing and update_existing:
-                version_comment = request.form.get('version_comment', '').strip()
-                if not version_comment:
-                    version_comment = f'Updated from XML import'
-                m = import_module(xml_str, update_existing=True, module_id=existing.id)
-                create_auto_version(existing.id, comment=version_comment)
-                log_audit('import', 'module', existing.id, existing.name, details='update=True')
-                flash(f'Module "{existing.name}" updated from XML')
-                _flash_import_metadata(m)
-                return redirect(url_for('admin.modules.edit_module', id=existing.id))
-            else:
-                m = import_module(xml_str)
-                log_audit('import', 'module', m.id, m.name, details='update=False')
-                flash(f'Module "{m.name}" imported successfully')
-                _flash_import_metadata(m)
-                return redirect(url_for('admin.modules.list_modules'))
         except Exception as e:
-            flash(f'Import failed: {e}', 'error')
+            flash(f'Invalid XML: {e}', 'error')
             return redirect(url_for('admin.modules.import_module_page'))
+
+        existing = db.session.query(Module).filter_by(slug=slug).first()
+        update_existing = existing is not None and request.form.get('update_existing') == 'true'
+        version_comment = (request.form.get('version_comment') or '').strip()
+        if not version_comment and update_existing:
+            version_comment = 'Updated from XML import'
+
+        module_id = existing.id if update_existing else None
+        user_id = current_user.id if current_user.is_authenticated else None
+
+        # Queue the import on the background pool so a large bundle can't block
+        # (or time out) this request. See async_executor.submit_import().
+        job_id = submit_import(
+            xml_str,
+            update_existing=update_existing,
+            module_id=module_id,
+            version_comment=version_comment,
+            source='upload',
+            created_by_user_id=user_id,
+        )
+        verb = 'updated' if update_existing else 'imported'
+        log_audit('import_queued', 'module', module_id or 0, existing.name if update_existing else slug,
+                  details=f'{verb} job={job_id}')
+        flash('Import queued — processing in the background.')
+        return redirect(url_for('admin.modules.import_status', job_id=job_id))
 
     return render_admin('Import Module', 'admin/modules/import.html')
 
@@ -334,16 +342,53 @@ def import_module_xml(id):
     if not xml_file.filename:
         flash('Empty filename', 'error')
         return redirect(url_for('admin.modules.edit_module', id=id))
+    from app.services.xml_utils import safe_fromstring
     try:
-        from app.services.bundle import import_module
-        m2 = import_module(xml_file.read().decode('utf-8'), update_existing=True, module_id=id)
-        create_auto_version(id)
-        log_audit('import', 'module', m.id, m.name)
-        flash(f'Module "{m.name}" updated from XML')
-        _flash_import_metadata(m2)
+        xml_str = xml_file.read().decode('utf-8')
+        safe_fromstring(xml_str)  # validate before queuing
     except Exception as e:
-        flash(f'Import failed: {e}', 'error')
-    return redirect(url_for('admin.modules.edit_module', id=id))
+        flash(f'Invalid XML: {e}', 'error')
+        return redirect(url_for('admin.modules.edit_module', id=id))
+    user_id = current_user.id if current_user.is_authenticated else None
+    job_id = submit_import(
+        xml_str,
+        update_existing=True,
+        module_id=id,
+        version_comment='Updated from XML import',
+        source='upload',
+        created_by_user_id=user_id,
+    )
+    log_audit('import_queued', 'module', id, m.name, details=f'update job={job_id}')
+    flash('Import queued — processing in the background.')
+    return redirect(url_for('admin.modules.import_status', job_id=job_id))
+
+
+@modules_bp.route('/import-status/<int:job_id>')
+@developer_or_admin_required
+def import_status(job_id):
+    """Server-rendered status page for a queued import.
+
+    The page polls /import-status/<id>/json until the job reaches a terminal
+    state (completed/failed) and then redirects accordingly.
+    """
+    job = get_import_job(job_id)
+    return render_admin('Import Status', 'admin/modules/import_status.html', job=job)
+
+
+@modules_bp.route('/import-status/<int:job_id>/json')
+@developer_or_admin_required
+def import_status_json(job_id):
+    """JSON status used by the import-status page's polling loop."""
+    job = get_import_job(job_id)
+    if job is None:
+        return jsonify({'error': 'Import job not found'})
+    return jsonify({
+        'id': job.id,
+        'status': job.status,
+        'module_id': job.module_id,
+        'source': getattr(job, 'source', 'upload'),
+        'result_summary': job.result_summary or '',
+    })
 
 
 @modules_bp.route('/<int:module_id>/executions')
