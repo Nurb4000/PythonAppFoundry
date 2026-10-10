@@ -133,6 +133,7 @@ NEW_MODULE_TEMPLATE_REMOVED = True
 
 @modules_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
 @developer_or_admin_required
+@csrf_protect
 def edit_module(id):
     m = Module.query.get_or_404(id)
     if request.method == 'POST':

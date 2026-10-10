@@ -32,6 +32,25 @@ def admin_required(f):
     return wrapper
 
 
+def admin_csrf_required(f):
+    """Decorator: admin role + CSRF validation on POST/PUT/PATCH/DELETE."""
+    from flask_login import login_required, current_user
+    from app.services.csrf import validate_csrf_token
+    @wraps(f)
+    @login_required
+    def wrapper(*a, **kw):
+        if current_user.role != 'admin':
+            abort(403)
+        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            token = (request.form.get('csrf_token', '') or
+                     request.headers.get('X-CSRF-Token', '') or
+                     (request.get_json(silent=True) or {}).get('csrf_token', ''))
+            if not validate_csrf_token(token):
+                abort(403)
+        return f(*a, **kw)
+    return wrapper
+
+
 def developer_or_admin_required(f):
     """Decorator: admins and developers can access."""
     from flask_login import login_required, current_user
@@ -40,6 +59,25 @@ def developer_or_admin_required(f):
     def wrapper(*a, **kw):
         if current_user.role not in ('admin', 'developer'):
             abort(403)
+        return f(*a, **kw)
+    return wrapper
+
+
+def dev_or_admin_csrf_required(f):
+    """Decorator: admin/developer role + CSRF validation on POST/PUT/PATCH/DELETE."""
+    from flask_login import login_required, current_user
+    from app.services.csrf import validate_csrf_token
+    @wraps(f)
+    @login_required
+    def wrapper(*a, **kw):
+        if current_user.role not in ('admin', 'developer'):
+            abort(403)
+        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            token = (request.form.get('csrf_token', '') or
+                     request.headers.get('X-CSRF-Token', '') or
+                     (request.get_json(silent=True) or {}).get('csrf_token', ''))
+            if not validate_csrf_token(token):
+                abort(403)
         return f(*a, **kw)
     return wrapper
 

@@ -165,6 +165,7 @@ def browse_table(table_name):
 
 @data_bp.route('/<table_name>/new', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def new_row(table_name):
     if table_name not in db.metadata.tables:
         return 'Table not found', 404
@@ -202,6 +203,7 @@ def new_row(table_name):
 
 @data_bp.route('/<table_name>/<int:id>/edit', methods=['GET', 'POST'])
 @admin_required
+@csrf_protect
 def edit_row(table_name, id):
     if table_name not in db.metadata.tables:
         return 'Table not found', 404
