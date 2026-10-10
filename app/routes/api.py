@@ -186,40 +186,49 @@ def api_run_query(id):
 @api_bp.route('/webhook/<slug>', methods=['POST'])
 def api_webhook(slug):
     """Public webhook endpoint. Fires triggers associated with this slug.
-    
+
     Accepts JSON or form data in the request body.
     Optional auth: include ?token=XXX or Authorization: Bearer XXX header.
+    HMAC auth: include X-Webhook-Signature header with HMAC-SHA256 of raw body.
     Rate limited to 30 calls/minute and 600 calls/hour per webhook slug.
-    
+
     Use ?async=true to run scripts in background threads (returns 202 immediately).
     Without ?async=true (default), scripts run synchronously for backward compatibility.
     """
     from app.services.triggers import fire_webhook, fire_webhook_async
     from app.services.rate_limiter import _webhook_limiter
-    
+
+    # Capture raw body before Flask consumes it (needed for HMAC verification)
+    raw_body = request.get_data(cache=True)
+
     # Rate limiting per webhook slug
     client_ip = request.remote_addr or 'unknown'
     limited, rate_msg = _webhook_limiter.is_rate_limited(f'webhook:{slug}:{client_ip}')
     if limited:
         return jsonify({'error': rate_msg}), 429
-    
+
     # Extract payload from request
     if request.is_json:
         payload = request.get_json(silent=True) or {}
     else:
         payload = dict(request.form)
-        # Also include files if present
         for key, value in request.files.items():
             payload[key] = value.filename
-    
+
     # Extract auth token from query param or header
     provided_token = request.args.get('token') or request.headers.get('Authorization', '').replace('Bearer ', '')
-    
+
+    # Extract HMAC signature from header
+    provided_signature = request.headers.get('X-Webhook-Signature', '')
+
     # Check for async mode
     async_mode = request.args.get('async', 'false').lower() in ('true', '1', 'yes')
-    
+
     if async_mode:
-        execution_ids = fire_webhook_async(slug, payload, provided_token=provided_token)
+        execution_ids = fire_webhook_async(
+            slug, payload, provided_token=provided_token,
+            raw_body=raw_body, provided_signature=provided_signature,
+        )
         return jsonify({
             'status': 'queued',
             'webhook': slug,
@@ -227,7 +236,10 @@ def api_webhook(slug):
             'status_url': f'/__api/execution/{execution_ids[0]}' if execution_ids else None,
         }), 202
     else:
-        fire_webhook(slug, payload, provided_token=provided_token)
+        fire_webhook(
+            slug, payload, provided_token=provided_token,
+            raw_body=raw_body, provided_signature=provided_signature,
+        )
         return jsonify({'status': 'ok', 'webhook': slug})
 
 

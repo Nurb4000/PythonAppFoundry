@@ -410,6 +410,10 @@ class Trigger(db.Model):
     script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=True)
     enabled = db.Column(db.Boolean, default=True)
     auth_token = db.Column(db.String(200), default='')
+    # HMAC-SHA256 secret for webhook signature verification.  When set, callers
+    # must include an ``X-Webhook-Signature`` header containing the hex-encoded
+    # HMAC of the raw request body.
+    hmac_secret = db.Column(db.String(64), default='')
 
     module = db.relationship('Module', backref=db.backref('triggers', lazy='dynamic'))
     script = db.relationship('Script')

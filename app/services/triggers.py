@@ -1,4 +1,7 @@
+import hashlib
+import hmac as _hmac
 import logging
+import secrets
 import time
 from datetime import datetime, timezone
 
@@ -7,6 +10,45 @@ from app.models import Trigger, ExecutionLog, DeadLetterEntry
 from app.services.script_runner import execute_script
 
 logger = logging.getLogger(__name__)
+
+
+def generate_hmac_secret() -> str:
+    """Generate a random 32-byte HMAC secret (64 hex chars)."""
+    return secrets.token_hex(32)
+
+
+def compute_webhook_signature(body: bytes, secret: str) -> str:
+    """Compute HMAC-SHA256 signature for a webhook payload.
+
+    Args:
+        body: Raw request body bytes
+        secret: The HMAC secret stored on the trigger
+
+    Returns:
+        Hex-encoded HMAC signature string
+    """
+    return _hmac.new(
+        secret.encode('utf-8'),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def verify_webhook_signature(body: bytes, provided_signature: str, secret: str) -> bool:
+    """Verify an HMAC-SHA256 signature against the stored secret.
+
+    Uses constant-time comparison to prevent timing attacks.
+
+    Args:
+        body: Raw request body bytes
+        provided_signature: Signature from X-Webhook-Signature header
+        secret: The HMAC secret stored on the trigger
+
+    Returns:
+        True if signature is valid, False otherwise
+    """
+    expected = compute_webhook_signature(body, secret)
+    return _hmac.compare_digest(expected, provided_signature)
 
 
 def fire_triggers(event_type, target_table, context=None):
@@ -35,13 +77,16 @@ def fire_triggers(event_type, target_table, context=None):
                                   module_id=trigger.module_id, script_id=trigger.script_id)
 
 
-def fire_webhook(webhook_slug, payload=None, provided_token=None):
+def fire_webhook(webhook_slug, payload=None, provided_token=None,
+                 raw_body=None, provided_signature=None):
     """Fire triggers for a webhook event synchronously.
-    
+
     Args:
         webhook_slug: The webhook identifier (used as event_type)
         payload: Optional dictionary with request data to pass to the script
         provided_token: Optional auth token from the request to validate against trigger
+        raw_body: Raw request body bytes (for HMAC verification)
+        provided_signature: Signature from X-Webhook-Signature header
     """
     if payload is None:
         payload = {}
@@ -55,9 +100,20 @@ def fire_webhook(webhook_slug, payload=None, provided_token=None):
     for trigger in triggers:
         if not trigger.script:
             continue
+
+        # Auth token check (legacy)
         if trigger.auth_token:
-            if not provided_token or not __import__('secrets').compare_digest(trigger.auth_token, provided_token):
+            if not provided_token or not secrets.compare_digest(trigger.auth_token, provided_token):
                 logger.warning(f'Webhook trigger {trigger.name}: invalid auth token')
+                continue
+
+        # HMAC signature check (if secret is configured)
+        if trigger.hmac_secret:
+            if raw_body is None or provided_signature is None:
+                logger.warning(f'Webhook trigger {trigger.name}: missing HMAC signature')
+                continue
+            if not verify_webhook_signature(raw_body, provided_signature, trigger.hmac_secret):
+                logger.warning(f'Webhook trigger {trigger.name}: invalid HMAC signature')
                 continue
         
         try:
@@ -84,13 +140,14 @@ def fire_webhook(webhook_slug, payload=None, provided_token=None):
                                   module_id=trigger.module_id, script_id=trigger.script_id)
 
 
-def fire_webhook_async(webhook_slug, payload=None, provided_token=None):
+def fire_webhook_async(webhook_slug, payload=None, provided_token=None,
+                       raw_body=None, provided_signature=None):
     """Fire triggers for a webhook event asynchronously via the thread pool.
-    
+
     Returns a list of execution IDs for status polling.
     """
     from app.services.async_executor import submit_script
-    
+
     if payload is None:
         payload = {}
 
@@ -104,11 +161,22 @@ def fire_webhook_async(webhook_slug, payload=None, provided_token=None):
     for trigger in triggers:
         if not trigger.script:
             continue
+
+        # Auth token check (legacy)
         if trigger.auth_token:
-            if not provided_token or not __import__('secrets').compare_digest(trigger.auth_token, provided_token):
+            if not provided_token or not secrets.compare_digest(trigger.auth_token, provided_token):
                 logger.warning(f'Webhook trigger {trigger.name}: invalid auth token')
                 continue
-        
+
+        # HMAC signature check
+        if trigger.hmac_secret:
+            if raw_body is None or provided_signature is None:
+                logger.warning(f'Webhook trigger {trigger.name}: missing HMAC signature')
+                continue
+            if not verify_webhook_signature(raw_body, provided_signature, trigger.hmac_secret):
+                logger.warning(f'Webhook trigger {trigger.name}: invalid HMAC signature')
+                continue
+
         exec_id = submit_script(
             trigger.script,
             source_type='webhook',
