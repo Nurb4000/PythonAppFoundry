@@ -669,3 +669,24 @@ class AuditLog(db.Model):
 
     def __repr__(self):
         return f'<AuditLog {self.action} {self.entity_type}:{self.entity_name} by {self.user_name}>'
+
+
+class RateLimitAttempt(db.Model):
+    """DB-backed rate limit attempt tracking for multi-process deployments."""
+    __tablename__ = 'rate_limit_attempts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    # The rate limit key (e.g., "login:192.168.1.1" or "webhook:my-hook:10.0.0.1")
+    key = db.Column(db.String(256), nullable=False, index=True)
+    # Timestamp of the attempt (stored as float for precision)
+    timestamp = db.Column(db.Float, nullable=False)
+    # Created at for cleanup purposes
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        # Composite index for efficient window queries
+        db.Index('ix_rate_limit_key_timestamp', 'key', 'timestamp'),
+    )
+
+    def __repr__(self):
+        return f'<RateLimitAttempt {self.key} at {self.timestamp}>'
