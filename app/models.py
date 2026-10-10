@@ -690,3 +690,34 @@ class RateLimitAttempt(db.Model):
 
     def __repr__(self):
         return f'<RateLimitAttempt {self.key} at {self.timestamp}>'
+
+
+class ApiKey(db.Model):
+    """API key for programmatic access to the platform.
+
+    Keys are stored as bcrypt hashes; the plaintext is shown once at creation.
+    Supports per-key rate limiting, expiration, and revocation.
+    """
+    __tablename__ = 'api_keys'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    # bcrypt hash of the key token
+    key_hash = db.Column(db.String(60), nullable=False, unique=True)
+    # Prefix shown in UI (e.g., "paf_sk_abc123...")
+    key_prefix = db.Column(db.String(20), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    module_id = db.Column(db.Integer, db.ForeignKey('modules.id'), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    # Optional expiration
+    expires_at = db.Column(db.DateTime, nullable=True)
+    # Usage tracking
+    last_used_at = db.Column(db.DateTime, nullable=True)
+    request_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship('User', backref=db.backref('api_keys', lazy='dynamic'))
+    module = db.relationship('Module', backref=db.backref('api_keys', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<ApiKey {self.name} ({self.key_prefix}...{self.key_hash[:8]})>'

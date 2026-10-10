@@ -1,0 +1,42 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.api_keys.new_key') }}">+ New API Key</a>
+</div>
+{% if keys %}
+<table>
+<thead><tr>
+  <th>Name</th>
+  <th>Prefix</th>
+  <th>User</th>
+  <th>Module</th>
+  <th>Active</th>
+  <th>Expires</th>
+  <th>Last Used</th>
+  <th>Requests</th>
+  <th>Created</th>
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for key in keys %}
+<tr>
+  <td>{{ key.name }}</td>
+  <td><code>{{ key.key_prefix }}_...</code></td>
+  <td>{{ key.user.username if key.user else 'N/A' }}</td>
+  <td>{{ key.module.name if key.module else '—' }}</td>
+  <td>{% if key.is_active %}<span style="color:green;">✓</span>{% else %}<span style="color:red;">✗</span>{% endif %}</td>
+  <td>{{ key.expires_at|localtime if key.expires_at else '—' }}</td>
+  <td>{{ key.last_used_at|localtime if key.last_used_at else '—' }}</td>
+  <td>{{ key.request_count or 0 }}</td>
+  <td>{{ key.created_at|localtime }}</td>
+  <td>
+    <form method="POST" action="{{ url_for('admin.api_keys.rotate_key', key_id=key.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" style="background:none;border:none;color:#2563eb;cursor:pointer;text-decoration:underline;padding:0;font:inherit" onclick="return confirm('Rotate key? Old token will be invalidated.');">Rotate</button></form> |
+    {% if key.is_active %}
+    <form method="POST" action="{{ url_for('admin.api_keys.revoke_key', key_id=key.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" style="background:none;border:none;color:#856404;cursor:pointer;text-decoration:underline;padding:0;font:inherit">Revoke</button></form> |
+    {% endif %}
+    <form method="POST" action="{{ url_for('admin.api_keys.delete_key', key_id=key.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" style="background:none;border:none;color:#d00;cursor:pointer;text-decoration:underline;padding:0;font:inherit" onclick="return confirm('Delete API key?');">Delete</button></form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+{% else %}
+<p>No API keys created yet.</p>
+{% endif %}

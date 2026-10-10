@@ -1,0 +1,21 @@
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div style="margin-bottom:12px;">
+    <label for="name" style="display:block;font-weight:600;margin-bottom:4px;">Name</label>
+    <input type="text" id="name" name="name" required style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g., Production API Access">
+  </div>
+  <div style="margin-bottom:12px;">
+    <label for="module_id" style="display:block;font-weight:600;margin-bottom:4px;">Module (optional)</label>
+    <select id="module_id" name="module_id" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+      <option value="">All Modules</option>
+      {% for m in modules %}
+      <option value="{{ m.id }}">{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="margin-bottom:12px;">
+    <label for="expires_in_days" style="display:block;font-weight:600;margin-bottom:4px;">Expires In (days, optional)</label>
+    <input type="number" id="expires_in_days" name="expires_in_days" min="1" style="width:200px;padding:8px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g., 90">
+  </div>
+  <button type="submit" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">Create API Key</button>
+</form>
