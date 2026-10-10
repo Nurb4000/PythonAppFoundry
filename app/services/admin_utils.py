@@ -158,10 +158,14 @@ def render_admin(title, content_template, **kwargs):
 
 
 def list_view(model, name_plural, columns, edit_endpoint, new_endpoint, show_view=False, has_module=False):
-    """Generic list view for admin entities."""
+    """Generic list view for admin entities with pagination."""
     selected_module_id = request.args.get('module_id', type=int)
     sort_col = request.args.get('sort', 'id')
     sort_order = request.args.get('order', 'asc')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    # Clamp per_page to reasonable bounds
+    per_page = max(10, min(per_page, 500))
 
     q = db.session.query(model)
     if selected_module_id and has_module:
@@ -173,13 +177,24 @@ def list_view(model, name_plural, columns, edit_endpoint, new_endpoint, show_vie
     else:
         q = q.order_by(model.id)
 
-    rows = q.all()
-
     fmt = request.args.get('format', '')
+    # For exports, load all rows (pagination only applies to HTML view)
     if fmt == 'csv':
+        rows = q.all()
         return _export_csv(name_plural, columns, rows, has_module)
     if fmt in EXPORT_FORMATS:
+        rows = q.all()
         return EXPORT_FORMATS[fmt](name_plural, columns, rows, has_module)
+
+    # Paginate for HTML view
+    total = q.count()
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * per_page
+    rows = q.offset(offset).limit(per_page).all()
 
     modules = db.session.query(Module).order_by(Module.name).all() if has_module else []
 
@@ -194,6 +209,10 @@ def list_view(model, name_plural, columns, edit_endpoint, new_endpoint, show_vie
         selected_module_id=selected_module_id,
         sort_col=sort_col,
         sort_order=sort_order,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=total_pages,
     )
     return render_template('admin/base.html',
         title=name_plural.title(),
