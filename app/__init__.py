@@ -18,6 +18,10 @@ def create_app(config_class=None):
     if config_class:
         app.config.from_object(config_class)
 
+    # Initialize centralized AppState for multi-process support
+    from app.services.app_state import init_state
+    init_state(app)
+
     db.init_app(app)
     login_manager.init_app(app)
     migrate.init_app(app, db)

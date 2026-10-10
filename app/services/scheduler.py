@@ -1,3 +1,10 @@
+"""Scheduler service with app-state-backed storage for multi-process support.
+
+Global variables ``_scheduler``, ``_app``, and ``_last_run_guard`` are now
+proxied through :class:`~app.services.app_state.AppState` so each Gunicorn
+worker maintains its own isolated copy.  The module-level names remain for
+backwards compatibility with existing imports.
+"""
 import logging
 import os
 import threading
@@ -10,13 +17,29 @@ from app.services.async_executor import submit_script
 
 logger = logging.getLogger(__name__)
 
-_scheduler = None
-_app = None
-_last_run_guard = {}
+
+def _get_state():
+    """Get the AppState, falling back to module-level globals for compat."""
+    try:
+        from flask import current_app
+        from app.services.app_state import get_state
+        return get_state(current_app._get_current_object())
+    except RuntimeError:
+        # Outside app context — use module-level fallbacks
+        return _ModuleState()
+
+
+class _ModuleState:
+    """Backwards-compatible module-level state (used outside app context)."""
+    scheduler = None
+    scheduler_app = None
+    last_run_guard = {}
 
 
 def register_task(task):
-    if _scheduler is None:
+    state = _get_state()
+    sched = state.scheduler
+    if sched is None:
         return
 
     from apscheduler.triggers.cron import CronTrigger
@@ -34,7 +57,7 @@ def register_task(task):
             day_of_week=parts[4],
         )
 
-        _scheduler.add_job(
+        sched.add_job(
             func=run_task_wrapper,
             trigger=trigger,
             id=f'task_{task.id}',
@@ -42,7 +65,7 @@ def register_task(task):
             replace_existing=True,
             name=task.name,
         )
-        job = _scheduler.get_job(f'task_{task.id}')
+        job = sched.get_job(f'task_{task.id}')
         if job and job.next_run_time:
             task.next_run = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
     except Exception as e:
@@ -50,25 +73,27 @@ def register_task(task):
 
 
 def run_task_wrapper(task_id):
-    app = _app
+    state = _get_state()
+    app = state.scheduler_app
     if app is None:
         return
     now = datetime.now(timezone.utc)
     # Dedup guard: skip if this task ran within the last 60 seconds
-    last = _last_run_guard.get(task_id)
+    last = state.last_run_guard.get(task_id)
     if last and now - last < timedelta(seconds=60):
-        print(f'[SCHEDULER] Dedup guard blocked task {task_id} — last run {last} now={now}')
+        logger.info(f'Dedup guard blocked task {task_id} — last run {last} now={now}')
         return
-    _last_run_guard[task_id] = now
+    state.last_run_guard[task_id] = now
 
     with app.app_context():
         task = db.session.get(ScheduledTask, task_id)
         if not task or not task.enabled:
             return
-        job_count = len(_scheduler.get_jobs()) if _scheduler else 0
-        print(f'[SCHEDULER] Running task: {task.name} PID={os.getpid()} thread={threading.get_ident()} jobs={job_count}')
+        sched = state.scheduler
+        job_count = len(sched.get_jobs()) if sched else 0
+        logger.info(f'Running task: {task.name} PID={os.getpid()} thread={threading.get_ident()} jobs={job_count}')
         task.last_run = now
-        job = _scheduler.get_job(f'task_{task.id}') if _scheduler else None
+        job = sched.get_job(f'task_{task.id}') if sched else None
         if job and job.next_run_time:
             task.next_run = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
         db.session.commit()
@@ -109,22 +134,15 @@ def _check_query_reports():
             parts = q.schedule_cron.strip().split()
             if len(parts) != 5:
                 continue
-            # Pin the trigger to UTC so its fire times are comparable with `now`
-            # (which is UTC-aware). APScheduler's CronTrigger handles full cron
-            # syntax (named days/months, ranges with steps, DOW aliases).
             trigger = CronTrigger(
                 minute=parts[0], hour=parts[1], day=parts[2],
                 month=parts[3], day_of_week=parts[4], timezone=timezone.utc,
             )
-            # The cron fires once per matching minute (at second 0). Determine a
-            # match for the current minute by asking whether the next fire time
-            # falls inside [minute_start - 1s, minute_start + 59s].
             minute_start = now.replace(second=0, microsecond=0)
             window_end = minute_start + timedelta(seconds=59)
             next_fire = trigger.get_next_fire_time(minute_start - timedelta(seconds=1), window_end)
             if next_fire is None or next_fire > window_end:
                 continue
-            # Guard: skip if this query ran within the last 60 seconds
             if q.last_run and (now - q.last_run).total_seconds() < 60:
                 continue
             result = db.session.execute(db.text(q.sql))
@@ -148,22 +166,26 @@ def _check_query_reports():
 
 
 def init_scheduler(app):
-    global _scheduler, _app
-    if _scheduler is not None:
-        print(f'[SCHEDULER] init_scheduler called but already running PID={os.getpid()}')
+    """Initialize the scheduler, storing state in AppState for multi-process support."""
+    from app.services.app_state import get_state
+    state = get_state(app)
+
+    if state.scheduler is not None:
+        logger.info(f'Scheduler already running PID={os.getpid()}')
         return
-    _app = app
+
+    state.scheduler_app = app
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
-        _scheduler = BackgroundScheduler()
-        _scheduler.start()
+        state.scheduler = BackgroundScheduler()
+        state.scheduler.start()
 
         with app.app_context():
             tasks = db.session.query(ScheduledTask).filter_by(enabled=True).all()
             for task in tasks:
                 register_task(task)
             db.session.commit()
-            _scheduler.add_job(
+            state.scheduler.add_job(
                 func=_check_query_reports_wrapper,
                 trigger='interval',
                 minutes=1,
@@ -171,7 +193,7 @@ def init_scheduler(app):
                 replace_existing=True,
                 name='Query Report Check',
             )
-            _scheduler.add_job(
+            state.scheduler.add_job(
                 func=_check_incoming_mail_wrapper,
                 trigger='interval',
                 minutes=1,
@@ -180,15 +202,19 @@ def init_scheduler(app):
                 name='Incoming Mail Check',
             )
 
-        print(f'[SCHEDULER] Started PID={os.getpid()} WERKZEUG_RUN_MAIN={os.environ.get("WERKZEUG_RUN_MAIN")} APP_DEBUG={os.environ.get("APP_DEBUG")} tasks={len(tasks)} jobs={len(_scheduler.get_jobs())}')
+        logger.info(
+            f'Scheduler started PID={os.getpid()} '
+            f'tasks={len(tasks)} jobs={len(state.scheduler.get_jobs())}'
+        )
     except ImportError:
-        print('[SCHEDULER] APScheduler not installed — scheduler disabled')
+        logger.info('APScheduler not installed — scheduler disabled')
     except Exception as e:
-        print(f'[SCHEDULER] Init failed: {e}')
+        logger.error(f'Scheduler init failed: {e}')
 
 
 def _check_query_reports_wrapper():
-    app = _app
+    state = _get_state()
+    app = state.scheduler_app
     if app is None:
         return
     with app.app_context():
@@ -202,10 +228,11 @@ def _check_incoming_mail():
     except (ValueError, TypeError):
         poll_interval = 5
     now = datetime.now(timezone.utc)
-    last = _last_run_guard.get('_imap')
+    state = _get_state()
+    last = state.last_run_guard.get('_imap')
     if last and (now - last).total_seconds() < poll_interval * 60:
         return
-    _last_run_guard['_imap'] = now
+    state.last_run_guard['_imap'] = now
     try:
         poll_incoming_mail()
     except Exception as e:
@@ -213,7 +240,8 @@ def _check_incoming_mail():
 
 
 def _check_incoming_mail_wrapper():
-    app = _app
+    state = _get_state()
+    app = state.scheduler_app
     if app is None:
         return
     with app.app_context():
@@ -221,10 +249,30 @@ def _check_incoming_mail_wrapper():
 
 
 def refresh_tasks():
-    if _scheduler is None:
+    state = _get_state()
+    sched = state.scheduler
+    if sched is None:
         return
-    _scheduler.remove_all_jobs()
+    sched.remove_all_jobs()
     tasks = db.session.query(ScheduledTask).filter_by(enabled=True).all()
     for task in tasks:
         register_task(task)
     db.session.commit()
+
+
+# ── Backwards-compatible module-level proxies ────────────────────────────────
+# These are read dynamically from AppState so existing imports like
+# ``from app.services.scheduler import _scheduler`` continue to work.
+
+class _SchedulerProxy:
+    """Lazy proxy that forwards attribute access to AppState.scheduler."""
+    @property
+    def scheduler(self):
+        state = _get_state()
+        return state.scheduler
+
+
+# Module-level aliases for backwards compatibility
+_scheduler = None  # Fallback; resolved dynamically via _get_state()
+_app = None
+_last_run_guard = {}

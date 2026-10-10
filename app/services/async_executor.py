@@ -1,13 +1,14 @@
 """Async script execution via ThreadPoolExecutor.
 
 Provides background script execution for webhooks and scheduled tasks,
-with status tracking via the ScriptExecution model.
+with status tracking via the ScriptExecution model.  The thread pool is now
+managed through :class:`~app.services.app_state.AppState` so each Gunicorn
+worker gets its own isolated pool.
 """
 import faulthandler
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from flask import current_app
@@ -16,9 +17,6 @@ from app.models import Script, ScriptExecution, Setting
 from app.services.script_runner import execute_script
 
 logger = logging.getLogger(__name__)
-
-_pool = None
-_max_workers = 4
 
 
 def _get_script_timeout_seconds():
@@ -31,15 +29,27 @@ def _get_script_timeout_seconds():
 
 
 def _get_pool():
-    """Get or create the thread pool. Recreated if worker count changes."""
-    global _pool, _max_workers
-    desired = int(Setting.get('async_workers', '4'))
-    if desired != _max_workers or _pool is None:
-        _max_workers = desired
-        if _pool is not None:
-            _pool.shutdown(wait=False, cancel_futures=True)
-        _pool = ThreadPoolExecutor(max_workers=_max_workers, thread_name_prefix='paf-async')
-    return _pool
+    """Get or create the thread pool via AppState. Recreated if worker count changes."""
+    try:
+        from app.services.app_state import get_state
+        state = get_state(current_app._get_current_object())
+        return state.get_or_create_pool()
+    except RuntimeError:
+        # Outside app context — fall back to module-level pool
+        global _pool, _max_workers
+        from concurrent.futures import ThreadPoolExecutor
+        desired = int(Setting.get('async_workers', '4'))
+        if desired != _max_workers or _pool is None:
+            _max_workers = desired
+            if _pool is not None:
+                _pool.shutdown(wait=False, cancel_futures=True)
+            _pool = ThreadPoolExecutor(max_workers=_max_workers, thread_name_prefix='paf-async')
+        return _pool
+
+
+# Module-level fallback (used only outside app context)
+_pool = None
+_max_workers = 4
 
 
 def submit_script(script, source_type='webhook', source_name=None,

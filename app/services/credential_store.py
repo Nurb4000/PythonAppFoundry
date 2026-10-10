@@ -1,11 +1,14 @@
-import os
+"""Fernet-encrypted credential storage with app-state-backed key management.
+
+The encryption key is stored in :class:`~app.services.app_state.AppState` so
+each Gunicorn worker loads its own copy from disk.
+"""
 import logging
+import os
 
 from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
-
-_key = None
 
 
 def _get_key_path(app):
@@ -13,27 +16,41 @@ def _get_key_path(app):
 
 
 def init_credential_store(app):
-    global _key
+    """Load or generate the Fernet encryption key and store it in AppState."""
+    from app.services.app_state import get_state
+    state = get_state(app)
+
     key_path = _get_key_path(app)
     os.makedirs(app.instance_path, exist_ok=True)
+
     if os.path.exists(key_path):
         os.chmod(key_path, 0o600)
         with open(key_path, 'rb') as f:
-            _key = f.read().strip()
+            state.credential_key = f.read().strip()
     else:
-        _key = Fernet.generate_key()
+        state.credential_key = Fernet.generate_key()
         fd = os.open(key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         try:
-            os.write(fd, _key)
+            os.write(fd, state.credential_key)
         finally:
             os.close(fd)
         logger.info(f'Created credential encryption key at {key_path}')
 
 
 def _get_cipher():
-    if _key is None:
+    """Get the Fernet cipher, loading key from AppState."""
+    try:
+        from flask import current_app
+        from app.services.app_state import get_state
+        state = get_state(current_app._get_current_object())
+        key = state.credential_key
+    except RuntimeError:
+        # Outside app context — use module-level fallback
+        key = _key
+
+    if key is None:
         raise RuntimeError('Credential store not initialized. Call init_credential_store(app) first.')
-    return Fernet(_key)
+    return Fernet(key)
 
 
 def encrypt_value(plaintext):
@@ -44,3 +61,7 @@ def encrypt_value(plaintext):
 def decrypt_value(ciphertext):
     cipher = _get_cipher()
     return cipher.decrypt(ciphertext.encode('utf-8')).decode('utf-8')
+
+
+# Module-level fallback for backwards compatibility
+_key = None
