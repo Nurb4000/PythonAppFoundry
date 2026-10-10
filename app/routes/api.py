@@ -280,3 +280,24 @@ def api_swagger():
 </body>
 </html>'''
     return swagger_ui
+
+
+@api_bp.route('/metrics')
+def api_metrics():
+    """Prometheus-compatible metrics endpoint."""
+    from app.services.metrics import generate_metrics, set_dead_letter_count
+    from flask import Response
+
+    # Update dead letter queue count from DB
+    try:
+        from app.models import DeadLetterEntry
+        from app import db
+        dlq_count = db.session.query(DeadLetterEntry).filter_by(retried=False).count()
+        set_dead_letter_count(dlq_count)
+    except Exception:
+        pass
+
+    return Response(
+        generate_metrics(),
+        mimetype='text/plain; charset=utf-8',
+    )
