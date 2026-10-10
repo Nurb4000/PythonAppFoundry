@@ -41,6 +41,8 @@ class Config:
     # production (or behind a TLS-terminating proxy) to enforce HTTPS-only
     # session cookies.
     SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+    # Max upload size: 16 MB by default. Set MAX_CONTENT_LENGTH env var to override (bytes).
+    MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', '16777216'))
     LLAMA_CPP_URL = os.environ.get('LLAMA_CPP_URL', 'http://localhost:8080')
     LLAMA_CPP_MODEL = os.environ.get('LLAMA_CPP_MODEL', '')
     AI_MAX_TOKENS = int(os.environ.get('AI_MAX_TOKENS', '4096'))
