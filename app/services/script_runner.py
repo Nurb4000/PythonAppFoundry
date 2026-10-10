@@ -1,3 +1,4 @@
+import logging
 import re
 import json
 import signal
@@ -10,6 +11,8 @@ from email.mime.text import MIMEText
 from io import StringIO
 
 from sqlalchemy import event as _sql_event
+
+logger = logging.getLogger(__name__)
 
 
 # Thread-local flag used to gate the sensitive-table read guard so it only
@@ -475,11 +478,12 @@ def _save_log(entry):
     try:
         db.session.add(entry)
         db.session.commit()
-    except Exception:
+    except Exception as e:
         try:
             db.session.rollback()
-        except Exception:
-            pass
+        except Exception as rb_e:
+            logger.debug(f'Execution log rollback failed: {rb_e}')
+        logger.warning(f'Execution log save failed: {e}')
 
 
 def _wrap_in_function(source):

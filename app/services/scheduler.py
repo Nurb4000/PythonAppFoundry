@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 from datetime import datetime, timezone, timedelta
@@ -6,6 +7,8 @@ from app import db
 from app.models import ScheduledTask, ExecutionLog, Setting
 from app.services.script_runner import execute_script
 from app.services.async_executor import submit_script
+
+logger = logging.getLogger(__name__)
 
 _scheduler = None
 _app = None
@@ -43,8 +46,7 @@ def register_task(task):
         if job and job.next_run_time:
             task.next_run = job.next_run_time.astimezone(timezone.utc).replace(tzinfo=None)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f'Failed to register task {task.name}: {e}')
+        logger.error(f'Failed to register task {task.name}: {e}')
 
 
 def run_task_wrapper(task_id):
@@ -137,12 +139,12 @@ def _check_query_reports():
                     try:
                         from app.services.script_runner import _send_email
                         _send_email(to=q.email_to, subject=q.email_subject, body=body)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f'Query report email failed for "{q.name}": {e}')
             q.last_run = now
             db.session.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f'Scheduled query report "{q.name}" failed: {e}')
 
 
 def init_scheduler(app):
@@ -206,8 +208,8 @@ def _check_incoming_mail():
     _last_run_guard['_imap'] = now
     try:
         poll_incoming_mail()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f'Incoming mail poll failed: {e}')
 
 
 def _check_incoming_mail_wrapper():

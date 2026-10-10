@@ -401,58 +401,6 @@ def _export_pdf(name_plural, columns, rows, has_module, metadata=None):
         headers={'Content-Disposition': f'attachment; filename={filename}'},
     )
 
-    # Build table data
-    headers = list(columns)
-    if has_module:
-        headers.insert(0, 'module')
-
-    table_data = [headers]
-    for row in rows:
-        vals = []
-        if has_module:
-            mod = getattr(row, 'module', None)
-            vals.append(mod.name if mod else '')
-        for col in columns:
-            val = getattr(row, col, None) if not isinstance(row, dict) else row.get(col)
-            serialized = _serialize_value(val)
-            vals.append(str(serialized) if serialized is not None else '')
-        table_data.append(vals)
-
-    # Build the PDF table
-    if table_data:
-        max_cols = len(table_data[0])
-        col_widths = min(1.5 * inch, (letter[0] - inch) / max_cols)
-        table = Table(table_data, repeatRows=1)
-
-        header_fill = PatternFill(start_color='2563EB', end_color='2563EB', fill_type='solid') if HAS_OPENPYXL else colors.HexColor('#2563EB')
-
-        table_style = [
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F3F4F6')]),
-            ('LEFTPADDING', (0, 0), (-1, -1), 4),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ]
-
-        table.setStyle(TableStyle(table_style))
-        elements.append(table)
-
-    pdf.build(elements)
-    buf.seek(0)
-    filename = name_plural.replace(' ', '_') + '.pdf'
-    return Response(
-        buf.getvalue(),
-        mimetype='application/pdf',
-        headers={'Content-Disposition': f'attachment; filename={filename}'},
-    )
-
 
 EXPORT_FORMATS = {
     'json': _export_json,
