@@ -9,6 +9,43 @@ login_manager = LoginManager()
 migrate = Migrate()
 
 
+def _apply_inline_migrations(inspector):
+    """Fallback inline migrations for databases without Alembic tracking.
+
+    These mirror the migrations in migrations/versions/ and are kept for
+    backwards compatibility with existing deployments.
+    """
+    from sqlalchemy import text
+    from app.models import Module
+
+    routes_cols = {c['name'] for c in inspector.get_columns('routes')}
+    if 'allowed_groups' not in routes_cols:
+        db.session.execute(text("ALTER TABLE routes ADD COLUMN allowed_groups TEXT DEFAULT ''"))
+        db.session.commit()
+
+    mod_cols = {c['name'] for c in inspector.get_columns('modules')}
+    if 'is_system' not in mod_cols:
+        db.session.execute(text("ALTER TABLE modules ADD COLUMN is_system BOOLEAN DEFAULT 0"))
+        db.session.commit()
+    if 'requirements_text' not in mod_cols:
+        db.session.execute(text("ALTER TABLE modules ADD COLUMN requirements_text TEXT DEFAULT ''"))
+        db.session.commit()
+
+    table_names = set(inspector.get_table_names())
+    if 'query_reports' in table_names:
+        qr_cols = {c['name'] for c in inspector.get_columns('query_reports')}
+        if 'module_id' not in qr_cols:
+            db.session.execute(text('ALTER TABLE query_reports ADD COLUMN module_id INTEGER REFERENCES modules(id)'))
+            db.session.commit()
+            sys_mod = db.session.query(Module).filter_by(slug='system-automation').first()
+            if sys_mod:
+                db.session.execute(
+                    text('UPDATE query_reports SET module_id = :mid WHERE module_id IS NULL'),
+                    {'mid': sys_mod.id}
+                )
+                db.session.commit()
+
+
 def create_app(config_class=None):
     import time as _time
     app = Flask(__name__)
@@ -352,41 +389,26 @@ def create_app(config_class=None):
     with app.app_context():
         db.create_all()
 
-        # Migrate: add missing columns
+        # Apply Alembic migrations if the alembic_version table exists.
+        # For databases created before migrations were introduced, fall back
+        # to inline ALTER TABLE statements (kept for backwards compatibility).
         from sqlalchemy import inspect as sa_inspect, text
         engine = db.get_engine()
         inspector = sa_inspect(engine)
-        routes_cols = {c['name'] for c in inspector.get_columns('routes')}
-        if 'allowed_groups' not in routes_cols:
-            db.session.execute(text('ALTER TABLE routes ADD COLUMN allowed_groups TEXT DEFAULT \'\''))
-            db.session.commit()
-
-        # Add is_system to modules if missing
-        mod_cols = {c['name'] for c in inspector.get_columns('modules')}
-        if 'is_system' not in mod_cols:
-            db.session.execute(text("ALTER TABLE modules ADD COLUMN is_system BOOLEAN DEFAULT 0"))
-            db.session.commit()
-
-        # Add requirements_text to modules if missing
-        if 'requirements_text' not in mod_cols:
-            db.session.execute(text("ALTER TABLE modules ADD COLUMN requirements_text TEXT DEFAULT ''"))
-            db.session.commit()
-
-        # Check if query_reports table exists and has module_id
         table_names = inspector.get_table_names()
-        if 'query_reports' in table_names:
-            qr_cols = {c['name'] for c in inspector.get_columns('query_reports')}
-            if 'module_id' not in qr_cols:
-                db.session.execute(text('ALTER TABLE query_reports ADD COLUMN module_id INTEGER REFERENCES modules(id)'))
-                db.session.commit()
-                # Migrate existing queries to System Automation module
-                sys_mod = db.session.query(Module).filter_by(slug='system-automation').first()
-                if sys_mod:
-                    db.session.execute(
-                        text('UPDATE query_reports SET module_id = :mid WHERE module_id IS NULL'),
-                        {'mid': sys_mod.id}
-                    )
-                    db.session.commit()
+
+        if 'alembic_version' in table_names:
+            # Alembic is tracking this database — apply pending migrations.
+            try:
+                from flask_migrate import upgrade as _alembic_upgrade
+                _alembic_upgrade(directory='migrations')
+                logger.info('Alembic migrations applied')
+            except Exception as e:
+                logger.warning(f'Alembic migration failed (continuing with inline fallback): {e}')
+                _apply_inline_migrations(inspector)
+        else:
+            # Legacy database without Alembic — apply inline migrations.
+            _apply_inline_migrations(inspector)
 
         from app.models import Route
         from app.services.scheduler import init_scheduler
