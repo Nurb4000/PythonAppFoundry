@@ -20,7 +20,39 @@ logger = logging.getLogger(__name__)
 # admin/request code that legitimately reads settings).
 _local = threading.local()
 
-_SENSITIVE_TABLES = ('settings', 'credentials')
+# Platform tables that scripts should not read directly via raw SQL.
+# Scripts should use the sanctioned helpers (get_setting, get_credential, etc.)
+# or DynamicModel for user-created tables.  The cursor-level guard raises
+# PermissionError if a script query targets any of these tables by name.
+_SENSITIVE_TABLES = (
+    'settings',
+    'credentials',
+    'users',
+    'groups',
+    'user_groups',
+    'modules',
+    'module_versions',
+    'module_dependencies',
+    'routes',
+    'scripts',
+    'forms',
+    'templates',
+    'scheduled_tasks',
+    'triggers',
+    'chat_sessions',
+    'chat_messages',
+    'uploads',
+    'query_reports',
+    'execution_logs',
+    'script_executions',
+    'import_jobs',
+    'dead_letter_entries',
+    'dynamic_table_registry',
+    'incoming_emails',
+    'audit_logs',
+    'rate_limit_attempts',
+    'api_keys',
+)
 _guard_installed = False
 
 
