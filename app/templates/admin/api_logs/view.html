@@ -1,0 +1,25 @@
+<div style="margin-bottom:1rem;">
+  <a href="{{ url_for('admin.api_logs.list_api_logs') }}">← Back to API Logs</a>
+</div>
+
+<table>
+<tr><td style="font-weight:600;width:150px;">ID</td><td>{{ log.id }}</td></tr>
+<tr><td style="font-weight:600;">Time</td><td>{{ log.created_at|localtime }}</td></tr>
+<tr><td style="font-weight:600;">Method</td><td><code>{{ log.method }}</code></td></tr>
+<tr><td style="font-weight:600;">Path</td><td><code>{{ log.path }}</code></td></tr>
+<tr><td style="font-weight:600;">Status Code</td><td>
+  {% if log.status_code < 300 %}
+  <span style="color:green;">{{ log.status_code }}</span>
+  {% elif log.status_code < 400 %}
+  <span style="color:orange;">{{ log.status_code }}</span>
+  {% else %}
+  <span style="color:red;">{{ log.status_code }}</span>
+  {% endif %}
+</td></tr>
+<tr><td style="font-weight:600;">Duration</td><td>{{ log.duration_ms }}ms</td></tr>
+<tr><td style="font-weight:600;">Client IP</td><td>{{ log.client_ip }}</td></tr>
+<tr><td style="font-weight:600;">User Agent</td><td style="word-break:break-all;">{{ log.user_agent or '—' }}</td></tr>
+<tr><td style="font-weight:600;">API Key</td><td>{{ log.api_key.name if log.api_key else '—' }}</td></tr>
+<tr><td style="font-weight:600;">Request Body</td><td><pre style="max-height:300px;overflow:auto;background:#f5f5f5;padding:8px;border-radius:4px;">{{ log.request_body or '—' }}</pre></td></tr>
+<tr><td style="font-weight:600;">Response Summary</td><td><pre style="max-height:300px;overflow:auto;background:#f5f5f5;padding:8px;border-radius:4px;">{{ log.response_summary or '—' }}</pre></td></tr>
+</table>

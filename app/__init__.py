@@ -415,9 +415,11 @@ def create_app(config_class=None):
         from app.services.credential_store import init_credential_store
         from app.services.async_executor import _get_pool
         from app.services.metrics import init_metrics
+        from app.services.api_logging import init_api_logging
         init_credential_store(app)
         init_scheduler(app)
         init_metrics(app)
+        init_api_logging(app)
         # Initialize async executor pool if there are scheduled tasks
         try:
             from app.models import ScheduledTask

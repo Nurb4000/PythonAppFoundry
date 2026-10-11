@@ -1,0 +1,78 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+  <form method="GET" style="display:inline;gap:0.5rem;align-items:center;">
+    <select name="method" onchange="this.form.submit()" style="padding:4px 8px;">
+      <option value="">All Methods</option>
+      {% for m in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] %}
+      <option value="{{ m }}" {% if method == m %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+    <input type="number" name="status_code" placeholder="Status Code" value="{{ status_code }}" style="width:80px;padding:4px 8px;">
+    <select name="api_key_id" onchange="this.form.submit()" style="padding:4px 8px;">
+      <option value="">All Keys</option>
+      {% for key in api_keys %}
+      <option value="{{ key.id }}" {% if api_key_id == key.id %}selected{% endif %}>{{ key.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" style="padding:4px 12px;">Filter</button>
+  </form>
+  <a href="{{ url_for('admin.api_logs.export_api_logs', method=method, status_code=status_code, api_key_id=api_key_id) }}" style="margin-left:auto;padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;">Export JSON</a>
+  <a href="{{ url_for('admin.api_logs.clear_api_logs', confirm='true') }}" onclick="return confirm('Clear all API logs?');" style="padding:4px 12px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;">Clear</a>
+</div>
+
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>Time</th>
+  <th>Method</th>
+  <th>Path</th>
+  <th>Status</th>
+  <th>Duration</th>
+  <th>Client IP</th>
+  <th>API Key</th>
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for log in logs %}
+<tr>
+  <td>{{ log.created_at|localtime }}</td>
+  <td><code>{{ log.method }}</code></td>
+  <td><code>{{ log.path }}</code></td>
+  <td>
+    {% if log.status_code < 300 %}
+    <span style="color:green;">{{ log.status_code }}</span>
+    {% elif log.status_code < 400 %}
+    <span style="color:orange;">{{ log.status_code }}</span>
+    {% else %}
+    <span style="color:red;">{{ log.status_code }}</span>
+    {% endif %}
+  </td>
+  <td>{{ log.duration_ms }}ms</td>
+  <td>{{ log.client_ip }}</td>
+  <td>{{ log.api_key.name if log.api_key else '—' }}</td>
+  <td><a href="{{ url_for('admin.api_logs.view_api_log', log_id=log.id) }}">View</a></td>
+</tr>
+{% endfor %}
+</tbody></table>
+</div>
+
+{% if total_pages > 1 %}
+<div style="display:flex;align-items:center;gap:0.5rem;margin-top:1rem;font-size:0.9em;">
+  <span>Showing {{ (page - 1) * per_page + 1 }}–{{ (page - 1) * per_page + logs|length }} of {{ total }}</span>
+  <div style="margin-left:auto;display:flex;gap:4px;">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}{% if method %}&method={{ method }}{% endif %}{% if status_code %}&status_code={{ status_code }}{% endif %}{% if api_key_id %}&api_key_id={{ api_key_id }}{% endif %}" style="padding:4px 10px;border:1px solid #ccc;border-radius:4px;text-decoration:none;color:#333;">← Prev</a>
+    {% endif %}
+    {% for p in range(1, total_pages + 1) %}
+    {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+    <a href="?page={{ p }}{% if method %}&method={{ method }}{% endif %}{% if status_code %}&status_code={{ status_code }}{% endif %}{% if api_key_id %}&api_key_id={{ api_key_id }}{% endif %}"
+       style="padding:4px 10px;border:1px solid {% if p == page %}#2563eb{% else %}#ccc{% endif %};border-radius:4px;text-decoration:none;color:{% if p == page %}#fff{% else %}#333{% endif %};background:{% if p == page %}#2563eb{% else %}transparent{% endif %};">{{ p }}</a>
+    {% elif p == page - 3 or p == page + 3 %}
+    <span style="padding:4px 2px;">…</span>
+    {% endif %}
+    {% endfor %}
+    {% if page < total_pages %}
+    <a href="?page={{ page + 1 }}{% if method %}&method={{ method }}{% endif %}{% if status_code %}&status_code={{ status_code }}{% endif %}{% if api_key_id %}&api_key_id={{ api_key_id }}{% endif %}" style="padding:4px 10px;border:1px solid #ccc;border-radius:4px;text-decoration:none;color:#333;">Next →</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

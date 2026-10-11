@@ -728,3 +728,30 @@ class ApiKey(db.Model):
 
     def __repr__(self):
         return f'<ApiKey {self.name} ({self.key_prefix}...{self.key_hash[:8]})>'
+
+
+class ApiLog(db.Model):
+    """Audit trail for API request/response logging.
+
+    Records every API call with method, path, status code, duration,
+    client IP, and associated API key (if used).  Used for monitoring,
+    debugging, and compliance auditing.
+    """
+    __tablename__ = 'api_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    method = db.Column(db.String(10), nullable=False)
+    path = db.Column(db.String(500), nullable=False)
+    status_code = db.Column(db.Integer, nullable=False)
+    duration_ms = db.Column(db.Integer, default=0)
+    client_ip = db.Column(db.String(100), default='')
+    user_agent = db.Column(db.String(500), default='')
+    api_key_id = db.Column(db.Integer, db.ForeignKey('api_keys.id'), nullable=True)
+    request_body = db.Column(db.Text, default='')
+    response_summary = db.Column(db.Text, default='')
+
+    api_key = db.relationship('ApiKey')
+
+    def __repr__(self):
+        return f'<ApiLog {self.method} {self.path} -> {self.status_code}>'
