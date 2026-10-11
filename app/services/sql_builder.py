@@ -4,6 +4,30 @@ from app.services.ai_assistant import _get_setting, _call_llm
 
 logger = logging.getLogger(__name__)
 
+# Regex for valid SQL identifiers: letters, digits, underscores, dots.
+# Anchored to match the full string when used with re.fullmatch().
+_SQL_IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_.]*$')
+
+
+def _sanitize_identifier(name: str) -> str:
+    """Validate and sanitize a SQL identifier (table or column name).
+
+    Only allows alphanumeric characters, underscores, and dots (for
+    table.column qualified names).  Raises ValueError on mismatch.
+
+    Args:
+        name: The raw identifier string from user input.
+
+    Returns:
+        The validated identifier (unchanged if valid).
+
+    Raises:
+        ValueError: If the identifier contains unexpected characters.
+    """
+    if not name or not _SQL_IDENTIFIER_RE.fullmatch(name):
+        raise ValueError(f'Invalid SQL identifier: {name!r}')
+    return name
+
 SQL_BUILDER_SYSTEM_PROMPT = """You are a SQL query assistant for a database-driven web application.
 
 Your job is to generate correct SQL SELECT queries based on the user's natural language description and the available database schema.
@@ -143,8 +167,8 @@ def validate_read_only(sql):
 
     Rejects multiple statements (embedded semicolons), DML/DDL (INSERT/UPDATE/
     DELETE/CREATE/ALTER/DROP/etc.), PRAGMA, and other write or side-effecting
-    statements. Used to guard query-execution paths against arbitrary database
-    mutation.
+    statements.  Also strips SQL comments to prevent comment-based injection
+    (e.g., ``SELECT * FROM users; DROP TABLE users--``).
 
     Args:
         sql: The SQL string to validate.
@@ -164,6 +188,15 @@ def validate_read_only(sql):
     if ';' in stripped:
         raise ValueError('Multiple SQL statements are not allowed.')
 
+    # Strip block comments (/* ... */) to prevent comment-based injection
+    stripped = re.sub(r'/\*.*?\*/', '', stripped, flags=re.DOTALL)
+    # Strip line comments (-- ...) to prevent trailing-statement injection
+    stripped = re.sub(r'--.*$', '', stripped, flags=re.MULTILINE)
+    stripped = stripped.strip()
+
+    if not stripped:
+        raise ValueError('SQL query is empty after stripping comments.')
+
     # Strip a single trailing semicolon if present after trimming.
     if stripped.endswith(';'):
         stripped = stripped[:-1].strip()
@@ -182,7 +215,12 @@ def validate_read_only(sql):
 
 
 def validate_sql(sql):
-    """Validate SQL by attempting to parse it.
+    """Validate SQL syntax and enforce read-only by attempting to parse it.
+
+    Uses ``EXPLAIN`` (or ``EXPLAIN QUERY PLAN`` for SQLite) instead of
+    appending ``LIMIT 0`` so that CTEs, subqueries, and other constructs are
+    handled correctly.  Also runs ``validate_read_only()`` first to reject
+    multi-statement and DML/DDL queries.
 
     Args:
         sql: SQL string to validate.
@@ -193,24 +231,29 @@ def validate_sql(sql):
     if not sql or not sql.strip():
         return {'valid': False, 'error': 'Empty SQL query.'}
 
-    sql_upper = sql.strip().upper()
-    if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH') or
-            sql_upper.startswith('INSERT') or sql_upper.startswith('UPDATE') or
-            sql_upper.startswith('DELETE') or sql_upper.startswith('CREATE') or
-            sql_upper.startswith('DROP') or sql_upper.startswith('ALTER')):
-        return {'valid': False, 'error': 'SQL must start with a valid statement keyword.'}
+    # Enforce read-only first
+    try:
+        cleaned = validate_read_only(sql)
+    except ValueError as e:
+        return {'valid': False, 'error': str(e)}
 
     from app import db
     try:
-        result = db.session.execute(db.text(sql + ' LIMIT 0'))
+        # Use EXPLAIN to validate syntax without executing the query.
+        # SQLite accepts "EXPLAIN QUERY PLAN <sql>" or "EXPLAIN <sql>".
+        result = db.session.execute(db.text(f'EXPLAIN QUERY PLAN {cleaned}'))
         return {'valid': True, 'error': None}
     except Exception as e:
         return {'valid': False, 'error': str(e)}
 
 
 def build_visual_query(table_name, columns=None, conditions=None, order_by=None,
-                       limit=100, select_all=False):
+                        limit=100, select_all=False):
     """Build a SQL SELECT query from visual builder form data.
+
+    Table and column names are validated against the database schema and
+    sanitized through ``_sanitize_identifier()`` to prevent injection via
+    user-controlled identifiers.
 
     Args:
         table_name: Name of the table to query.
@@ -225,6 +268,12 @@ def build_visual_query(table_name, columns=None, conditions=None, order_by=None,
     """
     from app import db
 
+    # Sanitize table name identifier
+    try:
+        table_name = _sanitize_identifier(table_name)
+    except ValueError as e:
+        return f'-- Error: {e}'
+
     if table_name not in db.metadata.tables:
         return f'-- Error: Table "{table_name}" not found.'
 
@@ -233,7 +282,15 @@ def build_visual_query(table_name, columns=None, conditions=None, order_by=None,
     if select_all or not columns:
         col_expr = '*'
     else:
-        valid_cols = [c.name for c in table.columns if c.name in columns]
+        # Validate each column against the schema and sanitize
+        valid_cols = []
+        for c in columns:
+            try:
+                sanitized = _sanitize_identifier(c)
+            except ValueError:
+                continue
+            if sanitized in table.columns:
+                valid_cols.append(sanitized)
         if not valid_cols:
             return f'-- Error: No valid columns found for table "{table_name}".'
         col_expr = ', '.join(f'{table_name}.{c}' for c in valid_cols)
@@ -249,6 +306,12 @@ def build_visual_query(table_name, columns=None, conditions=None, order_by=None,
             value = cond.get('value')
 
             if not col or col == '---':
+                continue
+
+            # Sanitize column identifier
+            try:
+                col = _sanitize_identifier(col)
+            except ValueError:
                 continue
 
             if col not in table.columns:
@@ -278,6 +341,11 @@ def build_visual_query(table_name, columns=None, conditions=None, order_by=None,
         for ob in order_by:
             col = ob.get('column', '')
             direction = ob.get('direction', 'asc').upper()
+            # Sanitize column identifier
+            try:
+                col = _sanitize_identifier(col)
+            except ValueError:
+                continue
             if col and col in table.columns and direction in ('ASC', 'DESC'):
                 order_parts.append(f'{table_name}.{col} {direction}')
         if order_parts:
@@ -290,8 +358,12 @@ def build_visual_query(table_name, columns=None, conditions=None, order_by=None,
 
 
 def build_query_with_joins(table_name, columns=None, conditions=None, joins=None,
-                           order_by=None, limit=100, select_all=False):
+                            order_by=None, limit=100, select_all=False):
     """Build a SQL SELECT query with JOINs from visual builder form data.
+
+    Table and column names are validated against the database schema and
+    sanitized through ``_sanitize_identifier()`` to prevent injection via
+    user-controlled identifiers.
 
     Args:
         table_name: Primary table name.
@@ -306,6 +378,12 @@ def build_query_with_joins(table_name, columns=None, conditions=None, joins=None
         SQL string.
     """
     from app import db
+
+    # Sanitize table name identifier
+    try:
+        table_name = _sanitize_identifier(table_name)
+    except ValueError as e:
+        return f'-- Error: {e}'
 
     if table_name not in db.metadata.tables:
         return f'-- Error: Table "{table_name}" not found.'
@@ -324,7 +402,21 @@ def build_query_with_joins(table_name, columns=None, conditions=None, joins=None
         if not join_table or not on_col or not ref_col:
             continue
 
+        # Sanitize identifiers
+        try:
+            join_table = _sanitize_identifier(join_table)
+            on_col = _sanitize_identifier(on_col)
+            ref_col = _sanitize_identifier(ref_col)
+        except ValueError:
+            continue
+
         if join_table not in db.metadata.tables:
+            continue
+
+        # Validate columns exist in respective tables
+        join_tbl = db.metadata.tables[join_table]
+        main_tbl = db.metadata.tables[table_name]
+        if on_col not in main_tbl.columns or ref_col not in join_tbl.columns:
             continue
 
         sql += f' {join_type} JOIN {join_table}'
