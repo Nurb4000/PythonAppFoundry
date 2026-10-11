@@ -755,3 +755,57 @@ class ApiLog(db.Model):
 
     def __repr__(self):
         return f'<ApiLog {self.method} {self.path} -> {self.status_code}>'
+
+
+class OAuthProvider(db.Model):
+    """OAuth 2.0 provider configuration (Google, GitHub, etc.).
+
+    Optional: providers are only active when enabled=True.  The platform
+    continues to work with local username/password auth when all providers
+    are disabled.
+    """
+    __tablename__ = 'oauth_providers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Provider identifier: 'google', 'github', etc.
+    provider_id = db.Column(db.String(50), nullable=False, unique=True)
+    display_name = db.Column(db.String(100), default='')
+    client_id = db.Column(db.String(200), default='')
+    client_secret = db.Column(db.String(500), default='')
+    # OAuth endpoints (auto-populated for known providers)
+    authorize_url = db.Column(db.String(500), default='')
+    token_url = db.Column(db.String(500), default='')
+    userinfo_url = db.Column(db.String(500), default='')
+    # Scopes to request (comma-separated)
+    scopes = db.Column(db.String(500), default='')
+    enabled = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f'<OAuthProvider {self.provider_id} ({"enabled" if self.enabled else "disabled"})>'
+
+
+class OAuthToken(db.Model):
+    """Stored OAuth tokens for a user (access + refresh)."""
+    __tablename__ = 'oauth_tokens'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    provider_id = db.Column(db.String(50), nullable=False)
+    # External user identifier from the provider
+    external_user_id = db.Column(db.String(200), nullable=False)
+    access_token = db.Column(db.Text, default='')
+    refresh_token = db.Column(db.Text, default='')
+    token_type = db.Column(db.String(50), default='Bearer')
+    expires_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship('User')
+
+    __table_args__ = (
+        db.UniqueConstraint('provider_id', 'external_user_id',
+                            name='uq_provider_external_user'),
+    )
+
+    def __repr__(self):
+        return f'<OAuthToken {self.provider_id}:{self.external_user_id}>'

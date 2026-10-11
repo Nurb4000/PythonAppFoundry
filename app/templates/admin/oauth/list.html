@@ -1,0 +1,41 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.oauth_admin.linked_accounts') }}">Linked Accounts</a>
+</div>
+
+<table>
+<thead><tr>
+  <th>Provider</th>
+  <th>Status</th>
+  <th>Client ID</th>
+  <th>Scopes</th>
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for provider in providers %}
+<tr>
+  <td><strong>{{ provider.display_name }}</strong> <code>({{ provider.provider_id }})</code></td>
+  <td>
+    {% if provider.enabled %}
+    <span style="color:green;">✓ Enabled</span>
+    {% else %}
+    <span style="color:orange;">○ Disabled</span>
+    {% endif %}
+  </td>
+  <td>
+    {% if provider.client_id %}
+    <code>{{ provider.client_id[:20] }}...</code>
+    {% else %}
+    <span style="color:#999;">Not configured</span>
+    {% endif %}
+  </td>
+  <td><code>{{ provider.scopes or '—' }}</code></td>
+  <td>
+    <a href="{{ url_for('admin.oauth_admin.configure_provider', provider_id=provider.provider_id) }}">Configure</a>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+
+<div style="margin-top:1rem;padding:12px;background:#f0f7ff;border-radius:4px;font-size:0.9em;">
+  <strong>Note:</strong> OAuth providers are optional. The platform continues to work with local username/password auth when all providers are disabled.
+</div>

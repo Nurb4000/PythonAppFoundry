@@ -1,0 +1,33 @@
+<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+  <a href="{{ url_for('admin.oauth_admin.list_providers') }}">← Back to Providers</a>
+</div>
+
+{% if tokens %}
+<table>
+<thead><tr>
+  <th>User</th>
+  <th>Provider</th>
+  <th>External ID</th>
+  <th>Linked At</th>
+  <th>Actions</th>
+</tr></thead>
+<tbody>
+{% for token in tokens %}
+<tr>
+  <td>{{ token.user.username if token.user else 'N/A' }}</td>
+  <td><strong>{{ token.provider_id }}</strong></td>
+  <td><code>{{ token.external_user_id }}</code></td>
+  <td>{{ token.created_at|localtime }}</td>
+  <td>
+    <form method="POST" action="{{ url_for('admin.oauth_admin.unlink_account', token_id=token.id) }}" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" style="background:none;border:none;color:#dc3545;cursor:pointer;text-decoration:underline;padding:0;font:inherit;"
+              onclick="return confirm('Unlink {{ token.provider_id }} account?');">Unlink</button>
+    </form>
+  </td>
+</tr>
+{% endfor %}
+</tbody></table>
+{% else %}
+<p>No linked OAuth accounts yet.</p>
+{% endif %}

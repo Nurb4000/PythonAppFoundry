@@ -85,24 +85,32 @@ def _is_safe_url(target):
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @csrf_protect
 def login():
+    from app.services.oauth import get_enabled_providers
     registration_disabled = Setting.get('registration_disabled', 'false') == 'true'
+    oauth_providers = get_enabled_providers()
+
     if request.method == 'POST':
         # Rate limiting on login attempts
         client_ip = request.remote_addr
         limited, remaining = _rate_limiter.is_rate_limited(f'login:{client_ip}')
         if limited:
-            return render_template('auth/login.html', 
-                error=f'Too many login attempts. Please try again in {int(remaining)} seconds.', 
-                registration_disabled=registration_disabled)
-        
+            return render_template('auth/login.html',
+                error=f'Too many login attempts. Please try again in {int(remaining)} seconds.',
+                registration_disabled=registration_disabled,
+                oauth_providers=oauth_providers)
+
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         user = db.session.query(User).filter_by(username=username).first()
         if user and bcrypt.checkpw(password.encode(), user.password_hash.encode()):
             if not user.is_active:
-                return render_template('auth/login.html', error='Your account has been disabled.', registration_disabled=registration_disabled)
+                return render_template('auth/login.html', error='Your account has been disabled.',
+                                       registration_disabled=registration_disabled,
+                                       oauth_providers=oauth_providers)
             if not user.is_approved:
-                return render_template('auth/login.html', error='Your account is pending approval.', registration_disabled=registration_disabled)
+                return render_template('auth/login.html', error='Your account is pending approval.',
+                                       registration_disabled=registration_disabled,
+                                       oauth_providers=oauth_providers)
             login_user(user)
             next_page = request.args.get('next')
             if next_page and _is_safe_url(next_page):
@@ -117,8 +125,11 @@ def login():
             else:
                 next_page = url_for('auth.profile')
             return redirect(next_page)
-        return render_template('auth/login.html', error='Invalid credentials', registration_disabled=registration_disabled)
-    return render_template('auth/login.html', registration_disabled=registration_disabled)
+        return render_template('auth/login.html', error='Invalid credentials',
+                               registration_disabled=registration_disabled,
+                               oauth_providers=oauth_providers)
+    return render_template('auth/login.html', registration_disabled=registration_disabled,
+                           oauth_providers=oauth_providers)
 
 
 @auth_bp.route('/logout')

@@ -6,11 +6,31 @@ button { padding: 0.5rem 2rem; cursor: pointer; }
 .error { color: #c00; }
 .success { color: #080; }
 .card { background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; }
-h2 { margin-top: 0; }</style></head>
+h2 { margin-top: 0; }
+.oauth-btn { display: block; width: 100%; padding: 0.6rem; margin-bottom: 0.5rem; text-align: center; text-decoration: none; border-radius: 4px; font-weight: 500; }
+.oauth-google { background: #4285f4; color: white; }
+.oauth-github { background: #24292e; color: white; }
+.oauth-divider { text-align: center; margin: 1rem 0; color: #999; font-size: 0.85em; position: relative; }
+.oauth-divider::before, .oauth-divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: #ddd; }
+.oauth-divider::before { left: 0; }
+.oauth-divider::after { right: 0; }</style></head>
 <body>
 <div class="card">
 <h2>Log In</h2>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+{% if oauth_providers %}
+<div>
+{% for provider in oauth_providers %}
+<a href="{{ url_for('oauth.authorize', provider_id=provider.provider_id) }}"
+   class="oauth-btn oauth-{{ provider.provider_id }}">
+  Sign in with {{ provider.display_name }}
+</a>
+{% endfor %}
+</div>
+<div class="oauth-divider">or</div>
+{% endif %}
+
 <form method="POST">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Username <input name="username" required autofocus></label>

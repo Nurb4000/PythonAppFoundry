@@ -1,0 +1,46 @@
+<div style="margin-bottom:1rem;">
+  <a href="{{ url_for('admin.oauth_admin.list_providers') }}">← Back to Providers</a>
+</div>
+
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div style="margin-bottom:12px;">
+    <label for="client_id" style="display:block;font-weight:600;margin-bottom:4px;">Client ID</label>
+    <input type="text" id="client_id" name="client_id" value="{{ provider.client_id }}"
+           style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;"
+           placeholder="Enter OAuth Client ID">
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <label for="client_secret" style="display:block;font-weight:600;margin-bottom:4px;">Client Secret</label>
+    <input type="password" id="client_secret" name="client_secret" value="{{ provider.client_secret }}"
+           style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;"
+           placeholder="Enter OAuth Client Secret">
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <label for="scopes" style="display:block;font-weight:600;margin-bottom:4px;">Scopes</label>
+    <input type="text" id="scopes" name="scopes" value="{{ provider.scopes }}"
+           style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;"
+           placeholder="Comma-separated scopes (e.g., email profile)">
+  </div>
+
+  <div style="margin-bottom:12px;">
+    <label style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" name="enabled" {% if provider.enabled %}checked{% endif %} style="width:18px;height:18px;">
+      <span style="font-weight:600;">Enable {{ provider.display_name }} login</span>
+    </label>
+  </div>
+
+  <button type="submit" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">
+    Save Configuration
+  </button>
+</form>
+
+<div style="margin-top:1rem;padding:12px;background:#f0f7ff;border-radius:4px;font-size:0.9em;">
+  <strong>Endpoints:</strong><br>
+  Authorize: <code>{{ provider.authorize_url or '—' }}</code><br>
+  Token: <code>{{ provider.token_url or '—' }}</code><br>
+  Userinfo: <code>{{ provider.userinfo_url or '—' }}</code>
+</div>

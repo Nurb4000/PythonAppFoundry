@@ -77,8 +77,10 @@ def create_app(config_class=None):
     from app.routes.dynamic import dynamic_bp
     from app.routes.chat import chat_bp
     from app.routes.bpmn import bpmn_bp
+    from app.routes.oauth import oauth_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(oauth_bp)  # OAuth routes under /__auth/oauth
     app.register_blueprint(admin_bp, url_prefix='/__admin')
     app.register_blueprint(api_bp, url_prefix='/__api')
     app.register_blueprint(dynamic_bp)
@@ -416,10 +418,12 @@ def create_app(config_class=None):
         from app.services.async_executor import _get_pool
         from app.services.metrics import init_metrics
         from app.services.api_logging import init_api_logging
+        from app.services.oauth import init_oauth
         init_credential_store(app)
         init_scheduler(app)
         init_metrics(app)
         init_api_logging(app)
+        init_oauth(app)
         # Initialize async executor pool if there are scheduled tasks
         try:
             from app.models import ScheduledTask
