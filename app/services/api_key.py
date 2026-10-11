@@ -64,6 +64,7 @@ def validate_api_key(token: str) -> ApiKey | None:
 
     Returns the ApiKey model if valid, None otherwise.
     Updates last_used_at and request_count on success.
+    Checks per-key rate limits (max_requests_per_minute, max_requests_per_hour).
     """
     if not token or not token.startswith('paf_sk_'):
         return None
@@ -75,6 +76,42 @@ def validate_api_key(token: str) -> ApiKey | None:
             now = datetime.now(timezone.utc)
             if k.expires_at and now > k.expires_at:
                 return None
+
+            # Check per-key rate limits
+            from app.models import RateLimitAttempt
+            from sqlalchemy import text
+
+            minute_ago = now - __import__('datetime').timedelta(minutes=1)
+            hour_ago = now - __import__('datetime').timedelta(hours=1)
+
+            # Count requests in the last minute
+            minute_count = db.session.execute(
+                text('SELECT COUNT(*) FROM rate_limit_attempts '
+                     'WHERE key = :key AND timestamp > :minute_start'),
+                {'key': f'apikey:{k.id}', 'minute_start': minute_ago.timestamp()},
+            ).scalar()
+
+            # Count requests in the last hour
+            hour_count = db.session.execute(
+                text('SELECT COUNT(*) FROM rate_limit_attempts '
+                     'WHERE key = :key AND timestamp > :hour_start'),
+                {'key': f'apikey:{k.id}', 'hour_start': hour_ago.timestamp()},
+            ).scalar()
+
+            # Check per-minute limit (0 means unlimited)
+            if k.max_requests_per_minute and minute_count >= k.max_requests_per_minute:
+                logger.warning(f'API key rate limited (per-minute): {k.name} (id={k.id})')
+                return None
+
+            # Check per-hour limit (0 means unlimited)
+            if k.max_requests_per_hour and hour_count >= k.max_requests_per_hour:
+                logger.warning(f'API key rate limited (per-hour): {k.name} (id={k.id})')
+                return None
+
+            # Record this request for rate limiting
+            attempt = RateLimitAttempt(key=f'apikey:{k.id}', timestamp=now.timestamp())
+            db.session.add(attempt)
+
             # Update usage stats
             k.last_used_at = now
             k.request_count = (k.request_count or 0) + 1

@@ -718,6 +718,9 @@ class ApiKey(db.Model):
     # Usage tracking
     last_used_at = db.Column(db.DateTime, nullable=True)
     request_count = db.Column(db.Integer, default=0)
+    # Rate limiting: 0 means unlimited
+    max_requests_per_minute = db.Column(db.Integer, default=60)
+    max_requests_per_hour = db.Column(db.Integer, default=1000)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = db.relationship('User', backref=db.backref('api_keys', lazy='dynamic'))
